@@ -34,9 +34,13 @@ MazeBuilder.WALL_COLOR    = Color3.fromRGB(104, 114, 88)
 MazeBuilder.FLOOR_MATERIAL = Enum.Material.Pavement
 MazeBuilder.FLOOR_COLOR    = Color3.fromRGB(118, 110, 94)
 
--- How far the floor extends past the outer walls on every side. Along the near (bottom-of-screen)
--- walls the fog script shows some of it (RING_CLEAR + RING_FADE there should fit within this).
-MazeBuilder.BORDER = 14
+-- Outside the walls: jungle ground
+MazeBuilder.GROUND_MATERIAL = Enum.Material.LeafyGrass
+MazeBuilder.GROUND_COLOR    = Color3.fromRGB(78, 96, 52)
+
+-- How far the ground extends past the outer walls on every side. Along the near (bottom-of-screen)
+-- walls the fog script shows some of it (RING_CLEAR + RING_FADE + RING_NOISE should fit within this).
+MazeBuilder.BORDER = 20
 
 MazeBuilder.NEWEST = 0.5  -- step 1: chance to grow from the newest cell (1 = long corridors, 0 = bushy)
 MazeBuilder.BRAID  = 0.75 -- step 2: fraction of dead ends opened up into loops (0 = none, 1 = no dead ends)
@@ -149,10 +153,15 @@ function MazeBuilder.build()
 		p.MaterialVariant = MazeBuilder.WALL_VARIANT
 	end
 
-	-- The floor reaches BORDER studs past the outer walls, so the clear ring around the maze has ground
-	local floorSize = n * S + T + 2 * MazeBuilder.BORDER
+	-- Paved floor inside the walls; jungle ground outside them. The ground is one big slab reaching
+	-- BORDER studs past the walls, sitting a hair lower than the pavers so they cover it inside
+	-- (exactly level surfaces would flicker where they overlap).
+	local floorSize = n * S + T
 	block("Floor", Vector3.new(floorSize, 1, floorSize), Vector3.new(0, y0 + 0.5, 0),
 		MazeBuilder.FLOOR_COLOR, MazeBuilder.FLOOR_MATERIAL)
+	local groundSize = floorSize + 2 * MazeBuilder.BORDER
+	block("Ground", Vector3.new(groundSize, 1, groundSize), Vector3.new(0, y0 + 0.5 - 0.05, 0),
+		MazeBuilder.GROUND_COLOR, MazeBuilder.GROUND_MATERIAL)
 	y0 += 1 -- everything else sits on the maze floor
 
 	local walls = MazeBuilder.generate(n)
