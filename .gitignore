@@ -1,0 +1,13 @@
+# Roblox Studio lock file (exists while the place is open)
+*.rbxl.lock
+*.rbxlx.lock
+
+# Studio auto-backups
+*.rbxl.bak
+*-backup.rbxl
+*.rbxlx.bak
+
+# OS clutter
+Thumbs.db
+desktop.ini
+.DS_Store

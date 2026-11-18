@@ -1,0 +1,10 @@
+# Place files are binary: never touch line endings, never try to diff/merge as text
+*.rbxl binary
+*.rbxm binary
+
+# Keep scripts byte-identical to what's in Studio (LF line endings)
+*.luau text eol=lf
+*.lua  text eol=lf
+*.md   text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
