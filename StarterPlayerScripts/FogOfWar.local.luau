@@ -49,8 +49,8 @@ local RING_CLEAR = 0       -- outside the near (bottom-of-screen) walls: this ma
 local RING_NOISE = 4        -- how far (studs) the fog's edge wobbles in and out, so it isn't a straight line (0 = straight)
 local RING_FADE  = 10      -- ...then the fog fades in over this many studs (keep CLEAR + FADE <= the maze's BORDER, or the fade runs past the floor's edge)
 
--- Must match DIRECTION in the IsometricCamera script
-local CAMERA_DIRECTION = Vector3.new(-1, 1, -1).Unit
+-- Where the camera sits relative to the player (shared with the IsometricCamera script)
+local CAMERA_DIRECTION = require(game:GetService("ReplicatedStorage"):WaitForChild("Config")).CAMERA_DIRECTION
 
 local NEIGHBOURS4 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} }
 local NEIGHBOURS8 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} }
