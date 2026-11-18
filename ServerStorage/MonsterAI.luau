@@ -142,12 +142,15 @@ local function rootOf(player)
 end
 
 ---------------------------------------------------------------- construction
--- maze: the table MazeBuilder.build returns. options.onCatch(player) is called when it catches
--- someone (default: knock them out, so they respawn at the start). options.startCell = {x, z}.
+-- maze: the table MazeBuilder.build returns.
+-- options.onCatch(player): called when it catches someone (default: knock them out).
+-- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
+-- options.startCell = {x, z}: where it appears.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
 	self.maze = maze
+	self.isBlocked = options.isBlocked or function() return false end
 	self.onCatch = options.onCatch or function(player)
 		local _, humanoid = rootOf(player)
 		if humanoid then humanoid.Health = 0 end
@@ -210,7 +213,7 @@ function MonsterAI:findPath(sx, sz, tx, tz)
 		for _, d in DIRS do
 			if not walls[c[1]][c[2]][d[3]] then          -- no wall on that side = can walk through
 				local nx, nz = c[1] + d[1], c[2] + d[2]
-				if cameFrom[key(nx, nz)] == nil then
+				if cameFrom[key(nx, nz)] == nil and not self.isBlocked(nx, nz) then
 					cameFrom[key(nx, nz)] = c
 					table.insert(queue, {nx, nz})
 				end
@@ -238,10 +241,20 @@ end
 
 -- Can the monster's body travel in a straight line from a to b without touching a wall?
 -- (A "spherecast" sweeps a ball along the line, so it accounts for the monster's width.)
+-- It also mustn't cut through a cell it's not allowed into.
 function MonsterAI:canPass(a, b)
-	local from = a + Vector3.new(0, BODY_RADIUS + 0.6, 0)   -- ball clears the floor (and finish pad), below wall tops
+	local from = a + Vector3.new(0, BODY_RADIUS + 0.6, 0)   -- ball clears the floor, below wall tops
 	local offset = (b - a) * Vector3.new(1, 0, 1)
 	if offset.Magnitude < 0.1 then return true end
+	-- check the cells along the line (and the body's width either side) every couple of studs
+	local side = Vector3.new(-offset.Z, 0, offset.X).Unit * BODY_RADIUS
+	local steps = math.ceil(offset.Magnitude / 2)
+	for i = 0, steps do
+		local p = a + offset * (i / steps)
+		for _, q in { p, p + side, p - side } do
+			if self.isBlocked(self:cellOf(q)) then return false end
+		end
+	end
 	return workspace:Spherecast(from, BODY_RADIUS, offset, self.rayParams) == nil
 end
 
@@ -271,6 +284,16 @@ function MonsterAI:Step(dt, targets)
 		return
 	end
 	local maze = self.maze
+
+	-- The player it was chasing is out of reach (reached safety, caught, left): give up on them
+	-- and search around where it last saw them instead
+	if self.chaseTarget and not table.find(targets, self.chaseTarget) then
+		self.chaseTarget = nil
+		if self.mode == "chase" then
+			self.mode = "search"
+			self.path = {}
+		end
+	end
 
 	-- 1. SENSES (5 times a second): pick the closest player it can detect
 	self.detectTimer -= dt
@@ -324,7 +347,12 @@ function MonsterAI:Step(dt, targets)
 				if #self.path == 0 and self.mode == "search" then self.mode = "roam" end   -- reached it, nobody here
 			end
 			if self.mode == "roam" and #self.path == 0 then
-				self.path = self:findPath(cx, cz, math.random(maze.n), math.random(maze.n))
+				local tx, tz
+				for _ = 1, 20 do                             -- a random cell it's allowed into
+					tx, tz = math.random(maze.n), math.random(maze.n)
+					if not self.isBlocked(tx, tz) then break end
+				end
+				self.path = self:findPath(cx, cz, tx, tz)
 			end
 			-- if we're off-centre (e.g. after lunging at a player), go back to the cell centre first
 			if #self.path > 0 and (self.pos - self:centerOf(cx, cz)).Magnitude > 0.5 then

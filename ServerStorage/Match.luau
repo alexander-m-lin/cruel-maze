@@ -2,16 +2,25 @@
 -- state, and moves to the next when that state's job is done.
 --
 --   Waiting   - fewer than Config.MIN_PLAYERS players; nothing happens until more arrive
---   Countdown - a new maze is built, everyone gets a role and is sent to the start, frozen,
---               while a short countdown runs; the monsters are placed but don't hunt yet
---   Playing   - go! The first survivor to reach the finish wins
+--   Countdown - a new maze is built, everyone gets a role, lives and a character in the start
+--               room, frozen, while a short countdown runs; the monsters don't hunt yet
+--   Playing   - survivors have Config.MATCH_TIME seconds to collect Config.RELICS_NEEDED relics.
+--               Caught survivors lose a life and pick a captured spawn room to come back in;
+--               with no lives left they're out.
 --   Results   - the result is shown for a few seconds, then everything is cleared away
+--
+-- How a match ends:
+--   survivors win  - enough relics collected
+--   monsters win   - time runs out, or every survivor is out of lives
 --
 -- Players' computers follow along through attributes on ReplicatedStorage.Match:
 --   State   - the current state (one of Config.States)
---   EndsAt  - server time when a timed state (Countdown, Results) ends, for on-screen countdowns
+--   EndsAt  - server time when the current state ends (countdown, match timer, results)
 --   Message - text to show on screen ("" = none)
--- and each player's "Role" and "RunStart" attributes.
+--   RelicsCollected / RelicsNeeded / RelicsTotal, and a SpawnRooms folder (see Objectives)
+-- and on each player:
+--   Role, Lives, Out (no lives left), Respawning (choosing a spawn room), RespawnBy (deadline),
+--   SpawnRoom (the room they'll come back in), BaseSpeed (see Controls)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,8 +31,11 @@ local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
 local MazeBuilder = require(ServerStorage.MazeBuilder)
 local MonsterAI = require(ServerStorage.MonsterAI)
+local Objectives = require(ServerStorage.Objectives)
 
 local States, Roles = Config.States, Config.Roles
+
+local MIN_RESPAWN_DELAY = 2      -- seconds after being caught before you can come back, even if you pick at once
 
 local Match = {}
 
@@ -31,13 +43,18 @@ local status = Instance.new("Configuration")   -- just a container for the attri
 status.Name = "Match"
 status.Parent = ReplicatedStorage
 
-local caughtEvent = Net.event("Caught")         -- tells a player they were caught
+local caughtEvent = Net.event("Caught")              -- server -> player: you were caught (lives left)
+local chooseSpawnEvent = Net.event("ChooseSpawn")    -- player -> server: respawn me in this room
+local noticeEvent = Net.event("Notice")              -- server -> everyone: a short message (relic found...)
 
 local state = nil
 local maze = nil         -- this match's maze (see MazeBuilder.build)
+local objectives = nil   -- this match's relics and spawn rooms (see Objectives)
 local monsters = {}      -- this match's MonsterAI objects
-local winner = nil       -- set when someone reaches the finish
-local finishConn = nil
+local caughtAt = {}      -- [player] = os.clock() when they were last caught
+
+-- Characters only appear when this script says so (so caught players can choose where to respawn)
+Players.CharacterAutoLoads = false
 
 ---------------------------------------------------------------- helpers
 local function setState(newState, duration, message)
@@ -47,10 +64,34 @@ local function setState(newState, duration, message)
 	status:SetAttribute("Message", message or "")
 end
 
-local function survivors()
+local function aliveCharacter(player)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health > 0 and character:FindFirstChild("HumanoidRootPart") then
+		return character
+	end
+	return nil
+end
+
+-- Survivors still in the match (not out of lives)
+local function survivorsInMatch()
 	local list = {}
 	for _, player in Players:GetPlayers() do
-		if player:GetAttribute("Role") == Roles.Survivor then table.insert(list, player) end
+		if player:GetAttribute("Role") == Roles.Survivor and not player:GetAttribute("Out") then
+			table.insert(list, player)
+		end
+	end
+	return list
+end
+
+-- Survivors the monsters may hunt right now: alive, and not inside a protected room
+local function huntable()
+	local list = {}
+	for _, player in survivorsInMatch() do
+		local character = aliveCharacter(player)
+		if character and not (objectives and objectives:IsSafe(character.HumanoidRootPart.Position)) then
+			table.insert(list, player)
+		end
 	end
 	return list
 end
@@ -67,55 +108,102 @@ local function applySpeed(player)
 	end
 end
 
--- Each player gets their own spot around the start cell, so nobody spawns inside anybody else.
--- Spots sit on a circle around the cell's centre, facing out toward the rest of the maze.
+-- Each player gets their own spot in a spawn room, so nobody spawns inside anybody else.
+-- Spots sit on a circle around the room's centre, facing outward.
 local SPAWN_RADIUS = 5
 local SPAWN_SLOTS = 6
-local function spawnSpot(player)
+local function spawnSpot(player, room)
 	local list = Players:GetPlayers()
 	table.sort(list, function(a, b) return a.UserId < b.UserId end)   -- same order on every call
 	local index = (table.find(list, player) or 1) - 1
 	local angle = (index % SPAWN_SLOTS) / SPAWN_SLOTS * math.pi * 2
 	local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * SPAWN_RADIUS
-	local at = maze.start + offset
-	return CFrame.lookAt(at, at + Vector3.new(1, 0, 1))   -- face into the maze (+X/+Z from the start corner)
+	local at = room.center + Vector3.new(0, 4, 0) + offset
+	return CFrame.lookAt(at, at + offset)
 end
 
-local function sendToStart(player)
+-- Put a (new) character in the player's chosen spawn room (the start room if it isn't available)
+local function placeInSpawnRoom(player)
 	local character = player.Character
-	if character and maze then
-		character:PivotTo(spawnSpot(player))
-	end
+	if not (character and maze) then return end
+	local room = objectives and objectives:CapturedRoom(player:GetAttribute("SpawnRoom") or 1) or maze.rooms[1]
+	character:PivotTo(spawnSpot(player, room))
 end
 
-local function startRunTimer(player)
-	player:SetAttribute("RunStart", workspace:GetServerTimeNow())   -- the HUD shows time since this
+local function respawn(player)
+	if not player.Parent or not player:GetAttribute("Respawning") then return end
+	player:SetAttribute("Respawning", nil)
+	player:SetAttribute("RespawnBy", nil)
+	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the room
 end
 
 local function onCaught(player)
-	caughtEvent:FireClient(player)
-	-- Phase 0 rule, same as the prototype: you're knocked out and respawn at the start.
+	if state ~= States.Playing then return end
+	caughtAt[player] = os.clock()
+	local lives = math.max(0, (player:GetAttribute("Lives") or 1) - 1)
+	player:SetAttribute("Lives", lives)
+	caughtEvent:FireClient(player, lives)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if humanoid then humanoid.Health = 0 end
+
+	if lives <= 0 then
+		player:SetAttribute("Out", true)        -- out for the rest of the match: watches teammates
+		return
+	end
+	-- choose where to come back; if they don't choose in time, use their last room
+	player:SetAttribute("Respawning", true)
+	player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
+	task.delay(Config.RESPAWN_CHOICE_TIME, function()
+		if state == States.Playing then respawn(player) end
+	end)
 end
 
-local function onFinishTouched(hit)
-	if state ~= States.Playing or winner then return end
-	local player = Players:GetPlayerFromCharacter(hit.Parent)
-	if player and player:GetAttribute("Role") == Roles.Survivor then
-		winner = player
+-- A player picked a spawn room. Check everything: never trust what a client sends.
+chooseSpawnEvent.OnServerEvent:Connect(function(player, roomId)
+	if state ~= States.Playing or not player:GetAttribute("Respawning") then return end
+	if typeof(roomId) ~= "number" or not objectives or not objectives:CapturedRoom(roomId) then return end
+	player:SetAttribute("SpawnRoom", roomId)
+	local wait = MIN_RESPAWN_DELAY - (os.clock() - (caughtAt[player] or 0))
+	if wait > 0 then
+		task.delay(wait, function()
+			if state == States.Playing then respawn(player) end
+		end)
+	else
+		respawn(player)
 	end
-end
+end)
 
 local function cleanUp()
 	for _, monster in monsters do monster:Destroy() end
 	table.clear(monsters)
-	if finishConn then finishConn:Disconnect() end
-	finishConn = nil
-	winner = nil
+	if objectives then objectives:Destroy() end
+	objectives = nil
+	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
-		player:SetAttribute("RunStart", nil)
+		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom" } do
+			player:SetAttribute(name, nil)
+		end
 	end
+end
+
+-- The free cell nearest the middle of the maze, for a monster to appear in
+local function monsterStartCell()
+	local mid = math.ceil(maze.n / 2)
+	local best, bestDist
+	for x = 1, maze.n do
+		for z = 1, maze.n do
+			if not objectives:IsBlocked(x, z) then
+				local d = math.abs(x - mid) + math.abs(z - mid)
+				if not bestDist or d < bestDist then best, bestDist = { x, z }, d end
+			end
+		end
+	end
+	return best
+end
+
+local function formatTime(seconds)
+	seconds = math.max(0, math.floor(seconds))
+	return ("%d:%02d"):format(seconds // 60, seconds % 60)
 end
 
 ---------------------------------------------------------------- the states
@@ -127,56 +215,78 @@ local function runWaiting()
 end
 
 local function runCountdown()
-	maze = MazeBuilder.build()
-	finishConn = maze.finish.Touched:Connect(onFinishTouched)
+	maze = MazeBuilder.build({
+		spawnRooms = Config.SPAWN_ROOMS,
+		roomSpacing = Config.SPAWN_ROOM_SPACING,
+		relics = Config.RELIC_TOTAL,
+		relicSpacing = Config.RELIC_SPACING,
+	})
+	objectives = Objectives.new(maze, {
+		onRelic = function(player, relic)
+			local stats = player:FindFirstChild("leaderstats")
+			if stats then stats.Relics.Value += 1 end
+			noticeEvent:FireAllClients(("%s found a relic! (%d/%d)"):format(
+				player.DisplayName, objectives.collected, Config.RELICS_NEEDED))
+		end,
+		onCapture = function(player, room)
+			noticeEvent:FireAllClients(("%s captured a spawn room!"):format(player.DisplayName))
+		end,
+	})
 
-	for i = 1, Config.MONSTER_COUNT do
-		local monster = MonsterAI.new(maze, { onCatch = onCaught })
+	for _ = 1, Config.MONSTER_COUNT do
+		local monster = MonsterAI.new(maze, {
+			onCatch = onCaught,
+			isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
+			startCell = monsterStartCell(),
+		})
 		monster.active = false
 		table.insert(monsters, monster)
 	end
 
 	setState(States.Countdown, Config.COUNTDOWN)
 	for _, player in Players:GetPlayers() do
-		player:SetAttribute("Role", Roles.Survivor)   -- Phase 0: everyone is a survivor
-		player:SetAttribute("RunStart", nil)
-		sendToStart(player)
-		applySpeed(player)
+		player:SetAttribute("Role", Roles.Survivor)   -- Phase 1: everyone is a survivor
+		player:SetAttribute("Lives", Config.LIVES)
+		player:SetAttribute("Out", nil)
+		player:SetAttribute("Respawning", nil)
+		player:SetAttribute("SpawnRoom", 1)
+		task.spawn(player.LoadCharacter, player)      -- a fresh character in the start room
 	end
 	task.wait(Config.COUNTDOWN)
 end
 
--- Returns false if the match was abandoned (everyone left)
+-- Returns "survivors", "time", "caught", or nil if the match was abandoned (everyone left)
 local function runPlaying()
-	setState(States.Playing)
+	setState(States.Playing, Config.MATCH_TIME)
+	local endsAt = os.clock() + Config.MATCH_TIME
 	for _, monster in monsters do monster.active = true end
-	for _, player in Players:GetPlayers() do
-		applySpeed(player)
-		startRunTimer(player)
-	end
-	while not winner do
-		if #Players:GetPlayers() < Config.MIN_PLAYERS then return false end
+	for _, player in Players:GetPlayers() do applySpeed(player) end
+
+	while true do
+		if #Players:GetPlayers() < Config.MIN_PLAYERS then return nil end
+		objectives:Update(survivorsInMatch())
+		if objectives.collected >= Config.RELICS_NEEDED then return "survivors" end
+		if os.clock() >= endsAt then return "time" end
+		if #survivorsInMatch() == 0 then return "caught" end
 		task.wait(0.1)
 	end
-	return true
 end
 
-local function runResults()
+local function runResults(outcome, elapsed)
 	for _, monster in monsters do monster.active = false end
-	local player = winner
-	local runTime = workspace:GetServerTimeNow() - (player:GetAttribute("RunStart") or 0)
-	runTime = math.floor(runTime * 10) / 10
-
-	local stats = player:FindFirstChild("leaderstats")
-	if stats then
-		stats.Wins.Value += 1
-		if stats.Best.Value == 0 or runTime < stats.Best.Value then
-			stats.Best.Value = runTime
+	local message
+	if outcome == "survivors" then
+		message = ("The survivors escaped with %d relics in %s!"):format(objectives.collected, formatTime(elapsed))
+		for _, player in Players:GetPlayers() do
+			local stats = player:FindFirstChild("leaderstats")
+			if stats and player:GetAttribute("Role") == Roles.Survivor then stats.Wins.Value += 1 end
 		end
+	elseif outcome == "time" then
+		message = ("Time's up! The monsters win. (%d/%d relics)"):format(objectives.collected, Config.RELICS_NEEDED)
+	else
+		message = "Every survivor was caught! The monsters win."
 	end
-
-	setState(States.Results, Config.RESULTS_TIME,
-		("%s escaped in %.1fs! New maze in %d..."):format(player.DisplayName, runTime, Config.RESULTS_TIME))
+	setState(States.Results, Config.RESULTS_TIME, message)
 	task.wait(Config.RESULTS_TIME)
 end
 
@@ -187,47 +297,54 @@ local function onPlayerAdded(player)
 	stats.Parent = player
 
 	local wins = Instance.new("IntValue")
-	wins.Name = "Wins"
+	wins.Name = "Wins"        -- matches won as a survivor
 	wins.Parent = stats
 
-	local best = Instance.new("NumberValue")
-	best.Name = "Best"   -- fastest escape in seconds (0 = none yet)
-	best.Parent = stats
-
-	-- Joining mid-match: you're a survivor straight away (Phase 0)
-	if state == States.Countdown or state == States.Playing then
-		player:SetAttribute("Role", Roles.Survivor)
-	end
+	local relics = Instance.new("IntValue")
+	relics.Name = "Relics"    -- relics collected, all time (this session)
+	relics.Parent = stats
 
 	player.CharacterAdded:Connect(function(character)
 		character:WaitForChild("Humanoid")
+		character:WaitForChild("HumanoidRootPart")
 		applySpeed(player)
-		-- (re)spawning during a match: move from the shared spawn pad to your own spot
 		if state == States.Countdown or state == States.Playing then
-			task.defer(sendToStart, player)
+			task.defer(placeInSpawnRoom, player)
 		end
-		-- respawning (e.g. after being caught) restarts your run timer, as in the prototype
-		if state == States.Playing then startRunTimer(player) end
 	end)
+
+	-- Joining mid-match: you're a survivor with full lives, in the start room
+	if state == States.Countdown or state == States.Playing then
+		player:SetAttribute("Role", Roles.Survivor)
+		player:SetAttribute("Lives", Config.LIVES)
+		player:SetAttribute("SpawnRoom", 1)
+	end
+	player:LoadCharacter()
 end
+
+Players.PlayerRemoving:Connect(function(player)
+	caughtAt[player] = nil
+end)
 
 ---------------------------------------------------------------- main loop
 function Match.run()
 	Players.PlayerAdded:Connect(onPlayerAdded)
-	for _, player in Players:GetPlayers() do onPlayerAdded(player) end
+	for _, player in Players:GetPlayers() do task.spawn(onPlayerAdded, player) end
 
 	-- The monsters think every frame while a match is on
 	RunService.Heartbeat:Connect(function(dt)
 		if #monsters == 0 then return end
-		local targets = survivors()
+		local targets = huntable()
 		for _, monster in monsters do monster:Step(dt, targets) end
 	end)
 
 	while true do
 		runWaiting()
 		runCountdown()
-		if runPlaying() then
-			runResults()
+		local started = os.clock()
+		local outcome = runPlaying()
+		if outcome then
+			runResults(outcome, os.clock() - started)
 		end
 		cleanUp()
 	end

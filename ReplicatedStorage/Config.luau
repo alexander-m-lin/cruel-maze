@@ -1,4 +1,4 @@
--- Settings shared by the server and every player's computer.
+-- Settings shared by the server and every player's computer. Tune the game here.
 -- Anything both sides need to agree on lives here, so it's only written down once.
 
 local Config = {}
@@ -21,8 +21,24 @@ Config.CAMERA_DIRECTION = Vector3.new(-1, 1, -1).Unit
 -- Match flow
 Config.MIN_PLAYERS = 1            -- a match starts once this many players are in the server
 Config.COUNTDOWN = 3              -- seconds of "Starting in..." before each match
-Config.RESULTS_TIME = 5           -- seconds the result is shown before the next match
+Config.MATCH_TIME = 240           -- seconds survivors have to collect their relics (4 minutes)
+Config.RESULTS_TIME = 6           -- seconds the result is shown before the next match
 Config.MONSTER_COUNT = 1          -- AI monsters per match
+
+-- Relics: survivors win by collecting RELICS_NEEDED of the RELIC_TOTAL in the maze
+Config.RELIC_TOTAL = 9
+Config.RELICS_NEEDED = 6
+Config.RELIC_SPACING = 4          -- minimum distance between relics, in maze cells (shrinks a little if they can't fit)
+Config.RELIC_BARRIER_DELAY = 2    -- seconds after a relic is collected before monsters can enter its room
+
+-- Lives and respawning
+Config.LIVES = 3                  -- per survivor; caught with none left = out for the rest of the match
+Config.RESPAWN_CHOICE_TIME = 6    -- seconds to pick a spawn room after being caught (then your last room is used)
+
+-- Spawn rooms: 2x2-cell rooms with 2-3 exits that monsters can never enter. Your team starts with
+-- the start room; walking into another one captures it, and you can respawn in any captured room.
+Config.SPAWN_ROOMS = 4            -- including the start room
+Config.SPAWN_ROOM_SPACING = 5     -- minimum distance between rooms, in cells
 
 -- Match states, in the order they run. The server publishes the current one (see Match).
 Config.States = {

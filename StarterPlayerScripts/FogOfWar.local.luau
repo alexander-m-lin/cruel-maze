@@ -502,11 +502,10 @@ end
 
 local function updateVisibility()
 	if not ready or not (maze and maze.Parent) then return end
+	-- Your own sight, every update (if you have a character: while respawning or out of lives you
+	-- see only through your teammates)
 	local eye, facing = eyesOf(player.Character)
-	if not eye then return end
-
-	-- Your own sight, every update
-	local merged = sightFrom(eye, facing)
+	local merged = eye and sightFrom(eye, facing) or {}
 	local eyes = { eye }
 	local pocketCentres = { eye }
 
@@ -552,7 +551,7 @@ local function updateVisibility()
 	updateFringe(visibleNow)
 
 	-- Unseen fog between the camera and the player becomes see-through (explored sheets never block the view)
-	for d = 0, 14, 2 do
+	for d = 0, eye and 14 or -1, 2 do
 		local px, pz = tileIndex(eye + CAMERA_DIRECTION * d)
 		for dx = -1, 1 do
 			for dz = -1, 1 do

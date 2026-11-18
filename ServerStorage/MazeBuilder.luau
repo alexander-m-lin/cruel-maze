@@ -9,6 +9,10 @@
 --   That turns a dead end into a junction and adds loops, so there's more than one way around - and
 --   you can lose the monster by circling.
 -- Every cell is still reachable from every other.
+-- Step 3 (MazeLayout): carve spawn rooms and pick relic rooms. build() then makes the parts:
+--   walls, floors, room floors, the barriers monsters can't cross, and the relics.
+
+local MazeLayout = require(game:GetService("ServerStorage").MazeLayout)
 
 local MazeBuilder = {}
 
@@ -119,9 +123,17 @@ function MazeBuilder.generate(n)
 	return walls
 end
 
+-- Looks of the special places
+local ROOM_FLOOR_COLOR     = Color3.fromRGB(96, 104, 110)    -- a spawn room nobody has found yet
+MazeBuilder.ROOM_CAPTURED_COLOR = Color3.fromRGB(70, 150, 160)  -- a spawn room your team has captured
+local ROOM_WARD_COLOR      = Color3.fromRGB(90, 220, 235)    -- barrier across spawn room exits
+local RELIC_WARD_COLOR     = Color3.fromRGB(255, 196, 70)    -- barrier across relic room openings
+local RELIC_COLOR          = Color3.fromRGB(255, 200, 80)
+
 -- Builds the maze in the workspace (replacing any previous one).
--- Returns a maze table: { model, walls, n, S, half, floorY, start, finish } (see the end).
-function MazeBuilder.build()
+-- Returns a maze table (see the end): the layout, plus its spawn rooms and relics.
+function MazeBuilder.build(options)
+	options = options or {}
 	local n, S, H, T = MazeBuilder.CELLS, MazeBuilder.CELL, MazeBuilder.WALL_H, MazeBuilder.WALL_T
 	local base = workspace.Baseplate
 	local y0 = base.Position.Y + base.Size.Y / 2   -- top of the baseplate
@@ -164,7 +176,17 @@ function MazeBuilder.build()
 		MazeBuilder.GROUND_COLOR, MazeBuilder.GROUND_MATERIAL)
 	y0 += 1 -- everything else sits on the maze floor
 
+	-- The layout: maze, then spawn rooms, then relic rooms (see MazeLayout)
 	local walls = MazeBuilder.generate(n)
+	local roomPlans = MazeLayout.carveRooms(walls, n, options.spawnRooms or 4, options.roomSpacing or 5)
+	local blocked = {}      -- cells monsters can't enter
+	for _, room in roomPlans do
+		for k in room.cells do blocked[k] = true end
+	end
+	MazeLayout.connect(walls, n, blocked)
+	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans, blocked,
+		options.relics or 9, options.relicSpacing or 4)
+
 	for x = 1, n do
 		for z = 1, n do
 			local c = cellCenter(x, z)
@@ -178,22 +200,81 @@ function MazeBuilder.build()
 		end
 	end
 
-	-- Finish pad in the far corner, with a tall glowing beam so you can aim for it
-	local fc = cellCenter(n, n)
-	local finish = block("Finish", Vector3.new(S - T - 1, 0.4, S - T - 1), fc + Vector3.new(0, 0.2, 0),
-		Color3.fromRGB(60, 255, 120), Enum.Material.Neon)
-	local beam = block("Beacon", Vector3.new(2, 120, 2), fc + Vector3.new(0, 60, 0),
-		Color3.fromRGB(60, 255, 120), Enum.Material.Neon)
-	beam.Transparency = 0.5
-	beam.CanCollide, beam.CanTouch, beam.CanQuery = false, false, false
+	-- Decorations that are only for show: nothing collides with them, and raycasts (line of sight,
+	-- the monster's checks) pass straight through
+	local function decor(name, size, cf, color, material, parent)
+		local p = Instance.new("Part")
+		p.Name, p.Size, p.CFrame = name, size, cf
+		p.Anchored = true
+		p.CanCollide, p.CanTouch, p.CanQuery = false, false, false
+		p.CastShadow = false
+		p.Color, p.Material = color, material
+		p.Parent = parent or model
+		return p
+	end
 
-	-- Move the spawn into the start corner
-	local start = cellCenter(1, 1)
+	-- A shimmering barrier panel across the opening on side `d` of cell (x, z): monsters can't pass
+	local function ward(x, z, d, color, parent)
+		local c = cellCenter(x, z) + Vector3.new(d[1], 0, d[2]) * (S / 2) + Vector3.new(0, H / 2, 0)
+		local size = d[1] == 0 and Vector3.new(S - T, H, 0.3) or Vector3.new(0.3, H, S - T)
+		local p = decor("Ward", size, CFrame.new(c), color, Enum.Material.ForceField, parent)
+		p.Transparency = 0.15
+		return p
+	end
+
+	-- SPAWN ROOMS: a tinted floor, and a barrier across each exit
+	local rooms = {}
+	for _, plan in roomPlans do
+		-- centre of the 2x2 block = the corner shared by its four cells
+		local center = Vector3.new(plan.x * S - half, y0, plan.z * S - half)
+		local folder = Instance.new("Model")
+		folder.Name = "SpawnRoom" .. plan.id
+		folder.Parent = model
+		local floor = decor("RoomFloor", Vector3.new(2 * S - T, 0.1, 2 * S - T), CFrame.new(center + Vector3.new(0, 0.05, 0)),
+			ROOM_FLOOR_COLOR, Enum.Material.Slate, folder)
+		local wards = {}
+		for _, e in plan.exits do
+			table.insert(wards, ward(e[1], e[2], e[3], ROOM_WARD_COLOR, folder))
+		end
+		table.insert(rooms, { id = plan.id, x = plan.x, z = plan.z, cells = plan.cells, center = center,
+			floor = floor, wards = wards })
+	end
+
+	-- RELIC ROOMS: a relic on a pedestal, and a barrier across each opening
+	local relics = {}
+	for i, plan in relicPlans do
+		local x, z = plan[1], plan[2]
+		local center = cellCenter(x, z)
+		local relicModel = Instance.new("Model")
+		relicModel.Name = "Relic" .. i
+		relicModel.Parent = model
+		decor("Pedestal", Vector3.new(3, 2, 3), CFrame.new(center + Vector3.new(0, 1, 0)),
+			Color3.fromRGB(120, 112, 96), Enum.Material.Slate, relicModel)
+		local gem = decor("Gem", Vector3.new(1.6, 1.6, 1.6),
+			CFrame.new(center + Vector3.new(0, 3.4, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+			RELIC_COLOR, Enum.Material.Neon, relicModel)
+		local light = Instance.new("PointLight")
+		light.Color, light.Range, light.Brightness = RELIC_COLOR, 14, 1.5
+		light.Parent = gem
+		local wards = {}
+		for _, d in MazeLayout.DIRS do
+			if not walls[x][z][d[3]] then table.insert(wards, ward(x, z, d, RELIC_WARD_COLOR, relicModel)) end
+		end
+		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem, wards = wards })
+	end
+
+	-- Move the spawn pad into the start room (players are moved to their own spots from there)
+	local start = rooms[1].center
 	local spawn = workspace:FindFirstChild("SpawnLocation")
 	if spawn then
 		spawn.Size = Vector3.new(6, 1, 6)
 		spawn.Position = start + Vector3.new(0, 0.5, 0)
 		spawn.Duration = 0
+		spawn.Transparency = 1                -- invisible: the room floor marks the start
+		spawn.CanCollide = false
+		for _, d in spawn:GetChildren() do    -- including its star emblem
+			if d:IsA("Decal") then d.Transparency = 1 end
+		end
 	end
 
 	-- Info the client needs for fog of war (it can't see this ModuleScript)
@@ -211,8 +292,9 @@ function MazeBuilder.build()
 		model = model,
 		walls = walls,                          -- the layout, for anything that navigates the maze
 		n = n, S = S, half = half, floorY = y0,
-		start = start + Vector3.new(0, 4, 0),   -- where players stand at the beginning
-		finish = finish,                        -- the finish pad Part
+		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
+		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
+		relics = relics,                        -- relics: { id, x, z, center, model, gem, wards }
 	}
 end
 
