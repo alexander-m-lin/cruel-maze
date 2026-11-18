@@ -2,6 +2,8 @@
 
 This project is the start of **Cruel Maze**. The design overview below is the direction the game is heading. Use it to guide decisions. Section 12 lists what is still undecided: ask rather than assume on those.
 
+The implementation plan, with phases, estimates and progress checkboxes, is in [docs/roadmap.md](docs/roadmap.md). Read it before planning new work, and tick a phase off there when it's done.
+
 ---
 
 # Cruel Maze — Game Design Overview
