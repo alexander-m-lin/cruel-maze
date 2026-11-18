@@ -2,16 +2,25 @@
 
 A learning sandbox in Roblox Studio. The place file is `Place2.rbxl`.
 
-## What's in it
+## The game
 
-- **Maze game (active):** a random maze every round, a fixed isometric camera, and fog of war with line of sight (a vision cone, a soft edge, and forgiveness for small unseen pockets). The first player to reach the green beacon wins the round.
-- **Dodge game (archived):** in `ServerStorage/DodgeGameArchive`, where it doesn't run. To play it again, move its items back to Workspace, ServerScriptService and StarterGui.
+A maze game: a random maze every round, a fixed isometric camera, and fog of war with line of sight (a vision cone, a soft edge, and forgiveness for small unseen pockets). The first player to reach the green beacon wins the round.
 
 ## Layout
 
-- `Place2.rbxl`: the actual place. Open this in Studio. It's a binary file, so git can store versions of it but can't show what changed.
-- `src/`: plain-text copies of every script, so git history shows code changes line by line. Folders match where each script lives in Studio.
-  - `.server.luau` = Script, `.client.luau` = LocalScript, `.module.luau` = ModuleScript
-- `ServerScriptService/MazeGame.legacy.luau`: a copy of the MazeGame script that was already here, likely written by Studio's script sync. It currently matches `src/`, but nothing keeps it updated.
+- `Place2.rbxl`: the actual place. Open this in Studio. It's a binary file, so git can store versions of it but can't show what changed. Commit it whenever you change parts, GUIs, lighting and so on.
+- Script files, kept in step with Studio automatically by **Script Sync**. Editing them in either place updates the other:
 
-The Studio place is the source of truth. The files in `src/` are exported snapshots, so editing them doesn't change the game.
+| File | Where it lives in Studio | What it does |
+|---|---|---|
+| `ServerScriptService/MazeGame.legacy.luau` | ServerScriptService | Runs rounds, times runs, wins/best stats |
+| `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds the maze |
+| `StarterGui/MazeHUD/HUD.local.luau` | StarterGui › MazeHUD | Run timer and announcements |
+| `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera |
+| `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight |
+
+Script Sync names files by script type: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript.
+
+## History
+
+- An earlier dodge-ball game was deleted. It's in the first commit (`11d51a5`): its scripts are under `src/ServerStorage/DodgeGameArchive/`, and the place file in that commit still contains it.
