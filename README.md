@@ -20,9 +20,9 @@ The start of **Cruel Maze** (design in `CLAUDE.md`, plan in `docs/roadmap.md`). 
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers (speeds, camera angle, match timings, states, roles) |
 | `ReplicatedStorage/Net.luau` | ReplicatedStorage (ModuleScript) | Creates/finds the remote events used to message between server and players |
 | `StarterGui/MazeHUD/HUD.local.luau` | StarterGui › MazeHUD | Countdown, run timer and announcements |
-| `StarterPlayerScripts/Controls.local.luau` | StarterPlayer › StarterPlayerScripts | Character faces the mouse (WASD is already screen-relative) |
+| `StarterPlayerScripts/Controls.local.luau` | StarterPlayer › StarterPlayerScripts | Character faces the mouse (WASD is already screen-relative); moving away from your facing is slower (cones and speeds in `Config`) |
 | `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera |
-| `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight; hides anything tagged `HiddenByFog` unless it's in view |
+| `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight, shared with teammates (same role); hides anything tagged `HiddenByFog` unless it's in view |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates their limbs in code (a limping walk cycle synced to speed) |
 
