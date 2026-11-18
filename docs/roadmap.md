@@ -7,17 +7,20 @@ Tick a phase's box when its "Done when" is met. Update this file as plans change
 
 ## Duration estimates
 
-Not set yet. Record how long Phase 0 actually takes, then estimate the later phases from that.
+Not set yet for the later phases.
 
-## Where the prototype stands (2026-11-18)
+Actual so far:
+- Phase 0: about 30 minutes of building (branch 12:53 → last commit 13:19 on 2026-11-18), plus two 2-player test sessions and design decisions. The 1-week guess was far too high: with Claude Code, writing code is fast, and the time goes into testing, feel and decisions. Phase 1 (more design decisions) will be a better benchmark before estimating the rest.
 
-Working: generated mazes with lots of junctions and loops; fixed isometric camera; fog of war with line of sight; AI monster with route planning, sight and hearing, ramping chase speed; rigged monster with code-driven animation; smooth monster movement on every screen.
+## Where the prototype stands (2026-11-18, after Phase 0)
 
-Not started: teams and roles, relics and match rules, a maze that changes mid-match, characters and abilities, bots for other roles, matchmaking, saved progress and purchases.
+Working: match loop (countdown, play, results); generated mazes with lots of junctions and loops; fixed isometric camera; mouse facing with direction-based speed; fog of war with line of sight, shared between teammates; AI monster with route planning, sight and hearing, ramping chase speed; rigged monster with code-driven animation; smooth monster movement on every screen.
+
+Not started: monster and Maze Master roles, relics and match rules, a maze that changes mid-match, characters and abilities, bots for other roles, matchmaking, saved progress and purchases.
 
 ## Phases
 
-### [ ] 0. Foundation and refactor
+### [x] 0. Foundation and refactor (done 2026-11-18)
 Today the game is one round loop with a single global monster and a maze that never changes. Restructure first, without adding features.
 - Match state machine: lobby → role assignment → match → results
 - Shared modules in ReplicatedStorage (needs a new Script Sync folder) and server-authoritative RemoteEvents
@@ -25,6 +28,9 @@ Today the game is one round loop with a single global monster and a maze that ne
 - Studio's multi-client local test servers set up for multiplayer testing
 
 **Done when:** the current game runs on the new structure and plays the same.
+
+**Outcome:** `Match`, `MonsterAI`, `Config`, `Net`, `Controls` (see README). Added along the way from playtesting: slower movement away from your facing (100° full-speed cone, 80% sides, 45% backwards), separate spawn spots, and fog of war shared between teammates. Each round now opens with a 3-second frozen countdown.
+**Deferred:** server-side checks on movement speed (clients apply the facing slowdown; check it in Phase 3) and touch/gamepad aiming (Phase 6).
 
 ### [ ] 1. Core loop: survivors against a bot monster
 The first build that plays like Cruel Maze. It answers the biggest question cheaply: is collecting relics while being hunted fun?

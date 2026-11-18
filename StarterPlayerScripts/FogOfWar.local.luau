@@ -34,6 +34,9 @@ local NEAR_RADIUS  = 12     -- you always sense tiles this close, even behind yo
 local SENSE_RANGE  = 45     -- tagged objects (the monster) this close with no wall between are shown even outside your view
 local SENSE_REVEAL = 10     -- ...by clearing the fog in a circle this many studs around them
 local UPDATE_EVERY = 0.05   -- seconds between line-of-sight checks
+local TEAM_UPDATE_EVERY = 0.05  -- seconds between refreshes of each teammate's sight (shared vision).
+                                -- Same as your own: one sight pass costs ~1.3 ms on PC. Raise it
+                                -- (e.g. 0.1-0.15) if phones struggle - teammates' fog gets steppier.
 local EYE_HEIGHT   = 3      -- rays are cast at this height above the floor
 local FADE_SPEED   = 10     -- how fast tiles fade in/out
 local POCKET_MAX   = 12     -- forgiveness: unseen pockets up to this many tiles, fully surrounded by seen tiles, get revealed too (0 = off)
@@ -49,8 +52,8 @@ local RING_CLEAR = 0       -- outside the near (bottom-of-screen) walls: this ma
 local RING_NOISE = 4        -- how far (studs) the fog's edge wobbles in and out, so it isn't a straight line (0 = straight)
 local RING_FADE  = 10      -- ...then the fog fades in over this many studs (keep CLEAR + FADE <= the maze's BORDER, or the fade runs past the floor's edge)
 
--- Must match DIRECTION in the IsometricCamera script
-local CAMERA_DIRECTION = Vector3.new(-1, 1, -1).Unit
+-- Where the camera sits relative to the player (shared with the IsometricCamera script)
+local CAMERA_DIRECTION = require(game:GetService("ReplicatedStorage"):WaitForChild("Config")).CAMERA_DIRECTION
 
 local NEIGHBOURS4 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} }
 local NEIGHBOURS8 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} }
@@ -391,7 +394,8 @@ local function revealAround(p, visibleNow)
 	end
 end
 
-local function updateHiddenObjects(visibleNow, eye)
+-- eyes: the eye positions of you and your teammates (anyone of them can sense it)
+local function updateHiddenObjects(visibleNow, eyes)
 	for _, obj in CollectionService:GetTagged("HiddenByFog") do
 		local ok, pivot = pcall(obj.GetPivot, obj)
 		if not ok then continue end
@@ -403,9 +407,12 @@ local function updateHiddenObjects(visibleNow, eye)
 		if tile and visibleNow[tile] and tile.explored and tile.target > T_EXPLORED + 0.1 then
 			state = "seen"
 		else
-			local target = Vector3.new(p.X, eye.Y, p.Z)
-			if (target - eye).Magnitude <= SENSE_RANGE and workspace:Raycast(eye, target - eye, rayParams) == nil then
-				state = "sensed"
+			for _, eye in eyes do
+				local target = Vector3.new(p.X, eye.Y, p.Z)
+				if (target - eye).Magnitude <= SENSE_RANGE and workspace:Raycast(eye, target - eye, rayParams) == nil then
+					state = "sensed"
+					break
+				end
 			end
 		end
 
@@ -425,22 +432,16 @@ local function updateHiddenObjects(visibleNow, eye)
 	end
 end
 
-local function updateVisibility()
-	if not ready or not (maze and maze.Parent) then return end
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-
-	local eye = Vector3.new(root.Position.X, floorY + EYE_HEIGHT, root.Position.Z)
-	local visibleNow = {}
-
-	-- Which way the avatar is facing, flattened onto the ground
-	local facing = root.CFrame.LookVector * Vector3.new(1, 0, 1)
-	facing = facing.Magnitude > 0.01 and facing.Unit or Vector3.new(0, 0, -1)
+-- What one pair of eyes can see: a cone in the direction `facing` (plus a small circle around
+-- the eyes), with walls blocking the view. Returns { [tile] = how clear it should look }.
+-- Tiles seen for the first time become explored (part of your map) - this is what makes vision
+-- shared: whatever a teammate sees is added to your map too.
+local function sightFrom(eye, facing)
+	local seen = {}
 	local halfAngle = CONE_ANGLE / 2
 	local edgeStart = VIEW_RANGE * (1 - SOFT_EDGE)
 
-	-- Only check tiles inside a square around the player (not the whole grid)
+	-- Only check tiles inside a square around the eyes (not the whole grid)
 	local cx, cz = tileIndex(eye)
 	local r = math.ceil(VIEW_RANGE / TILE)
 	for x = math.max(1, cx - r), math.min(count, cx + r) do
@@ -462,18 +463,90 @@ local function updateVisibility()
 			-- 2. Is there a wall in the way? (stop the ray 0.5 studs short, so tiles whose
 			--    centre sits right on a wall's surface still count as visible)
 			if dist < 0.6 or workspace:Raycast(eye, offset - offset.Unit * 0.5, rayParams) == nil then
-				visibleNow[tile] = true
 				if not tile.explored then reveal(tile) end
 				-- Fade toward "explored" near the edge of the range or the edge of the cone
 				local distFade = math.clamp((dist - edgeStart) / (VIEW_RANGE - edgeStart), 0, 1)
 				local k = math.max(distFade, coneFade)
-				setTarget(tile, T_VISIBLE + (T_EXPLORED - T_VISIBLE) * k)
+				seen[tile] = T_VISIBLE + (T_EXPLORED - T_VISIBLE) * k
 			end
 		end
 	end
+	return seen
+end
 
-	-- Forgiveness: reveal small unseen pockets surrounded by seen tiles
-	fillPockets(cx, cz, r + 2, visibleNow)
+-- Where a character's eyes are and which way they face (flattened onto the ground)
+local function eyesOf(character)
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not (root and humanoid and humanoid.Health > 0) then return nil end
+	local eye = Vector3.new(root.Position.X, floorY + EYE_HEIGHT, root.Position.Z)
+	local facing = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	facing = facing.Magnitude > 0.01 and facing.Unit or Vector3.new(0, 0, -1)
+	return eye, facing
+end
+
+-- SHARED VISION: your teammates' sight is worked out here too, from their positions and facing
+-- (which every computer already receives). It's refreshed every TEAM_UPDATE_EVERY seconds rather
+-- than every update, to save work, and the last result is reused in between.
+local teamSight = {}   -- [teammate Player] = { seen = {...}, at = os.clock() }
+
+local function teammates()
+	local myRole = player:GetAttribute("Role")
+	local list = {}
+	if not myRole then return list end
+	for _, other in Players:GetPlayers() do
+		if other ~= player and other:GetAttribute("Role") == myRole then table.insert(list, other) end
+	end
+	return list
+end
+
+local function updateVisibility()
+	if not ready or not (maze and maze.Parent) then return end
+	local eye, facing = eyesOf(player.Character)
+	if not eye then return end
+
+	-- Your own sight, every update
+	local merged = sightFrom(eye, facing)
+	local eyes = { eye }
+	local pocketCentres = { eye }
+
+	-- Your teammates' sight, refreshed every TEAM_UPDATE_EVERY seconds
+	local now = os.clock()
+	local current = {}
+	for _, mate in teammates() do
+		current[mate] = true
+		local mateEye, mateFacing = eyesOf(mate.Character)
+		if mateEye then
+			local cached = teamSight[mate]
+			if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
+				cached = { seen = sightFrom(mateEye, mateFacing), at = now, maze = maze }
+				teamSight[mate] = cached
+			end
+			for tile, t in cached.seen do
+				if not merged[tile] or t > merged[tile] then merged[tile] = t end   -- the clearest view wins
+			end
+			table.insert(eyes, mateEye)
+			table.insert(pocketCentres, mateEye)
+		else
+			teamSight[mate] = nil
+		end
+	end
+	for mate in teamSight do
+		if not current[mate] then teamSight[mate] = nil end   -- left the team / the game
+	end
+
+	local visibleNow = {}
+	for tile, t in merged do
+		visibleNow[tile] = true
+		setTarget(tile, t)
+	end
+
+	-- Forgiveness: reveal small unseen pockets surrounded by seen tiles (around everyone's view)
+	local r = math.ceil(VIEW_RANGE / TILE)
+	for _, centre in pocketCentres do
+		local cx, cz = tileIndex(centre)
+		fillPockets(cx, cz, r + 2, visibleNow)
+	end
 
 	-- Soft edge around everything seen
 	updateFringe(visibleNow)
@@ -493,7 +566,7 @@ local function updateVisibility()
 	end
 
 	-- The monster etc. (before the reset below, since sensing one clears fog around it)
-	updateHiddenObjects(visibleNow, eye)
+	updateHiddenObjects(visibleNow, eyes)
 
 	-- Anything that was visible/peeked last time but isn't now goes back to its resting state
 	for tile in lastVisible do

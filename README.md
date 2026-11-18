@@ -4,7 +4,7 @@ A learning sandbox in Roblox Studio. The place file is `Place2.rbxl`.
 
 ## The game
 
-A maze game: a random maze every round, a fixed isometric camera, and fog of war with line of sight (a vision cone, a soft edge, and forgiveness for small unseen pockets). The first player to reach the green beacon wins the round. A monster roams the maze and chases players it sees or hears, and a red sonar ping shows its position every 3 seconds when it's nearby but out of view.
+The start of **Cruel Maze** (design in `CLAUDE.md`, plan in `docs/roadmap.md`). Right now it's a maze game: a short countdown, then a random maze every round, a fixed isometric camera, and fog of war with line of sight (a vision cone, a soft edge, and forgiveness for small unseen pockets). The first player to reach the green beacon wins the round. A monster roams the maze and chases players it sees or hears, and a red sonar ping shows its position every 3 seconds when it's nearby but out of view.
 
 ## Layout
 
@@ -13,14 +13,18 @@ A maze game: a random maze every round, a fixed isometric camera, and fog of war
 
 | File | Where it lives in Studio | What it does |
 |---|---|---|
-| `ServerScriptService/MazeGame.legacy.luau` | ServerScriptService | Runs rounds, times runs, wins/best stats |
-| `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds the maze |
-| `StarterGui/MazeHUD/HUD.local.luau` | StarterGui › MazeHUD | Run timer and announcements |
+| `ServerScriptService/Main.legacy.luau` | ServerScriptService | Starts the game (runs `Match`) |
+| `ServerStorage/Match.luau` | ServerStorage (ModuleScript) | Runs matches one after another: Waiting → Countdown → Playing → Results. Roles, wins/best stats |
+| `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds each maze |
+| `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches. A match creates as many as it needs |
+| `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers (speeds, camera angle, match timings, states, roles) |
+| `ReplicatedStorage/Net.luau` | ReplicatedStorage (ModuleScript) | Creates/finds the remote events used to message between server and players |
+| `StarterGui/MazeHUD/HUD.local.luau` | StarterGui › MazeHUD | Countdown, run timer and announcements |
+| `StarterPlayerScripts/Controls.local.luau` | StarterPlayer › StarterPlayerScripts | Character faces the mouse (WASD is already screen-relative); moving away from your facing is slower (cones and speeds in `Config`) |
 | `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera |
-| `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight; hides anything tagged `HiddenByFog` unless it's in view |
-| `ServerScriptService/Monster.legacy.luau` | ServerScriptService | The monster: roams, chases, catches |
+| `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight, shared with teammates (same role); hides anything tagged `HiddenByFog` unless it's in view |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
-| `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Animates the monster's limbs in code (a limping walk cycle synced to its speed) |
+| `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates their limbs in code (a limping walk cycle synced to speed) |
 
 The monster's body is the rigged model `ServerStorage.MonsterRig` (AI-generated, auto-rigged as R15). It lives in the place file, not in a script. If it's missing, the monster falls back to a floating orb.
 

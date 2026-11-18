@@ -4,13 +4,14 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
+
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Direction from the player to the camera.
--- (-1, 1, -1) = true isometric: 45° around, ~35° down.
--- Try (-1, 2, -1) for a steeper, more top-down view.
-local DIRECTION = Vector3.new(-1, 1, -1).Unit
+-- Direction from the player to the camera (set in Config, shared with the fog).
+-- Try (-1, 2, -1) there for a steeper, more top-down view.
+local DIRECTION = Config.CAMERA_DIRECTION
 local DISTANCE = 210   -- far away...
 local FOV = 22         -- ...with a narrow lens: looks flatter, like classic isometric games
 local FADE = 0.75      -- how see-through walls become when they block the view
