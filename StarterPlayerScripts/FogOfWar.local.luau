@@ -16,9 +16,12 @@
 --
 -- Vision is a CONE in the direction your avatar faces (plus a small circle around you).
 -- Line of sight = one raycast from the player to the centre of each nearby tile in that cone.
+-- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
+-- or when it's close with no wall between (then it glows through the fog).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 
@@ -27,7 +30,8 @@ local VIEW_RANGE   = 80     -- how far you can see (studs)
 local SOFT_EDGE    = 0.35   -- outer 35% of the view range fades gradually instead of a hard edge
 local CONE_ANGLE   = 110    -- total width of the vision cone in degrees (360 = see all around)
 local CONE_SOFT    = 20     -- the outer this-many degrees of the cone fade gradually
-local NEAR_RADIUS  = 9      -- you always sense tiles this close, even behind you
+local NEAR_RADIUS  = 12     -- you always sense tiles this close, even behind you
+local SENSE_RANGE  = 25     -- tagged objects (the monster) this close with no wall between are shown even outside your view
 local UPDATE_EVERY = 0.05   -- seconds between line-of-sight checks
 local EYE_HEIGHT   = 3      -- rays are cast at this height above the floor
 local FADE_SPEED   = 10     -- how fast tiles fade in/out
@@ -287,6 +291,59 @@ local function updateFringe(visibleNow)
 	end
 end
 
+-- Things tagged "HiddenByFog" (e.g. the monster) are hidden unless you can see them. Three states:
+--   "seen"   - its tile is in your view: drawn normally
+--   "sensed" - outside your view, but close (SENSE_RANGE) with no wall between: drawn with a red
+--              Highlight that shows through the fog, so you can see it even behind you
+--   "hidden" - not drawn at all (its light is switched off too)
+-- Sets a local "VisibleToMe" attribute other scripts can read (e.g. the monster ping).
+local SENSED_COLOR = Color3.fromRGB(255, 60, 60)
+
+local function updateHiddenObjects(visibleNow, eye)
+	for _, obj in CollectionService:GetTagged("HiddenByFog") do
+		local ok, pivot = pcall(obj.GetPivot, obj)
+		if not ok then continue end
+		local p = pivot.Position
+		local tx, tz = tileIndex(p)
+		local tile = tiles[tx] and tiles[tx][tz]
+
+		local state = "hidden"
+		if tile and visibleNow[tile] and tile.explored and tile.target > T_EXPLORED + 0.1 then
+			state = "seen"
+		else
+			local target = Vector3.new(p.X, eye.Y, p.Z)
+			if (target - eye).Magnitude <= SENSE_RANGE and workspace:Raycast(eye, target - eye, rayParams) == nil then
+				state = "sensed"
+			end
+		end
+
+		if obj:GetAttribute("FogState") ~= state then
+			obj:SetAttribute("FogState", state)                 -- set on this computer only; not shared
+			obj:SetAttribute("VisibleToMe", state ~= "hidden")
+			for _, d in obj:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.LocalTransparencyModifier = state == "hidden" and 1 or 0
+				elseif d:IsA("Light") then
+					d.Enabled = state ~= "hidden"
+				end
+			end
+			-- A Highlight set to AlwaysOnTop draws the object's silhouette over everything (incl. fog)
+			local glow = obj:FindFirstChild("FogSenseHighlight")
+			if not glow then
+				glow = Instance.new("Highlight")
+				glow.Name = "FogSenseHighlight"
+				glow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				glow.FillColor = SENSED_COLOR
+				glow.FillTransparency = 0.35
+				glow.OutlineColor = Color3.fromRGB(255, 170, 170)
+				glow.Adornee = obj
+				glow.Parent = obj
+			end
+			glow.Enabled = state == "sensed"
+		end
+	end
+end
+
 local function updateVisibility()
 	if not ready or not (maze and maze.Parent) then return end
 	local character = player.Character
@@ -358,6 +415,8 @@ local function updateVisibility()
 	for tile in lastVisible do
 		if not visibleNow[tile] then setTarget(tile, restingState(tile)) end
 	end
+
+	updateHiddenObjects(visibleNow, eye)
 
 	lastVisible = visibleNow
 end

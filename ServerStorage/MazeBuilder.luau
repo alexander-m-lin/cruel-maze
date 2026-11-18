@@ -128,6 +128,9 @@ function MazeBuilder.build()
 	-- raycasts never pass through walls that haven't streamed in yet
 	model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 
+	-- Remember the layout so other scripts (e.g. the monster) can navigate the maze
+	MazeBuilder.current = { walls = walls, n = n, S = S, half = half, floorY = y0, model = model }
+
 	model.Parent = workspace
 	return model, start + Vector3.new(0, 4, 0), finish
 end
