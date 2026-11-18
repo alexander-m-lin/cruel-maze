@@ -20,6 +20,9 @@ A maze game: a random maze every round, a fixed isometric camera, and fog of war
 | `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight; hides anything tagged `HiddenByFog` unless it's in view |
 | `ServerScriptService/Monster.legacy.luau` | ServerScriptService | The monster: roams, chases, catches |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
+| `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Animates the monster's limbs in code (a limping walk cycle synced to its speed) |
+
+The monster's body is the rigged model `ServerStorage.MonsterRig` (AI-generated, auto-rigged as R15). It lives in the place file, not in a script. If it's missing, the monster falls back to a floating orb.
 
 Script Sync names files by script type: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript.
 

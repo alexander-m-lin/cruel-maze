@@ -17,7 +17,7 @@
 -- Vision is a CONE in the direction your avatar faces (plus a small circle around you).
 -- Line of sight = one raycast from the player to the centre of each nearby tile in that cone.
 -- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
--- or when it's close with no wall between (then it glows through the fog).
+-- or when it's close with no wall between (then the fog clears in a small circle around it).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -31,7 +31,8 @@ local SOFT_EDGE    = 0.35   -- outer 35% of the view range fades gradually inste
 local CONE_ANGLE   = 110    -- total width of the vision cone in degrees (360 = see all around)
 local CONE_SOFT    = 20     -- the outer this-many degrees of the cone fade gradually
 local NEAR_RADIUS  = 12     -- you always sense tiles this close, even behind you
-local SENSE_RANGE  = 25     -- tagged objects (the monster) this close with no wall between are shown even outside your view
+local SENSE_RANGE  = 45     -- tagged objects (the monster) this close with no wall between are shown even outside your view
+local SENSE_REVEAL = 10     -- ...by clearing the fog in a circle this many studs around them
 local UPDATE_EVERY = 0.05   -- seconds between line-of-sight checks
 local EYE_HEIGHT   = 3      -- rays are cast at this height above the floor
 local FADE_SPEED   = 10     -- how fast tiles fade in/out
@@ -39,11 +40,14 @@ local POCKET_MAX   = 12     -- forgiveness: unseen pockets up to this many tiles
 
 local FOG_COLOR  = Color3.fromRGB(8, 8, 14)
 local T_HIDDEN   = 0        -- transparency for each state (0 = black, 1 = clear)
-local T_EXPLORED = 0.65     -- higher = brighter remembered areas
+local T_EXPLORED = 0.5      -- higher = brighter remembered areas
 local T_VISIBLE  = 1
 local T_PEEK     = 0.7      -- hidden fog between the camera and you is see-through, so it never hides your character
 local FRINGE     = { 0.55, 0.3, 0.12 }  -- how see-through the unseen tiles 1, 2, 3 tiles away from seen ones are ({} = off)
 local SHEET      = 0.005    -- thickness of sheets (paper-thin so their edges don't show as grid lines)
+local RING_CLEAR = 0       -- outside the near (bottom-of-screen) walls: this many studs stay fully clear...
+local RING_NOISE = 4        -- how far (studs) the fog's edge wobbles in and out, so it isn't a straight line (0 = straight)
+local RING_FADE  = 10      -- ...then the fog fades in over this many studs (keep CLEAR + FADE <= the maze's BORDER, or the fade runs past the floor's edge)
 
 -- Must match DIRECTION in the IsometricCamera script
 local CAMERA_DIRECTION = Vector3.new(-1, 1, -1).Unit
@@ -182,6 +186,76 @@ local function buildFog(newMaze)
 		end
 	end
 
+	-- OUTSIDE THE MAZE.
+	-- The camera looks from the -X/-Z corner, so the -X and -Z borders are the NEAR ones (bottom of
+	-- the screen) and the +X and +Z borders the FAR ones (top of the screen).
+	--   far borders:  fog blocks (same colour/height as unexplored fog) right up against the outer
+	--                 wall, so there's nothing to see past them
+	--   near borders: a clear strip by the wall (RING_CLEAR studs), then the fog fades in over
+	--                 RING_FADE studs, then solid fog. The fade is made of small floor tiles whose
+	--                 darkness depends on distance from the wall PLUS some smooth random "noise", so
+	--                 the edge of the fog wobbles instead of running in a straight line. These are
+	--                 flat sheets on the floor: tall blocks on the camera's side would hide the fade.
+	local wallFace = half + 1                    -- the outer walls stick out about 1 stud past the grid
+	local outer = half + 850                     -- far enough to fill the view (parts max 2048 wide)
+	local fogH = wallH + 1
+
+	local function outsidePart(x1, x2, z1, z2, height, transparency)
+		local p = Instance.new("Part")
+		p.Name = "OutsideFog"
+		p.Anchored = true
+		p.CanCollide, p.CanQuery, p.CanTouch = false, false, false
+		p.CastShadow = false
+		p.Material = Enum.Material.SmoothPlastic
+		p.Color = FOG_COLOR
+		p.Transparency = transparency
+		p.Size = Vector3.new(x2 - x1, height, z2 - z1)
+		p.Position = Vector3.new((x1 + x2) / 2, floorY + 0.02 + height / 2, (z1 + z2) / 2)
+		p.Parent = fogFolder
+	end
+	-- An L-shaped band (west strip + north strip) covering distances d1..d2 out from the near walls
+	-- (measured the "square" way, so the corner is filled too), running up to the far fog at +half
+	local function nearBand(d1, d2, height, transparency)
+		outsidePart(-d2, -d1, -d2, half, height, transparency)   -- west side, including the corner
+		outsidePart(-d1, half, -d2, -d1, height, transparency)   -- north side
+	end
+
+	-- far borders: blocks from the edge of the grid outwards
+	outsidePart(half, outer, -outer, outer, fogH, 0)        -- east (+X), full length
+	outsidePart(-outer, half, half, outer, fogH, 0)         -- south (+Z)
+	-- near borders: a noisy fade made of TILE-sized floor tiles, then solid.
+	-- math.noise gives smooth random values (roughly -0.5..0.5) that change gradually with position;
+	-- we add two layers - big gentle bulges plus smaller wiggles - and use the result to push each
+	-- tile's distance out or in by up to RING_NOISE studs.
+	local seed = math.random() * 1000            -- a different pattern every maze
+	local function wobble(x, z)
+		local n = math.noise(x * 0.06 + seed, z * 0.06 - seed) * 2
+			+ math.noise(x * 0.2 - seed, z * 0.2 + seed) * 0.8
+		return math.clamp(n, -1, 1) * RING_NOISE
+	end
+	local rowsOut = math.ceil((RING_CLEAR + RING_FADE + RING_NOISE) / TILE) + 1  -- +1 so it's fully dark before the solid part
+	local bandOuter = wallFace + rowsOut * TILE  -- the noisy band ends here; solid fog beyond
+	local rowsIn = math.ceil((wallFace + half) / TILE)   -- tiles from the wall face across to the far side
+	local made = 0
+	for i = -rowsOut, rowsIn - 1 do
+		for k = -rowsOut, rowsIn - 1 do
+			if i >= 0 and k >= 0 then continue end          -- inside the walls: not ours
+			local x1, z1 = -wallFace + i * TILE, -wallFace + k * TILE
+			local cx, cz = x1 + TILE / 2, z1 + TILE / 2
+			local d = math.max(-cx, -cz) - wallFace          -- how far outside the near walls
+			local darkness = math.clamp((d - RING_CLEAR + wobble(cx, cz)) / RING_FADE, 0, 1)
+			if darkness > 0.01 then
+				outsidePart(x1, x1 + TILE, z1, z1 + TILE, SHEET, darkness > 0.99 and 0 or 1 - darkness)
+				made += 1
+				if made % 400 == 0 then
+					task.wait()   -- build in chunks so the game doesn't freeze
+					if myId ~= buildId then return end
+				end
+			end
+		end
+	end
+	nearBand(bandOuter, outer, SHEET, 0)
+
 	-- Mark which tiles overlap a wall
 	for _, part in maze:GetChildren() do
 		if part.Name == "Wall" then
@@ -293,11 +367,29 @@ end
 
 -- Things tagged "HiddenByFog" (e.g. the monster) are hidden unless you can see them. Three states:
 --   "seen"   - its tile is in your view: drawn normally
---   "sensed" - outside your view, but close (SENSE_RANGE) with no wall between: drawn with a red
---              Highlight that shows through the fog, so you can see it even behind you
+--   "sensed" - outside your view, but close (SENSE_RANGE) with no wall between: the fog clears in a
+--              small circle (SENSE_REVEAL) around it, so you can see it even behind you. Only for
+--              now - the area isn't added to your map.
 --   "hidden" - not drawn at all (its light is switched off too)
 -- Sets a local "VisibleToMe" attribute other scripts can read (e.g. the monster ping).
-local SENSED_COLOR = Color3.fromRGB(255, 60, 60)
+
+-- Clear the fog around a point, for this update only (tiles behind a wall from it stay fogged)
+local function revealAround(p, visibleNow)
+	local from = Vector3.new(p.X, floorY + EYE_HEIGHT, p.Z)
+	local x1, x2 = tileRange(p.X - SENSE_REVEAL, p.X + SENSE_REVEAL)
+	local z1, z2 = tileRange(p.Z - SENSE_REVEAL, p.Z + SENSE_REVEAL)
+	for x = x1, x2 do
+		for z = z1, z2 do
+			local tile = tiles[x][z]
+			local to = tile.center + Vector3.new(0, EYE_HEIGHT, 0)
+			local offset = to - from
+			if offset.Magnitude <= SENSE_REVEAL and (offset.Magnitude < 0.6 or workspace:Raycast(from, offset - offset.Unit * 0.5, rayParams) == nil) then
+				setTarget(tile, T_VISIBLE)
+				visibleNow[tile] = true   -- so it goes back to fog once the monster moves on
+			end
+		end
+	end
+end
 
 local function updateHiddenObjects(visibleNow, eye)
 	for _, obj in CollectionService:GetTagged("HiddenByFog") do
@@ -317,6 +409,8 @@ local function updateHiddenObjects(visibleNow, eye)
 			end
 		end
 
+		if state == "sensed" then revealAround(p, visibleNow) end
+
 		if obj:GetAttribute("FogState") ~= state then
 			obj:SetAttribute("FogState", state)                 -- set on this computer only; not shared
 			obj:SetAttribute("VisibleToMe", state ~= "hidden")
@@ -327,19 +421,6 @@ local function updateHiddenObjects(visibleNow, eye)
 					d.Enabled = state ~= "hidden"
 				end
 			end
-			-- A Highlight set to AlwaysOnTop draws the object's silhouette over everything (incl. fog)
-			local glow = obj:FindFirstChild("FogSenseHighlight")
-			if not glow then
-				glow = Instance.new("Highlight")
-				glow.Name = "FogSenseHighlight"
-				glow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-				glow.FillColor = SENSED_COLOR
-				glow.FillTransparency = 0.35
-				glow.OutlineColor = Color3.fromRGB(255, 170, 170)
-				glow.Adornee = obj
-				glow.Parent = obj
-			end
-			glow.Enabled = state == "sensed"
 		end
 	end
 end
@@ -411,12 +492,13 @@ local function updateVisibility()
 		end
 	end
 
+	-- The monster etc. (before the reset below, since sensing one clears fog around it)
+	updateHiddenObjects(visibleNow, eye)
+
 	-- Anything that was visible/peeked last time but isn't now goes back to its resting state
 	for tile in lastVisible do
 		if not visibleNow[tile] then setTarget(tile, restingState(tile)) end
 	end
-
-	updateHiddenObjects(visibleNow, eye)
 
 	lastVisible = visibleNow
 end

@@ -1,8 +1,14 @@
--- Generates and builds a random maze.
--- Algorithm: "recursive backtracker" (a depth-first search).
---   Start in a cell, knock down the wall to a random unvisited neighbour, move there,
---   repeat. When stuck, back up until a cell has unvisited neighbours.
---   This guarantees every cell is reachable and there's exactly one path between any two cells.
+-- Generates and builds a random maze, tuned to have lots of JUNCTIONS (places where you must choose).
+--
+-- Step 1, "growing tree": keep a list of cells to grow from. Each step, pick one, knock down the wall
+--   to a random unvisited neighbour and add that neighbour to the list (or drop the cell if it has
+--   none). Always picking the NEWEST cell gives long winding corridors with few branches; picking a
+--   RANDOM one gives lots of short branches. Mixing the two gives plenty of junctions whose branches
+--   still go somewhere.
+-- Step 2, "braiding": most dead ends get one extra wall knocked down, joining them to a neighbour.
+--   That turns a dead end into a junction and adds loops, so there's more than one way around - and
+--   you can lose the monster by circling.
+-- Every cell is still reachable from every other.
 
 local MazeBuilder = {}
 
@@ -10,6 +16,30 @@ MazeBuilder.CELLS  = 15   -- maze is CELLS x CELLS
 MazeBuilder.CELL   = 20   -- studs per cell (hallways are CELL - WALL_T wide)
 MazeBuilder.WALL_H = 7    -- wall height (low enough for the isometric camera to see into corridors)
 MazeBuilder.WALL_T = 2    -- wall thickness
+
+-- Wall look. WALL_VARIANT names an AI-generated MaterialVariant stored in MaterialService (it lives
+-- in the place file); WALL_MATERIAL must be the base material it was made for. Options generated:
+--   "JungleTempleStone" .. "JungleTempleStone3"  (base Cobblestone) - mossy grey-green temple blocks
+--   "AncientTombStone"  .. "AncientTombStone3"   (base Sandstone)   - weathered tomb sandstone
+-- WALL_COLOR tints the texture; white shows it as generated.
+-- NOTE (2026-11-18): the generated textures' images were still awaiting Roblox moderation (they
+-- load as blank), so for now the walls use Roblox's built-in Cobblestone with a mossy tint
+-- (WALL_VARIANT = "" means no variant). Once the images load, set WALL_VARIANT to one of the
+-- names above and WALL_COLOR back to white.
+MazeBuilder.WALL_MATERIAL = Enum.Material.Cobblestone
+MazeBuilder.WALL_VARIANT  = ""
+MazeBuilder.WALL_COLOR    = Color3.fromRGB(104, 114, 88)
+
+-- Floor look: Roblox's built-in Pavement (stone pavers) in a weathered warm grey
+MazeBuilder.FLOOR_MATERIAL = Enum.Material.Pavement
+MazeBuilder.FLOOR_COLOR    = Color3.fromRGB(118, 110, 94)
+
+-- How far the floor extends past the outer walls on every side. Along the near (bottom-of-screen)
+-- walls the fog script shows some of it (RING_CLEAR + RING_FADE there should fit within this).
+MazeBuilder.BORDER = 14
+
+MazeBuilder.NEWEST = 0.5  -- step 1: chance to grow from the newest cell (1 = long corridors, 0 = bushy)
+MazeBuilder.BRAID  = 0.75 -- step 2: fraction of dead ends opened up into loops (0 = none, 1 = no dead ends)
 
 -- Returns walls[x][z] = {N=bool, E=bool, S=bool, W=bool}
 function MazeBuilder.generate(n)
@@ -24,26 +54,62 @@ function MazeBuilder.generate(n)
 	-- {dx, dz, wallOnThisCell, wallOnNeighbour}
 	local DIRS = { {0,-1,"N","S"}, {1,0,"E","W"}, {0,1,"S","N"}, {-1,0,"W","E"} }
 
-	local stack = { {1, 1} }
+	local function inside(x, z) return x >= 1 and x <= n and z >= 1 and z <= n end
+	local function knock(x, z, d)
+		walls[x][z][d[3]] = false
+		walls[x + d[1]][z + d[2]][d[4]] = false
+	end
+	local function openSides(x, z)
+		local w = walls[x][z]
+		return (w.N and 0 or 1) + (w.E and 0 or 1) + (w.S and 0 or 1) + (w.W and 0 or 1)
+	end
+
+	-- Step 1: growing tree
+	local active = { {1, 1} }
 	visited[1][1] = true
-	while #stack > 0 do
-		local x, z = stack[#stack][1], stack[#stack][2]
+	while #active > 0 do
+		local i = math.random() < MazeBuilder.NEWEST and #active or math.random(#active)
+		local x, z = active[i][1], active[i][2]
 		local options = {}
 		for _, d in DIRS do
 			local nx, nz = x + d[1], z + d[2]
-			if nx >= 1 and nx <= n and nz >= 1 and nz <= n and not visited[nx][nz] then
+			if inside(nx, nz) and not visited[nx][nz] then
 				table.insert(options, d)
 			end
 		end
 		if #options == 0 then
-			table.remove(stack) -- dead end: back up
+			table.remove(active, i) -- nothing left to grow into from here
 		else
 			local d = options[math.random(#options)]
-			local nx, nz = x + d[1], z + d[2]
-			walls[x][z][d[3]] = false
-			walls[nx][nz][d[4]] = false
-			visited[nx][nz] = true
-			table.insert(stack, { nx, nz })
+			knock(x, z, d)
+			visited[x + d[1]][z + d[2]] = true
+			table.insert(active, { x + d[1], z + d[2] })
+		end
+	end
+
+	-- Step 2: braiding. Visit cells in a random order; open up dead ends. Joining two dead ends
+	-- together fixes both at once, so prefer that.
+	local cells = {}
+	for x = 1, n do
+		for z = 1, n do table.insert(cells, { x, z }) end
+	end
+	for i = #cells, 2, -1 do
+		local j = math.random(i)
+		cells[i], cells[j] = cells[j], cells[i]
+	end
+	for _, c in cells do
+		local x, z = c[1], c[2]
+		if openSides(x, z) == 1 and math.random() < MazeBuilder.BRAID then
+			local best, any = {}, {}
+			for _, d in DIRS do
+				local nx, nz = x + d[1], z + d[2]
+				if inside(nx, nz) and walls[x][z][d[3]] then
+					table.insert(any, d)
+					if openSides(nx, nz) == 1 then table.insert(best, d) end
+				end
+			end
+			local pick = #best > 0 and best or any
+			if #pick > 0 then knock(x, z, pick[math.random(#pick)]) end
 		end
 	end
 	return walls
@@ -78,13 +144,15 @@ function MazeBuilder.build()
 		return p
 	end
 
-	local WALL_COLOR = Color3.fromRGB(95, 105, 125)
 	local function wall(pos, size)
-		block("Wall", size, pos + Vector3.new(0, H / 2, 0), WALL_COLOR, Enum.Material.Brick)
+		local p = block("Wall", size, pos + Vector3.new(0, H / 2, 0), MazeBuilder.WALL_COLOR, MazeBuilder.WALL_MATERIAL)
+		p.MaterialVariant = MazeBuilder.WALL_VARIANT
 	end
 
-	block("Floor", Vector3.new(n * S + T, 1, n * S + T), Vector3.new(0, y0 + 0.5, 0),
-		Color3.fromRGB(200, 190, 160), Enum.Material.Sand)
+	-- The floor reaches BORDER studs past the outer walls, so the clear ring around the maze has ground
+	local floorSize = n * S + T + 2 * MazeBuilder.BORDER
+	block("Floor", Vector3.new(floorSize, 1, floorSize), Vector3.new(0, y0 + 0.5, 0),
+		MazeBuilder.FLOOR_COLOR, MazeBuilder.FLOOR_MATERIAL)
 	y0 += 1 -- everything else sits on the maze floor
 
 	local walls = MazeBuilder.generate(n)
@@ -124,6 +192,7 @@ function MazeBuilder.build()
 	model:SetAttribute("CellSize", S)
 	model:SetAttribute("WallHeight", H)
 	model:SetAttribute("FloorY", y0)
+	model:SetAttribute("Border", MazeBuilder.BORDER)
 	-- Always keep the whole maze loaded on every client, so line-of-sight
 	-- raycasts never pass through walls that haven't streamed in yet
 	model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent

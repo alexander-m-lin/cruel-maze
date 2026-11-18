@@ -4,6 +4,8 @@
 local Players = game:GetService("Players")
 local MazeBuilder = require(game:GetService("ServerStorage").MazeBuilder)
 
+local PLAYER_SPEED = 24   -- player walk speed in studs per second (Roblox default is 16)
+
 -- A StringValue the clients watch to show announcements
 local announcement = Instance.new("StringValue")
 announcement.Name = "Announcement"
@@ -68,7 +70,8 @@ Players.PlayerAdded:Connect(function(player)
 	best.Name = "Best"   -- fastest escape in seconds (0 = none yet)
 	best.Parent = stats
 
-	player.CharacterAdded:Connect(function()
+	player.CharacterAdded:Connect(function(character)
+		character:WaitForChild("Humanoid").WalkSpeed = PLAYER_SPEED
 		startRun(player)  -- resetting your character restarts your timer
 	end)
 end)
