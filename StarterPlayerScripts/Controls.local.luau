@@ -7,13 +7,34 @@
 -- and since the fog's vision cone follows the way you face, the mouse aims where you look.
 -- With touch or a gamepad (no mouse to aim), you face the way you're moving, as normal.
 -- (Proper touch/gamepad aiming comes later, with mobile controls.)
+--
+-- SPEED: moving a different way from where you face slows you down (cone sizes and speeds are in
+-- Config). The server sets your base speed (the player's "BaseSpeed" attribute, e.g. 0 during the
+-- countdown); this script scales it each frame. Your character's movement is simulated on your
+-- own computer, so setting WalkSpeed here is what takes effect.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
+
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
+
+-- Speed multiplier for moving at `angle` degrees away from where you face:
+-- full inside the front cone, slightly slower on the sides, much slower backwards.
+-- Each change blends in over Config.FACING_BLEND degrees just past the zone's edge, so each zone
+-- keeps its full speed right up to its edge (a sideways strafe at 90° gets the side speed).
+local function facingSpeed(angle)
+	local frontEdge = Config.FACING_FULL_CONE / 2                 -- 50°
+	local sideEdge = frontEdge + Config.FACING_SIDE_CONE          -- 90°
+	local blend = Config.FACING_BLEND
+	local toSide = math.clamp((angle - frontEdge) / blend, 0, 1)
+	local toBack = math.clamp((angle - sideEdge) / blend, 0, 1)
+	local side = 1 + (Config.FACING_SIDE_SPEED - 1) * toSide
+	return side + (Config.FACING_BACK_SPEED - side) * toBack
+end
 
 local MOUSE_INPUTS = {
 	[Enum.UserInputType.MouseMovement] = true,
@@ -51,11 +72,23 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 	if not (humanoid and root) or humanoid.Health <= 0 then return end
 
 	humanoid.AutoRotate = not aimWithMouse   -- Roblox turns you toward your movement only when not aiming
-	if not aimWithMouse then return end
 
-	local target = mouseOnPlane(root.Position.Y)
-	if not target then return end
-	local flat = (target - root.Position) * Vector3.new(1, 0, 1)
-	if flat.Magnitude < 0.5 then return end   -- cursor right on top of you: keep the current facing
-	root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
+	if aimWithMouse then
+		local target = mouseOnPlane(root.Position.Y)
+		local flat = target and (target - root.Position) * Vector3.new(1, 0, 1)
+		if flat and flat.Magnitude >= 0.5 then   -- cursor right on top of you: keep the current facing
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
+		end
+	end
+
+	-- Speed: scale the server's base speed by how far your movement is from your facing
+	local base = player:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED
+	local move = humanoid.MoveDirection * Vector3.new(1, 0, 1)
+	local multiplier = 1
+	if aimWithMouse and move.Magnitude > 0.1 then
+		local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+		local angle = math.deg(math.acos(math.clamp(move.Unit:Dot(look.Unit), -1, 1)))
+		multiplier = facingSpeed(angle)
+	end
+	humanoid.WalkSpeed = base * multiplier
 end)

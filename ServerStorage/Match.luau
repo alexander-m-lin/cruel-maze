@@ -55,11 +55,15 @@ local function survivors()
 	return list
 end
 
--- Walk speed for the current state: frozen during the countdown
+-- Walk speed for the current state: frozen during the countdown.
+-- Also published as the player's "BaseSpeed" attribute: the Controls script on their computer
+-- scales it down when they move a different way from where they're facing.
 local function applySpeed(player)
+	local speed = (state == States.Countdown) and 0 or Config.PLAYER_SPEED
+	player:SetAttribute("BaseSpeed", speed)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		humanoid.WalkSpeed = (state == States.Countdown) and 0 or Config.PLAYER_SPEED
+		humanoid.WalkSpeed = speed
 	end
 end
 
