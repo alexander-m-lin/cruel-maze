@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Roblox_Studio",
+      "Bash(git status *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git diff)",
+      "Bash(git log *)",
+      "Bash(git log)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch)",
+      "Bash(git branch --list *)",
+      "Bash(git branch --show-current)",
+      "Bash(git switch *)",
+      "Bash(git checkout -b *)"
+    ],
+    "ask": [
+      "mcp__Roblox_Studio__generate_mesh",
+      "mcp__Roblox_Studio__generate_material",
+      "mcp__Roblox_Studio__generate_texture",
+      "mcp__Roblox_Studio__generate_procedural_model",
+      "mcp__Roblox_Studio__generate_scene",
+      "mcp__Roblox_Studio__upload_image",
+      "mcp__Roblox_Studio__insert_asset",
+      "mcp__Roblox_Studio__open_cloud_invoke",
+      "mcp__Roblox_Studio__auto_setup_avatar"
+    ]
+  }
+}
