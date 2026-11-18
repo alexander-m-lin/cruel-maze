@@ -67,10 +67,24 @@ local function applySpeed(player)
 	end
 end
 
+-- Each player gets their own spot around the start cell, so nobody spawns inside anybody else.
+-- Spots sit on a circle around the cell's centre, facing out toward the rest of the maze.
+local SPAWN_RADIUS = 5
+local SPAWN_SLOTS = 6
+local function spawnSpot(player)
+	local list = Players:GetPlayers()
+	table.sort(list, function(a, b) return a.UserId < b.UserId end)   -- same order on every call
+	local index = (table.find(list, player) or 1) - 1
+	local angle = (index % SPAWN_SLOTS) / SPAWN_SLOTS * math.pi * 2
+	local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * SPAWN_RADIUS
+	local at = maze.start + offset
+	return CFrame.lookAt(at, at + Vector3.new(1, 0, 1))   -- face into the maze (+X/+Z from the start corner)
+end
+
 local function sendToStart(player)
 	local character = player.Character
 	if character and maze then
-		character:PivotTo(CFrame.new(maze.start + Vector3.new(math.random(-2, 2), 0, math.random(-2, 2))))
+		character:PivotTo(spawnSpot(player))
 	end
 end
 
@@ -188,6 +202,10 @@ local function onPlayerAdded(player)
 	player.CharacterAdded:Connect(function(character)
 		character:WaitForChild("Humanoid")
 		applySpeed(player)
+		-- (re)spawning during a match: move from the shared spawn pad to your own spot
+		if state == States.Countdown or state == States.Playing then
+			task.defer(sendToStart, player)
+		end
 		-- respawning (e.g. after being caught) restarts your run timer, as in the prototype
 		if state == States.Playing then startRunTimer(player) end
 	end)
