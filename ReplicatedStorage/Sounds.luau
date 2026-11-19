@@ -13,7 +13,7 @@ local Sounds = {
 	RelicHum       = { id = 9125674129,  volume = 0.6, range = 60, looped = true },   -- while someone collects (pitch rises as the bar fills)
 	RelicCollected = { id = 9118587701, volume = 1.0 },                              -- everyone hears it
 	-- (tried before: 4612374036 sharp ding, 103516326607012 soft bell; 90773963263404 and 96659579913194 untried)
-	RoomCaptured   = { id = 9125879007, volume = 1.0, startAt = 1 },             -- everyone hears it
+	RoomCaptured   = { id = 9125879007, volume = 1.0, startAt = 0.5 },             -- everyone hears it
 
 	-- The monster
 	MonsterRoar    = { id = 9113980319,  volume = 2.0, range = 140 },                 -- when it starts chasing someone
