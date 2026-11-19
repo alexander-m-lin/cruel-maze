@@ -9,9 +9,10 @@
 --    stride advances with distance travelled, so the feet don't slide, and the gait gets bigger
 --    and more frantic as the monster speeds up during a chase.
 -- 3. THE KILL. When it catches someone (the server sets KillStart/KillVictim on the model) the
---    arms lift overhead, and the victim's body is shown held between its hands. At the rip the
---    body is swapped for a copy that tears at the waist: the top half is flung one way and the
---    legs the other, along with the arms, and every limb comes loose and scatters. All of this exists only on this computer.
+--    arms lift overhead, and the victim's body is shown held between its hands, thrashing and
+--    shaking its head. At the rip the body is swapped for a copy that tears at the waist: the top
+--    half is flung one way and the legs the other, along with the arms, and every limb comes
+--    loose and scatters. All of this exists only on this computer.
 --
 -- Joint axes (R15, facing -Z): rotating about X swings a limb forward/back, about Z swings it out
 -- to the side, about Y twists it.
@@ -299,6 +300,40 @@ local function hide(character)
 	end
 end
 
+-- The victim's limb joints (classic Motor6Ds or newer AnimationConstraints), by name
+local FLAIL_JOINTS = { "LeftShoulder", "RightShoulder", "LeftElbow", "RightElbow", "LeftHip", "RightHip",
+	"LeftKnee", "RightKnee", "Neck" }
+local function victimJoints(character)
+	local found = {}
+	for _, d in character:GetDescendants() do
+		if (d:IsA("Motor6D") or d:IsA("AnimationConstraint")) and table.find(FLAIL_JOINTS, d.Name) then
+			found[d.Name] = d
+		end
+	end
+	return found
+end
+
+-- Struggling in its grip: arms and legs thrash, each on its own rhythm, and the head shakes side
+-- to side. It builds up as they're lifted and gets wilder toward the rip.
+local function flail(v, k)
+	local j = v.joints
+	local power = smooth01(k / KILL_LIFT) * (0.7 + 0.3 * math.clamp((k - KILL_LIFT) / (KILL_RIP - KILL_LIFT), 0, 1))
+	local function set(name, cf) if j[name] then j[name].Transform = cf end end
+	local function wave(speed, phase) return math.sin(k * speed + phase) end
+	-- arms: windmilling forward and back, flung out to the sides, elbows bending
+	set("LeftShoulder", CFrame.Angles(wave(13, 0) * 1.3 * power, 0, -(0.5 + wave(9, 1) * 0.5) * power))
+	set("RightShoulder", CFrame.Angles(wave(14, 2.1) * 1.3 * power, 0, (0.5 + wave(10, 0.4) * 0.5) * power))
+	set("LeftElbow", CFrame.Angles((0.7 + wave(17, 0.5) * 0.6) * power, 0, 0))
+	set("RightElbow", CFrame.Angles((0.7 + wave(16, 2.7) * 0.6) * power, 0, 0))
+	-- legs: kicking, out of step with each other
+	set("LeftHip", CFrame.Angles(wave(15, 0) * 1.0 * power, 0, -0.2 * power))
+	set("RightHip", CFrame.Angles(wave(15, math.pi) * 1.0 * power, 0, 0.2 * power))
+	set("LeftKnee", CFrame.Angles(-(0.6 + wave(15, 0.8) * 0.6) * power, 0, 0))
+	set("RightKnee", CFrame.Angles(-(0.6 + wave(15, math.pi + 0.8) * 0.6) * power, 0, 0))
+	-- head: shaking side to side
+	set("Neck", CFrame.Angles(0, wave(22, 0) * 0.7 * power, 0))
+end
+
 -- The rip: swap the body for a copy posed exactly the same, split it at the waist, and throw the
 -- halves apart the way the arms fling (top half toward the left hand, legs toward the right).
 -- Every joint is undone, so the limbs drift apart from each other as they fly.
@@ -372,7 +407,8 @@ local function updateVictim(model, s)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root then
 			character.Archivable = true
-			s.victim = { character = character, root = root, from = root.CFrame, copy = character:Clone(), start = killStart }
+			s.victim = { character = character, root = root, from = root.CFrame, copy = character:Clone(), start = killStart,
+				joints = victimJoints(character) }
 		end
 	end
 	local v = s.victim
@@ -419,6 +455,12 @@ RunService.PreSimulation:Connect(function(dt)
 			s.mode = model:GetAttribute("Mode")
 			s.killStart = model:GetAttribute("KillStart")
 			pose(s, dt)
+		end
+		-- the victim struggling (until the rip)
+		local v = s.victim
+		if v and v.joints and v.character.Parent then
+			local k = workspace:GetServerTimeNow() - v.start
+			if k < KILL_RIP then flail(v, k) end
 		end
 	end
 end)
