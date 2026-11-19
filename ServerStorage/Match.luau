@@ -18,6 +18,7 @@
 --   EndsAt  - server time when the current state ends (countdown, match timer, results)
 --   Message - text to show on screen ("" = none)
 --   RelicsCollected / RelicsNeeded / RelicsTotal, and a SpawnRooms folder (see Objectives)
+--   Winner  - during Results: the role that won (Config.Roles.Survivor or .Monster)
 -- and on each player:
 --   Role, Lives, Out (no lives left), Respawning (choosing a spawn room), RespawnBy (deadline),
 --   SpawnRoom (the room they'll come back in), BaseSpeed (see Controls), Seized (held by a
@@ -374,8 +375,10 @@ local function runResults(outcome, elapsed)
 	else
 		message = "Every survivor was caught! The monsters win."
 	end
+	status:SetAttribute("Winner", outcome == "survivors" and Roles.Survivor or Roles.Monster)
 	setState(States.Results, Config.RESULTS_TIME, message)
 	task.wait(Config.RESULTS_TIME)
+	status:SetAttribute("Winner", nil)
 end
 
 ---------------------------------------------------------------- players
