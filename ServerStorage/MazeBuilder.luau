@@ -158,18 +158,19 @@ local function makeRelicSkull(pedestalTop, parent)
 	-- resting on the pedestal, turned toward the camera (the skull's face is its front, -Z)
 	local at = pedestalTop + Vector3.new(0, 0.55 * SKULL_SCALE, 0)
 	skull.CFrame = CFrame.lookAt(at, at - Vector3.new(1, 0, 1))
-	-- the glow: a small glowing ball deep in each eye socket, and a faint red light in front
-	for _, x in { -0.27, 0.27 } do
+	-- the glow: a glowing ball filling each eye socket (centred in it, set back a little so the
+	-- socket's rim frames it), and a faint red light in front
+	for _, x in { -0.243, 0.243 } do
 		local eye = Instance.new("Part")
 		eye.Name = "Eye"
 		eye.Shape = Enum.PartType.Ball
-		eye.Size = Vector3.one * 0.26 * SKULL_SCALE
+		eye.Size = Vector3.one * 0.3 * SKULL_SCALE
 		eye.Material = Enum.Material.Neon
 		eye.Color = EYE_COLOR
 		eye.Anchored = true
 		eye.CanCollide, eye.CanQuery, eye.CanTouch = false, false, false
 		eye.CastShadow = false
-		eye.CFrame = skull.CFrame * CFrame.new(x * SKULL_SCALE, 0.12 * SKULL_SCALE, -0.3 * SKULL_SCALE)
+		eye.CFrame = skull.CFrame * CFrame.new(x * SKULL_SCALE, 0.11 * SKULL_SCALE, -0.34 * SKULL_SCALE)
 		eye.Parent = skull
 	end
 	local glowAt = Instance.new("Attachment")
