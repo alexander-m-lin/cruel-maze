@@ -34,6 +34,7 @@ local Net = require(ReplicatedStorage.Net)
 local MazeBuilder = require(ServerStorage.MazeBuilder)
 local MonsterAI = require(ServerStorage.MonsterAI)
 local Objectives = require(ServerStorage.Objectives)
+local Doors = require(ServerStorage.Doors)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -55,6 +56,7 @@ local state = nil
 local maze = nil         -- this match's maze (see MazeBuilder.build)
 local objectives = nil   -- this match's relics and spawn rooms (see Objectives)
 local monsters = {}      -- this match's MonsterAI objects
+local doors = nil        -- this match's doors (see Doors)
 local caughtAt = {}      -- [player] = os.clock() when they were last caught
 
 -- Characters only appear when this script says so (so caught players can choose where to respawn)
@@ -218,6 +220,8 @@ local function cleanUp()
 	table.clear(monsters)
 	if objectives then objectives:Destroy() end
 	objectives = nil
+	if doors then doors:Destroy() end
+	doors = nil
 	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
 		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom" } do
@@ -271,6 +275,10 @@ local function runCountdown()
 		relics = Config.RELIC_TOTAL,
 		relicSpacing = Config.RELIC_SPACING,
 		relicsNearStart = Config.RELICS_NEAR_START,
+		doorCorridors = Config.DOOR_CORRIDORS,
+		doorShortcuts = Config.DOOR_SHORTCUTS,
+		doorSpacing = Config.DOOR_SPACING,
+		doorMinDetour = Config.DOOR_MIN_DETOUR,
 	})
 	objectives = Objectives.new(maze, {
 		onRelic = function(player, relic)
@@ -297,6 +305,7 @@ local function runCountdown()
 		monster.active = false
 		table.insert(monsters, monster)
 	end
+	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch })
 
 	setState(States.Countdown, Config.COUNTDOWN)
 	for _, player in Players:GetPlayers() do
@@ -315,6 +324,7 @@ local function runPlaying()
 	setState(States.Playing, Config.MATCH_TIME)
 	local endsAt = os.clock() + Config.MATCH_TIME
 	for _, monster in monsters do monster.active = true end
+	doors.running = true
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
 	while true do
@@ -333,6 +343,7 @@ end
 
 local function runResults(outcome, elapsed)
 	for _, monster in monsters do monster.active = false end
+	if doors then doors.running = false end
 	local message
 	if outcome == "survivors" then
 		message = ("The survivors escaped with %d relics in %s!"):format(objectives.collected, formatTime(elapsed))
@@ -392,8 +403,9 @@ function Match.run()
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in Players:GetPlayers() do task.spawn(onPlayerAdded, player) end
 
-	-- The monsters think every frame while a match is on
+	-- Doors move and the monsters think every frame while a match is on
 	RunService.Heartbeat:Connect(function(dt)
+		if doors then doors:Step(dt) end
 		if #monsters == 0 then return end
 		local targets = huntable()
 		for _, monster in monsters do monster:Step(dt, targets) end

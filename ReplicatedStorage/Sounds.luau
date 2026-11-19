@@ -21,8 +21,14 @@ local Sounds = {
 	KillScream     = { id = 87645109019991, volume = 0.8, range = 140 },              -- the victim's scream as they're torn apart...
 	KillCrack      = { id = 9113542694,  volume = 0.6, range = 140 },                 -- ...and the crack of bones
 
+	-- Doors (see DoorView)
+	-- (startAt skips each recording's quiet opening: measured with PlaybackLoudness)
+	DoorRumble     = { id = 9125875498,  volume = 1.0, range = 90, stopAfter = 2.25, startAt = 1.0 },    -- the warning, heard near the door
+	DoorFarRumble  = { id = 9125486602,  volume = 0.15, stopAfter = 2.5, startAt = 0.25 },             -- ...and faintly by everyone, anywhere
+	DoorGrind      = { id = 9113807062,  volume = 0.9, range = 90, stopAfter = 1.3, startAt = 0.4 },   -- the slab rising or sinking (timed to start with it)
+
 	-- Background music: plays all the time, on a loop
-	Music          = { id = 138890398994853, volume = 0.7, looped = true },
+	Music          = { id = 138890398994853, volume = 0.1, looped = true },
 
 	-- Match flow
 	CountdownTick  = { id = 134410911353980, volume = 0.6 },                          -- each second of the countdown

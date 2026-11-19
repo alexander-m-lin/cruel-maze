@@ -9,8 +9,9 @@
 --   That turns a dead end into a junction and adds loops, so there's more than one way around - and
 --   you can lose the monster by circling.
 -- Every cell is still reachable from every other.
--- Step 3 (MazeLayout): carve spawn rooms and pick relic rooms. build() then makes the parts:
---   walls, floors, room floors, the barriers monsters can't cross (spawn rooms only), and the relics.
+-- Step 3 (MazeLayout): carve spawn rooms, pick relic rooms and door slots. build() then makes the
+--   parts: walls, floors, room floors, the barriers monsters can't cross (spawn rooms only), the
+--   relics, and the doors (moved by the Doors module).
 
 local MazeLayout = require(game:GetService("ServerStorage").MazeLayout)
 
@@ -53,6 +54,20 @@ MazeBuilder.GROUND_COLOR    = Color3.fromRGB(78, 96, 52)
 -- How far the ground extends past the outer walls on every side. Along the near (bottom-of-screen)
 -- walls the fog script shows some of it (RING_CLEAR + RING_FADE + RING_NOISE should fit within this).
 MazeBuilder.BORDER = 20
+
+-- Doors: slabs that rise out of the floor to close a passage and sink back into it to open it.
+-- DOOR_LOOK picks how they look:
+--   "subtle" - the slab is a wall like any other (same texture and colour); the only tell is its
+--              two posts, a little darker than the walls
+--   "dev"    - plainly different (rusty metal slab, dark posts), to see every door at a glance
+-- variant = nil: a random one of WALL_VARIANTS, like a wall panel.
+MazeBuilder.DOOR_LOOK = "subtle"
+MazeBuilder.DOOR_LOOKS = {
+	subtle = { material = MazeBuilder.WALL_MATERIAL, variant = nil, color = MazeBuilder.WALL_COLOR,
+	           post = Color3.fromRGB(78, 74, 62) },
+	dev    = { material = Enum.Material.CorrodedMetal, variant = "", color = Color3.fromRGB(150, 82, 52),
+	           post = Color3.fromRGB(70, 60, 54) },
+}
 
 MazeBuilder.NEWEST = 0.5  -- step 1: chance to grow from the newest cell (1 = long corridors, 0 = bushy)
 MazeBuilder.BRAID  = 0.75 -- step 2: fraction of dead ends opened up into loops (0 = none, 1 = no dead ends)
@@ -217,6 +232,7 @@ function MazeBuilder.build(options)
 	local function wall(pos, size, variant)
 		local p = block("Wall", size, pos + Vector3.new(0, H / 2, 0), MazeBuilder.WALL_COLOR, MazeBuilder.WALL_MATERIAL)
 		p.MaterialVariant = variant or variants[math.random(#variants)]
+		return p
 	end
 
 	-- Paved floor inside the walls; jungle ground outside them. The ground is one big slab reaching
@@ -241,6 +257,14 @@ function MazeBuilder.build(options)
 	MazeLayout.connect(walls, n, blocked)
 	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans,
 		options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
+	local doorPlans = MazeLayout.placeDoors(walls, n, roomPlans, relicPlans, {
+		corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
+		spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
+	})
+	-- isDoor[x][z].E / .S: that side of the cell is a door slot (doors are always on an E or S side)
+	local isDoor = {}
+	for x = 1, n do isDoor[x] = {} for z = 1, n do isDoor[x][z] = {} end end
+	for _, door in doorPlans do isDoor[door.x][door.z][door.d[3]] = true end
 
 	-- WALLS. Grid points (i, j) are the cell corners, 0..n each way. A wall panel runs along one
 	-- cell side, corner to corner. Each cell builds its North and West sides; the last row/column
@@ -265,11 +289,20 @@ function MazeBuilder.build(options)
 	for x = 1, n do
 		for z = 1, n do
 			local w = walls[x][z]
-			if w.N then panelX(x - 1, z - 1) end
-			if w.W then panelZ(x - 1, z - 1) end
+			-- (no panel where there's a door: N of this cell is S of the one above, W is E of the one left)
+			if w.N and not (z > 1 and isDoor[x][z - 1].S) then panelX(x - 1, z - 1) end
+			if w.W and not (x > 1 and isDoor[x - 1][z].E) then panelZ(x - 1, z - 1) end
 			if z == n and w.S then panelX(x - 1, z) end
 			if x == n and w.E then panelZ(x, z - 1) end
 		end
+	end
+	-- Both ends of every door get a post (its door frame), even in a straight run of wall
+	local doorEnds = {}
+	for _, door in doorPlans do
+		local i, j = door.x, door.z                    -- the cell's far corner
+		local a = door.d[3] == "E" and { i, j - 1 } or { i - 1, j }
+		doorEnds[a[1] * 1000 + a[2]] = true
+		doorEnds[i * 1000 + j] = true
 	end
 	-- A post at every corner where walls meet, except where two panels just continue in a
 	-- straight line (there the panels join seamlessly on their own)
@@ -279,7 +312,15 @@ function MazeBuilder.build(options)
 			local d = sides[i][j]
 			local count = (d.N and 1 or 0) + (d.S and 1 or 0) + (d.E and 1 or 0) + (d.W and 1 or 0)
 			local straight = count == 2 and ((d.N and d.S) or (d.E and d.W))
-			if count > 0 and not straight then wall(corner(i, j), Vector3.new(P, H, P), variants[1]) end
+			if doorEnds[i * 1000 + j] then
+				local look = MazeBuilder.DOOR_LOOKS[MazeBuilder.DOOR_LOOK]
+				local post = wall(corner(i, j), Vector3.new(P, H + 0.4, P), variants[1])
+				post:SetAttribute("DoorPost", true)   -- otherwise a wall like any other
+				post.Color = look.post
+				post.Position += Vector3.new(0, 0.2, 0)
+			elseif count > 0 and not straight then
+				wall(corner(i, j), Vector3.new(P, H, P), variants[1])
+			end
 		end
 	end
 
@@ -362,6 +403,32 @@ function MazeBuilder.build(options)
 		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem })
 	end
 
+	-- DOORS: a slab between the two door posts. Closed, it stands like a wall; open, it has sunk
+	-- just under the floor (out of sight and out of the way of rays and bodies).
+	local look = MazeBuilder.DOOR_LOOKS[MazeBuilder.DOOR_LOOK]
+	local doors = {}
+	for id, plan in doorPlans do
+		local i, j = plan.x, plan.z
+		local horizontal = plan.d[3] == "S"           -- runs along X (between cells above and below)
+		local a = horizontal and corner(i - 1, j) or corner(i, j - 1)
+		local mid = (a + corner(i, j)) / 2
+		local length = S - P + 0.6                     -- reaches a little into each post
+		local size = horizontal and Vector3.new(length, H, T) or Vector3.new(T, H, length)
+		local closedCF = CFrame.new(mid + Vector3.new(0, H / 2, 0))
+		local openCF = CFrame.new(mid - Vector3.new(0, H / 2 + 0.1, 0))
+		local p = block("Door", size, (plan.open and openCF or closedCF).Position, look.color, look.material)
+		p.MaterialVariant = look.variant or variants[math.random(#variants)]
+		p.CanCollide = not plan.open
+		p:SetAttribute("Id", id)
+		p:SetAttribute("Kind", plan.kind)
+		p:SetAttribute("Open", plan.open)
+		p:SetAttribute("ClosedCFrame", closedCF)
+		p:SetAttribute("OpenCFrame", openCF)
+		table.insert(doors, { id = id, x = i, z = j, d = plan.d, kind = plan.kind, open = plan.open,
+			part = p, closedCF = closedCF, openCF = openCF,
+			other = { i + plan.d[1], j + plan.d[2] } })  -- the cell on the far side
+	end
+
 	-- Move the spawn pad into the start room (players are moved to their own spots from there)
 	local start = rooms[1].center
 	local spawn = workspace:FindFirstChild("SpawnLocation")
@@ -394,6 +461,7 @@ function MazeBuilder.build(options)
 		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
 		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
 		relics = relics,                        -- relics: { id, x, z, center, model, gem (the skull) }
+		doors = doors,                          -- doors: { id, x, z, d, other, kind, open, part, closedCF, openCF }
 	}
 end
 

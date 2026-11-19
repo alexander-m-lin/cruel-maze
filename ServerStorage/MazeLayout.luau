@@ -234,4 +234,118 @@ function tryPick(walls, n, rooms, count, spacing, nearStart)
 	return picks
 end
 
+---------------------------------------------------------------- doors
+-- Shortest walking distance (in steps) from cell a to cell b, avoiding blocked cells, or nil if
+-- there's no way through.
+local function distance(walls, n, ax, az, bx, bz, blocked)
+	local dist = { [key(ax, az)] = 0 }
+	local queue, head = { {ax, az} }, 1
+	while head <= #queue do
+		local c = queue[head]
+		head += 1
+		local here = dist[key(c[1], c[2])]
+		if c[1] == bx and c[2] == bz then return here end
+		for _, d in DIRS do
+			if not walls[c[1]][c[2]][d[3]] then
+				local nx, nz = c[1] + d[1], c[2] + d[2]
+				local nk = key(nx, nz)
+				if dist[nk] == nil and not blocked[nk] then
+					dist[nk] = here + 1
+					table.insert(queue, {nx, nz})
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Picks DOOR SLOTS: cell sides that can open and close during a match. Two kinds:
+--   corridor doors - in an existing opening; they start open, and closing one forces a detour
+--   shortcut doors - in place of a wall; they start closed, and opening one cuts a long way round
+-- The rule that keeps every door safe to work at any time: with EVERY door closed, the maze is
+-- still one connected piece, for survivors and for monsters (who can't use spawn rooms). So no
+-- combination of doors can cut anyone off from a relic or a room - doors only redirect.
+-- Doors never touch a spawn room or a relic cell (rooms keep their exits, relics their 2-3 ways in).
+-- options: corridors, shortcuts (how many of each), spacing (cells between doors), minDetour
+-- (closing a corridor door / opening a shortcut must save or cost at least this many steps).
+-- Leaves walls with corridor doors open and shortcut doors closed.
+-- Returns a list of { x, z, d (a DIRS entry: the side of cell x,z), open (starting state), kind }.
+function MazeLayout.placeDoors(walls, n, rooms, relics, options)
+	local roomCells, avoid = {}, {}
+	for _, room in rooms do
+		for k in room.cells do roomCells[k] = true avoid[k] = true end
+	end
+	for _, r in relics do avoid[key(r[1], r[2])] = true end
+
+	local doors = {}
+	local function spacedOut(x, z, d)
+		-- edge midpoint, in cell units
+		local mx, mz = x + d[1] / 2, z + d[2] / 2
+		for _, door in doors do
+			local ox, oz = door.x + door.d[1] / 2, door.z + door.d[2] / 2
+			if math.max(math.abs(mx - ox), math.abs(mz - oz)) < options.spacing then return false end
+		end
+		return true
+	end
+
+	-- Every interior side once (east and south of each cell), not touching a room or relic
+	local open, closed = {}, {}
+	for x = 1, n do
+		for z = 1, n do
+			for _, d in { DIRS[2], DIRS[3] } do
+				local nx, nz = x + d[1], z + d[2]
+				if nx > n or nz > n or avoid[key(x, z)] or avoid[key(nx, nz)] then continue end
+				table.insert(walls[x][z][d[3]] and closed or open, { x, z, d })
+			end
+		end
+	end
+	shuffle(open)
+	shuffle(closed)
+
+	-- Corridor doors: close one for good (as if every door were shut), and keep it only if the
+	-- two sides are still joined the long way round - by a route monsters can use too, which
+	-- means survivors can as well.
+	for _, e in open do
+		if #doors >= options.corridors then break end
+		local x, z, d = e[1], e[2], e[3]
+		if not spacedOut(x, z, d) then continue end
+		setWall(walls, x, z, d, true)
+		local around = distance(walls, n, x, z, x + d[1], z + d[2], roomCells)
+		if around and around >= options.minDetour then
+			table.insert(doors, { x = x, z = z, d = d, open = true, kind = "corridor" })
+		else
+			setWall(walls, x, z, d, false)
+		end
+	end
+
+	-- Shortcut doors: walls between cells that are a long way apart with every door shut. Opening
+	-- one can't disconnect anything, so the only test is that it's worth having.
+	local shortcuts = {}
+	for _, e in closed do
+		local x, z, d = e[1], e[2], e[3]
+		local around = distance(walls, n, x, z, x + d[1], z + d[2], roomCells)
+		if around and around >= options.minDetour then
+			table.insert(shortcuts, { x, z, d, around })
+		end
+	end
+	table.sort(shortcuts, function(a, b) return a[4] > b[4] end)   -- the biggest shortcuts first
+	local added = 0
+	for _, s in shortcuts do
+		if added >= options.shortcuts then break end
+		if spacedOut(s[1], s[2], s[3]) then
+			table.insert(doors, { x = s[1], z = s[2], d = s[3], open = false, kind = "shortcut" })
+			added += 1
+		end
+	end
+
+	-- Every door shut is now the state of the walls table; open the corridor doors
+	for _, door in doors do
+		if door.open then setWall(walls, door.x, door.z, door.d, false) end
+	end
+	return doors
+end
+
+MazeLayout.setWall = setWall
+MazeLayout.components = components
+
 return MazeLayout

@@ -244,6 +244,11 @@ function MonsterAI:findPath(sx, sz, tx, tz)
 	return route
 end
 
+-- A door opened or closed (see Doors): the route it's following may be wrong now, so plan afresh
+function MonsterAI:MazeChanged()
+	self.path = {}
+end
+
 ---------------------------------------------------------------- senses
 function MonsterAI:canDetect(root)
 	local eye = self.pos + Vector3.new(0, HOVER, 0)

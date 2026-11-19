@@ -48,6 +48,19 @@ Config.RESPAWN_CHOICE_TIME = 6    -- seconds to pick a spawn room after being ca
 Config.SPAWN_ROOMS = 3            -- including the start room
 Config.SPAWN_ROOM_SPACING = 5     -- minimum distance between rooms, in cells
 
+-- Doors: passages that open and close during a match (see MazeLayout.placeDoors and Doors).
+-- The maze is laid out so that everything stays reachable even with every door shut.
+Config.DOOR_CORRIDORS = 9         -- doors in existing passages (start open; closing one forces a detour)
+Config.DOOR_SHORTCUTS = 5         -- doors in place of walls (start closed; opening one is a shortcut)
+Config.DOOR_SPACING = 3           -- at least this many cells between doors
+Config.DOOR_MIN_DETOUR = 6        -- a door must change the walk between its two sides by at least this many cells
+Config.DOOR_WARNING = 2           -- seconds a door rumbles (shaking, dust, sound) before it moves
+Config.DOOR_MOVE_TIME = 1         -- seconds it takes to rise or sink
+Config.DOOR_COOLDOWN = 20         -- the AI leaves a door alone this long after it changes
+Config.DOOR_AI_COUNT = 3          -- until the Maze Master is a person, an AI changes this many doors at once...
+Config.DOOR_AI_MIN = 5            -- ...every DOOR_AI_MIN..MAX seconds
+Config.DOOR_AI_MAX = 10
+
 -- Match states, in the order they run. The server publishes the current one (see Match).
 Config.States = {
 	Waiting = "Waiting",          -- not enough players yet

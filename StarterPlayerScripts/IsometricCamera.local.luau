@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
+local FogState = require(script.Parent:WaitForChild("FogState"))   -- for the doors' ghosts (DoorView)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -38,6 +39,13 @@ local function fadeBlockingWalls(fromPos, toPos, character)
 		if part.Name == "Wall" then
 			part.LocalTransparencyModifier = FADE
 			faded[part] = true
+		elseif part.Name == "Door" then
+			-- the real door is never drawn here; fade the copy that is
+			local ghost = FogState.doorGhosts[part]
+			if ghost then
+				ghost.LocalTransparencyModifier = FADE
+				faded[ghost] = true
+			end
 		end
 		table.insert(ignore, part)
 	end

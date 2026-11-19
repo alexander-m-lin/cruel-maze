@@ -7,6 +7,8 @@
 --   spawn room captured    - a chime (everyone)
 --   monster starts a chase - a roar from the monster
 --   monster kill           - a roar as it lifts its victim, their scream, then cracking bones at the rip
+--   door about to move     - a rumble from the door, and a faint one for everyone anywhere
+--   door moving            - stone grinding from the door
 --   countdown              - a tick each second
 --   match over             - a win or lose sting, depending on your team
 --   background music       - always, on a loop
@@ -155,6 +157,45 @@ local function updateMonsters()
 	end
 end
 
+---------------------------------------------------------------- doors
+-- Heard whether or not you can see the door: a rumble behind a wall is a fair warning.
+local doorStates = {}   -- [door part] = last State seen
+local grindFor = {}     -- [door part] = the MoveAt its grind sound is already booked for
+
+local function updateDoors()
+	local maze = workspace:FindFirstChild("Maze")
+	if maze then
+		for _, part in maze:GetChildren() do
+			if part.Name ~= "Door" then continue end
+			local state = part:GetAttribute("State")
+			local before = doorStates[part]
+			if before and state ~= before then
+				local at = (part:GetAttribute("ClosedCFrame") or part.CFrame).Position
+				-- The grind is timed from MoveAt (sent with the warning) rather than played when the
+				-- "moving" state arrives, which comes a little late over the network
+				local moveAt = part:GetAttribute("MoveAt")
+				if state == "warning" then
+					playAt(Sounds.DoorRumble, at)
+					play2D(Sounds.DoorFarRumble)
+					if moveAt and grindFor[part] ~= moveAt then
+						grindFor[part] = moveAt
+						task.delay(math.max(0, moveAt - workspace:GetServerTimeNow() - (Sounds.DoorGrind.lead or 0)), function()
+							if part.Parent then playAt(Sounds.DoorGrind, at) end
+						end)
+					end
+				elseif state == "moving" and grindFor[part] ~= moveAt then
+					grindFor[part] = moveAt              -- missed the warning: play it now
+					playAt(Sounds.DoorGrind, at)
+				end
+			end
+			doorStates[part] = state
+		end
+	end
+	for part in doorStates do
+		if not part.Parent then doorStates[part] = nil grindFor[part] = nil end
+	end
+end
+
 ---------------------------------------------------------------- match flow
 local lastTick = nil
 local lastState = nil
@@ -188,6 +229,7 @@ music:Play()
 RunService.Heartbeat:Connect(function()
 	updateObjectives()
 	updateMonsters()
+	updateDoors()
 	updateMatch()
 end)
 

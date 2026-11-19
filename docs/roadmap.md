@@ -76,6 +76,15 @@ The Maze Master depends on this, and several systems assume walls never move.
 **Must rework:** the fog marks wall tiles once at build time; the monster plans routes from a fixed wall table; line-of-sight checks don't know about doors.
 **Done when:** doors can open and close mid-match and fog, routes and sight all stay correct.
 
+**Decisions (2026-11-19):**
+- Doors only; swappable sections wait until doors prove fun.
+- Doors may close in any combination: the maze is generated so every cell, relic and spawn room stays reachable with *every* door closed (monsters too, outside spawn rooms). Doors redirect and pseudo-trap; they never block relics or truly trap anyone. Some doors sit in open corridors (start open), some replace walls (start closed, shortcuts when opened).
+- Until the human Maze Master (Phase 3): a simple AI changes doors on a timer (Config.DOOR_AI_*; 3 doors every 5–10 s while testing, per-door cooldown), plus a dev panel to toggle any door.
+- Doors look like walls; the tell is their two posts, a little darker than the walls (`MazeBuilder.DOOR_LOOK = "subtle"`; `"dev"` makes them rusty metal).
+- Warning: ~2 s of rumbling (the slab shakes harder and harder and dust rises; a sunk door peeks out of the floor to rattle) with a rumble heard nearby, plus a faint maze-wide sound, then ~1 s to move. A player standing in a closing door is nudged out to the nearer side.
+- Monsters obey doors and re-plan when one changes. Players can't work doors yet.
+- Fog and minimap memory show a door as last seen until it's seen again.
+
 ### [ ] 3. Human roles and the Maze Master
 The feature that makes Cruel Maze different, and the biggest design risk. Get a rough, playable Maze Master in front of people early. Can overlap with Phase 2: a Maze Master who can only work doors is enough to test the role.
 - Role assignment: 3 survivors, 2 monsters, 1 Maze Master
