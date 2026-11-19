@@ -43,18 +43,49 @@ local function fadeBlockingWalls(fromPos, toPos, character)
 	end
 end
 
+local function aliveRoot(character)
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health > 0 then return character:FindFirstChild("HumanoidRootPart") end
+	return nil
+end
+
+-- Who to watch when you have no character (choosing a spawn room, or out of lives):
+-- a teammate who's still alive, sticking with the same one while they are
+local watching = nil
+local function teammateRoot()
+	local myRole = player:GetAttribute("Role")
+	if watching and watching.Parent and aliveRoot(watching.Character) then
+		return aliveRoot(watching.Character), watching.Character
+	end
+	watching = nil
+	for _, other in Players:GetPlayers() do
+		if other ~= player and myRole and other:GetAttribute("Role") == myRole and aliveRoot(other.Character) then
+			watching = other
+			return aliveRoot(other.Character), other.Character
+		end
+	end
+	return nil
+end
+
+local lastFocus = nil
+
 -- BindToRenderStep runs right before each frame is drawn, after Roblox's default camera
 RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value + 1, function()
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.FieldOfView = FOV
 
 	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+	local root = aliveRoot(character)
+	if not root then
+		root, character = teammateRoot()      -- watch a teammate instead
+	end
+	local focus = root and root.Position or lastFocus
+	if not focus then return end
+	lastFocus = focus
 
-	local focus = root.Position
 	local camPos = focus + DIRECTION * DISTANCE
 	camera.CFrame = CFrame.lookAt(camPos, focus)
+	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 
-	fadeBlockingWalls(focus, camPos, character)
+	if character then fadeBlockingWalls(focus, camPos, character) end
 end)

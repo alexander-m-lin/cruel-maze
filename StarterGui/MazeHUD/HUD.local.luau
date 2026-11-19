@@ -1,5 +1,9 @@
--- The on-screen HUD: the match countdown, your run timer, and messages from the server.
--- Follows the match through the attributes on ReplicatedStorage.Match (see ServerStorage.Match).
+-- The on-screen HUD:
+--   top:     the countdown / time left in the match
+--   below:   relics collected and your lives
+--   below:   messages (match results, relic found, caught, choosing a spawn room...)
+-- Follows the match through attributes on ReplicatedStorage.Match and on your player
+-- (see ServerStorage.Match and ServerStorage.Objectives).
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = game:GetService("Players").LocalPlayer
@@ -13,28 +17,91 @@ local timerLabel = gui:WaitForChild("TimerLabel")
 local announceLabel = gui:WaitForChild("AnnounceLabel")
 local match = ReplicatedStorage:WaitForChild("Match")
 
-local flashText, flashUntil = nil, 0   -- a short local message (e.g. "You were caught!")
+-- A second line under the timer, in the same style
+local statusLabel = gui:FindFirstChild("StatusLabel") or timerLabel:Clone()
+statusLabel.Name = "StatusLabel"
+statusLabel.Size = UDim2.fromOffset(300, 36)
+statusLabel.Position = UDim2.new(0.5, 0, 0, 76)
+statusLabel.TextSize = 20
+statusLabel.Visible = false
+statusLabel.Parent = gui
+announceLabel.Position = UDim2.new(0.5, 0, 0, 120)
 
-Net.event("Caught").OnClientEvent:Connect(function()
-	flashText, flashUntil = "You were caught! Back to the start.", os.clock() + 2.5
+-- Short local messages, newest wins (e.g. "You were caught!", "Ana found a relic!")
+local flashText, flashUntil = nil, 0
+local function flash(text, seconds)
+	flashText, flashUntil = text, os.clock() + (seconds or 3)
+end
+
+Net.event("Caught").OnClientEvent:Connect(function(livesLeft)
+	if livesLeft and livesLeft <= 0 then
+		flash("Caught! You're out of lives - watching your team.", 4)
+	else
+		flash(("Caught! %d %s left."):format(livesLeft or 0, livesLeft == 1 and "life" or "lives"), 2.5)
+	end
 end)
+Net.event("Notice").OnClientEvent:Connect(function(text)
+	flash(text, 3)
+end)
+
+local function formatTime(seconds)
+	seconds = math.max(0, math.ceil(seconds))
+	return ("%d:%02d"):format(seconds // 60, seconds % 60)
+end
 
 RunService.RenderStepped:Connect(function()
 	local state = match:GetAttribute("State")
 	local endsAt = match:GetAttribute("EndsAt")
 	local now = workspace:GetServerTimeNow()
 
-	-- Top label: what's happening right now
+	-- Top: what's happening right now
 	if state == States.Countdown and endsAt then
 		timerLabel.Text = ("Starting in %d"):format(math.max(1, math.ceil(endsAt - now)))
-	elseif state == States.Playing and player:GetAttribute("RunStart") then
-		timerLabel.Text = ("Time: %.1fs"):format(now - player:GetAttribute("RunStart"))
+	elseif state == States.Playing and endsAt then
+		timerLabel.Text = formatTime(endsAt - now)
+	elseif state == States.Results then
+		timerLabel.Text = "Match over"
 	elseif state == States.Waiting then
 		timerLabel.Text = "Waiting"
 	end
 
-	-- Announcement: a local flash wins over the server's message
-	local text = (os.clock() < flashUntil) and flashText or match:GetAttribute("Message") or ""
+	-- Second line: relics and lives, during a match
+	local inMatch = state == States.Countdown or state == States.Playing
+	statusLabel.Visible = inMatch
+	if inMatch then
+		local lives = player:GetAttribute("Lives") or 0
+		statusLabel.Text = ("Relics %d/%d   ·   Lives %s"):format(
+			match:GetAttribute("RelicsCollected") or 0, match:GetAttribute("RelicsNeeded") or Config.RELICS_NEEDED,
+			player:GetAttribute("Out") and "out" or string.rep("♥", lives))
+	end
+
+	-- Messages: a recent local flash, else your own situation, else the server's message
+	local text = match:GetAttribute("Message") or ""
+	if player:GetAttribute("Respawning") then
+		local by = player:GetAttribute("RespawnBy")
+		text = ("Choose a spawn room on the map  (%ds)"):format(by and math.max(0, math.ceil(by - now)) or 0)
+	elseif player:GetAttribute("Out") and state == States.Playing then
+		text = "You're out of lives - watching your team."
+	end
+	if os.clock() < flashUntil then text = flashText end
 	announceLabel.Text = text
 	announceLabel.Visible = text ~= ""
+
+	-- Relic progress bars: the server says when collecting started (CollectSince); the bar is
+	-- filled here every frame so it moves smoothly
+	local relics = match:FindFirstChild("Relics")
+	local maze = workspace:FindFirstChild("Maze")
+	if relics and maze then
+		for _, info in relics:GetChildren() do
+			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
+			local bar = relicModel and relicModel:FindFirstChild("Progress")
+			local fill = bar and bar:FindFirstChild("Fill", true)
+			if not fill then continue end
+			local since = info:GetAttribute("CollectSince")
+			bar.Enabled = since ~= nil and not info:GetAttribute("Collected")
+			if bar.Enabled then
+				fill.Size = UDim2.fromScale(math.clamp((now - since) / Config.RELIC_COLLECT_TIME, 0, 1), 1)
+			end
+		end
+	end
 end)

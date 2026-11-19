@@ -27,8 +27,8 @@
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 
-local ROAM_SPEED   = 10     -- studs per second (players walk at Config.PLAYER_SPEED)
-local SEARCH_SPEED = 15
+local ROAM_SPEED   = 15     -- studs per second (players walk at Config.PLAYER_SPEED)
+local SEARCH_SPEED = 18
 -- Chase speed is relative to the WalkSpeed of the player being chased: it starts a bit slower than
 -- you, then speeds up the longer the chase lasts, until it's faster than you. So escaping takes
 -- breaking line of sight early, not just outrunning it.
@@ -45,10 +45,20 @@ local BODY_RADIUS  = 4      -- how wide it is, for checking it can fit past wall
 local RIG_SCALE    = 1.8    -- the rig is scaled up by this much (bigger = longer, slower strides)
 local TURN_SPEED   = 8      -- how quickly it turns to face where it's going
 
+-- THE KILL: when it catches someone it stops, lifts them over its head, and tears them apart.
+-- Times in seconds from the catch. MonsterAnimate draws it on players' computers (arms, victim
+-- and pieces); Match freezes the victim and decides what happens to them afterwards.
+local KILL = {
+	LIFT = 0.7,   -- raising them overhead
+	RIP  = 1.7,   -- the moment they're torn apart
+	DONE = 2.6,   -- it starts moving again
+}
+
 local DIRS = { {0, -1, "N"}, {1, 0, "E"}, {0, 1, "S"}, {-1, 0, "W"} }
 
 local MonsterAI = {}
 MonsterAI.__index = MonsterAI
+MonsterAI.KILL = KILL
 
 ---------------------------------------------------------------- the body
 local function finishBody(model)
@@ -142,12 +152,16 @@ local function rootOf(player)
 end
 
 ---------------------------------------------------------------- construction
--- maze: the table MazeBuilder.build returns. options.onCatch(player) is called when it catches
--- someone (default: knock them out, so they respawn at the start). options.startCell = {x, z}.
+-- maze: the table MazeBuilder.build returns.
+-- options.onCatch(player, monster): called when it catches someone (default: knock them out).
+--   The monster then stands still for KILL.DONE seconds while the kill plays out.
+-- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
+-- options.startCell = {x, z}: where it appears.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
 	self.maze = maze
+	self.isBlocked = options.isBlocked or function() return false end
 	self.onCatch = options.onCatch or function(player)
 		local _, humanoid = rootOf(player)
 		if humanoid then humanoid.Health = 0 end
@@ -210,7 +224,7 @@ function MonsterAI:findPath(sx, sz, tx, tz)
 		for _, d in DIRS do
 			if not walls[c[1]][c[2]][d[3]] then          -- no wall on that side = can walk through
 				local nx, nz = c[1] + d[1], c[2] + d[2]
-				if cameFrom[key(nx, nz)] == nil then
+				if cameFrom[key(nx, nz)] == nil and not self.isBlocked(nx, nz) then
 					cameFrom[key(nx, nz)] = c
 					table.insert(queue, {nx, nz})
 				end
@@ -238,10 +252,20 @@ end
 
 -- Can the monster's body travel in a straight line from a to b without touching a wall?
 -- (A "spherecast" sweeps a ball along the line, so it accounts for the monster's width.)
+-- It also mustn't cut through a cell it's not allowed into.
 function MonsterAI:canPass(a, b)
-	local from = a + Vector3.new(0, BODY_RADIUS + 0.6, 0)   -- ball clears the floor (and finish pad), below wall tops
+	local from = a + Vector3.new(0, BODY_RADIUS + 0.6, 0)   -- ball clears the floor, below wall tops
 	local offset = (b - a) * Vector3.new(1, 0, 1)
 	if offset.Magnitude < 0.1 then return true end
+	-- check the cells along the line (and the body's width either side) every couple of studs
+	local side = Vector3.new(-offset.Z, 0, offset.X).Unit * BODY_RADIUS
+	local steps = math.ceil(offset.Magnitude / 2)
+	for i = 0, steps do
+		local p = a + offset * (i / steps)
+		for _, q in { p, p + side, p - side } do
+			if self.isBlocked(self:cellOf(q)) then return false end
+		end
+	end
 	return workspace:Spherecast(from, BODY_RADIUS, offset, self.rayParams) == nil
 end
 
@@ -270,7 +294,28 @@ function MonsterAI:Step(dt, targets)
 		self:publish(now)
 		return
 	end
+	-- In the middle of a kill: stand still until it's over
+	if self.killUntil then
+		if now < self.killUntil then
+			self:publish(now)
+			return
+		end
+		self.killUntil = nil
+		self.mode = "roam"
+		self.model:SetAttribute("KillVictim", nil)
+		self.model:SetAttribute("KillStart", nil)
+	end
 	local maze = self.maze
+
+	-- The player it was chasing is out of reach (reached safety, caught, left): give up on them
+	-- and search around where it last saw them instead
+	if self.chaseTarget and not table.find(targets, self.chaseTarget) then
+		self.chaseTarget = nil
+		if self.mode == "chase" then
+			self.mode = "search"
+			self.path = {}
+		end
+	end
 
 	-- 1. SENSES (5 times a second): pick the closest player it can detect
 	self.detectTimer -= dt
@@ -324,7 +369,12 @@ function MonsterAI:Step(dt, targets)
 				if #self.path == 0 and self.mode == "search" then self.mode = "roam" end   -- reached it, nobody here
 			end
 			if self.mode == "roam" and #self.path == 0 then
-				self.path = self:findPath(cx, cz, math.random(maze.n), math.random(maze.n))
+				local tx, tz
+				for _ = 1, 20 do                             -- a random cell it's allowed into
+					tx, tz = math.random(maze.n), math.random(maze.n)
+					if not self.isBlocked(tx, tz) then break end
+				end
+				self.path = self:findPath(cx, cz, tx, tz)
 			end
 			-- if we're off-centre (e.g. after lunging at a player), go back to the cell centre first
 			if #self.path > 0 and (self.pos - self:centerOf(cx, cz)).Magnitude > 0.5 then
@@ -374,8 +424,17 @@ function MonsterAI:Step(dt, targets)
 			local flat = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z).Magnitude
 			if flat < CATCH_DIST then
 				self.graceUntil[player] = now + CATCH_GRACE
-				self.mode, self.chaseTarget, self.path = "roam", nil, {}
-				self.onCatch(player)
+				self.chaseTarget, self.path = nil, {}
+				-- turn to face them, and start the kill (players' computers animate it from these)
+				local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)
+				if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
+				self.mode = "kill"
+				self.killUntil = now + KILL.DONE
+				self.model:SetAttribute("KillVictim", player.UserId)
+				self.model:SetAttribute("KillStart", workspace:GetServerTimeNow())
+				self:publish(now)
+				self.onCatch(player, self)
+				break                                  -- one at a time
 			end
 		end
 	end
