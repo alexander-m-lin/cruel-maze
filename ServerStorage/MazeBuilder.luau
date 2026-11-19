@@ -137,6 +137,51 @@ MazeBuilder.ROOM_CAPTURED_COLOR = Color3.fromRGB(70, 150, 160)  -- a spawn room 
 local ROOM_WARD_COLOR      = Color3.fromRGB(90, 220, 235)    -- barrier across spawn room exits
 local RELIC_COLOR          = Color3.fromRGB(255, 200, 80)
 
+-- The relic itself: a skull (the model ServerStorage.SkullRelic, Creator Store asset 98498294) sitting
+-- on its pedestal, facing the camera, with red light glowing deep in its eye sockets. It's named
+-- "Gem" because the rest of the game looks for that (the beam, the prompt, the sounds...).
+-- Returns nil if the skull model is missing (then the relic is a glowing cube instead).
+local SKULL_SCALE = 2         -- how big the skull is (1 = the model as made)
+local EYE_COLOR = Color3.fromRGB(255, 30, 20)
+local function makeRelicSkull(pedestalTop, parent)
+	local template = game:GetService("ServerStorage"):FindFirstChild("SkullRelic")
+	local head = template and template:FindFirstChildWhichIsA("BasePart")
+	if not head then return nil end
+	local skull = head:Clone()
+	skull.Name = "Gem"
+	local mesh = skull:FindFirstChildWhichIsA("SpecialMesh")
+	if mesh then mesh.Scale *= SKULL_SCALE end
+	skull.Size *= SKULL_SCALE
+	skull.Anchored = true
+	skull.CanCollide, skull.CanQuery, skull.CanTouch = false, false, false
+	skull.CastShadow = false
+	-- resting on the pedestal, turned toward the camera (the skull's face is its front, -Z)
+	local at = pedestalTop + Vector3.new(0, 0.55 * SKULL_SCALE, 0)
+	skull.CFrame = CFrame.lookAt(at, at - Vector3.new(1, 0, 1))
+	-- the glow: a small glowing ball deep in each eye socket, and a faint red light in front
+	for _, x in { -0.27, 0.27 } do
+		local eye = Instance.new("Part")
+		eye.Name = "Eye"
+		eye.Shape = Enum.PartType.Ball
+		eye.Size = Vector3.one * 0.26 * SKULL_SCALE
+		eye.Material = Enum.Material.Neon
+		eye.Color = EYE_COLOR
+		eye.Anchored = true
+		eye.CanCollide, eye.CanQuery, eye.CanTouch = false, false, false
+		eye.CastShadow = false
+		eye.CFrame = skull.CFrame * CFrame.new(x * SKULL_SCALE, 0.12 * SKULL_SCALE, -0.3 * SKULL_SCALE)
+		eye.Parent = skull
+	end
+	local glowAt = Instance.new("Attachment")
+	glowAt.Position = Vector3.new(0, 0.12 * SKULL_SCALE, -0.7 * SKULL_SCALE)
+	glowAt.Parent = skull
+	local red = Instance.new("PointLight")
+	red.Color, red.Range, red.Brightness = EYE_COLOR, 4, 3
+	red.Parent = glowAt
+	skull.Parent = parent
+	return skull
+end
+
 -- Builds the maze in the workspace (replacing any previous one).
 -- Returns a maze table (see the end): the layout, plus its spawn rooms and relics.
 function MazeBuilder.build(options)
@@ -288,11 +333,12 @@ function MazeBuilder.build(options)
 		relicModel.Parent = model
 		decor("Pedestal", Vector3.new(3, 2, 3), CFrame.new(center + Vector3.new(0, 1, 0)),
 			Color3.fromRGB(120, 112, 96), Enum.Material.Slate, relicModel)
-		local gem = decor("Gem", Vector3.new(1.6, 1.6, 1.6),
-			CFrame.new(center + Vector3.new(0, 3.4, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
-			RELIC_COLOR, Enum.Material.Neon, relicModel)
+		local gem = makeRelicSkull(center + Vector3.new(0, 2, 0), relicModel)
+			or decor("Gem", Vector3.new(1.6, 1.6, 1.6),
+				CFrame.new(center + Vector3.new(0, 3.4, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+				RELIC_COLOR, Enum.Material.Neon, relicModel)
 		local light = Instance.new("PointLight")
-		light.Color, light.Range, light.Brightness = RELIC_COLOR, 14, 1.5
+		light.Color, light.Range, light.Brightness = RELIC_COLOR, 16, 2.5   -- the golden glow around it
 		light.Parent = gem
 		local bar = Instance.new("BillboardGui")
 		bar.Name = "Progress"
@@ -346,7 +392,7 @@ function MazeBuilder.build(options)
 		n = n, S = S, half = half, floorY = y0,
 		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
 		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
-		relics = relics,                        -- relics: { id, x, z, center, model, gem }
+		relics = relics,                        -- relics: { id, x, z, center, model, gem (the skull) }
 	}
 end
 

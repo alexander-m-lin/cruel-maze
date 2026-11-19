@@ -62,7 +62,8 @@ choose where you come back. M hides the minimap.
 Script Sync names files by script type: `.legacy.luau` = Script, `.local.luau` = LocalScript,
 `.luau` = ModuleScript.
 
-Also in the place file (not scripts): the monster's rigged body (`ServerStorage.MonsterRig`), the
+Also in the place file (not scripts): the monster's rigged body (`ServerStorage.MonsterRig`), the relic
+skull (`ServerStorage.SkullRelic`, Creator Store asset 98498294 by RoyalBoyMc), the
 wall and floor materials (`MaterialService`), and a few developer previews (`Workspace.WallPalette`,
 `Workspace.FloorPalette`, `SoundService.SoundBoard`).
 
