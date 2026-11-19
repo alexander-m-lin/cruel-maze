@@ -147,22 +147,30 @@ local function shape(parent, pos, size, color, corner)
 	return f
 end
 
--- the mouse: a rounded body with an outline
+-- the mouse: a rounded body (its outline is added last, on top of everything)
 local mouse = shape(button, UDim2.fromOffset(4, 4), UDim2.fromOffset(ICON_W, ICON_H), BODY_COLOR, 13)
-local edge = Instance.new("UIStroke")
-edge.Color = EDGE_COLOR
-edge.Thickness = 2
-edge.Parent = mouse
--- the left button, lit up: rounded only at its outer top corner (a rounded box with two plain
--- boxes laid over the corners that should be square)
+-- the left button, lit up: a gold copy of the whole body's rounded shape, cut down to its top-left
+-- quarter (a clipping box shows only that part), so its curve matches the body's exactly
 local BUTTON_H = math.floor(ICON_H * 0.42)
-local lit = {}
-table.insert(lit, shape(mouse, UDim2.fromOffset(0, 0), UDim2.fromOffset(ICON_W / 2, BUTTON_H), BEAM_COLOR, 13))
-table.insert(lit, shape(mouse, UDim2.fromOffset(ICON_W / 4, 0), UDim2.fromOffset(ICON_W / 4, BUTTON_H), BEAM_COLOR))
-table.insert(lit, shape(mouse, UDim2.fromOffset(0, BUTTON_H / 2), UDim2.fromOffset(ICON_W / 2, BUTTON_H / 2), BEAM_COLOR))
+local quarter = Instance.new("Frame")
+quarter.Size = UDim2.fromOffset(ICON_W / 2, BUTTON_H)
+quarter.BackgroundTransparency = 1
+quarter.ClipsDescendants = true
+quarter.Parent = mouse
+local lit = { shape(quarter, UDim2.fromOffset(0, 0), UDim2.fromOffset(ICON_W, ICON_H), BEAM_COLOR, 13) }
 -- the seams: down the middle between the buttons, and across under them
 shape(mouse, UDim2.fromOffset(ICON_W / 2 - 1, 0), UDim2.fromOffset(2, BUTTON_H), EDGE_COLOR)
 shape(mouse, UDim2.fromOffset(0, BUTTON_H - 1), UDim2.fromOffset(ICON_W, 2), EDGE_COLOR)
+-- the outline: a see-through copy of the body's shape drawn above the lit button, so the button
+-- never covers the edge
+local outline = shape(mouse, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), BODY_COLOR, 13)
+outline.BackgroundTransparency = 1
+outline.ZIndex = 2
+local edge = Instance.new("UIStroke")
+edge.Color = EDGE_COLOR
+edge.Thickness = 2
+edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+edge.Parent = outline
 
 local tapLabel = Instance.new("TextLabel")   -- shown instead of the mouse on touch screens
 tapLabel.Size = UDim2.fromScale(1, 1)
