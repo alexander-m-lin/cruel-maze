@@ -85,6 +85,7 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 
 	local camPos = focus + DIRECTION * DISTANCE
 	camera.CFrame = CFrame.lookAt(camPos, focus)
+	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 
 	if character then fadeBlockingWalls(focus, camPos, character) end
 end)

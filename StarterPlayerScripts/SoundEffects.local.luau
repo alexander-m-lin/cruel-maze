@@ -181,3 +181,12 @@ RunService.Heartbeat:Connect(function()
 	updateMonsters()
 	updateMatch()
 end)
+
+-- WHERE YOU HEAR FROM. Roblox normally hears from the camera, but ours hangs 210 studs away, far
+-- enough that every sound placed in the world faded to nothing. So listen from what the camera
+-- is looking at (your character, or the teammate you're watching), facing the way the camera
+-- faces, so sounds on the left of the screen come from the left.
+local camera = workspace.CurrentCamera
+RunService:BindToRenderStep("SoundListener", Enum.RenderPriority.Camera.Value + 3, function()
+	SoundService:SetListener(Enum.ListenerType.CFrame, CFrame.new(camera.Focus.Position) * camera.CFrame.Rotation)
+end)
