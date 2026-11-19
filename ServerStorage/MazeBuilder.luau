@@ -25,13 +25,10 @@ MazeBuilder.WALL_T = 2    -- wall thickness
 -- in the place file); WALL_MATERIAL must be the base material it was made for. Options generated:
 --   "JungleTempleStone" .. "JungleTempleStone3"  (base Cobblestone) - mossy grey-green temple blocks
 --   "AncientTombStone"  .. "AncientTombStone3"   (base Sandstone)   - weathered tomb sandstone
--- WALL_COLOR tints the texture; white shows it as generated.
--- NOTE (2026-11-18): the generated textures' images were still awaiting Roblox moderation (they
--- load as blank), so for now the walls use Roblox's built-in Cobblestone with a mossy tint
--- (WALL_VARIANT = "" means no variant). Once the images load, set WALL_VARIANT to one of the
--- names above and WALL_COLOR back to white.
+-- WALL_COLOR tints the texture; white shows it as generated. WALL_VARIANT = "" uses the plain
+-- base material. To compare them all side by side, see Workspace.WallPalette in the place.
 MazeBuilder.WALL_MATERIAL = Enum.Material.Cobblestone
-MazeBuilder.WALL_VARIANT  = ""
+MazeBuilder.WALL_VARIANT  = "JungleTempleStone3"
 MazeBuilder.WALL_COLOR    = Color3.fromRGB(104, 114, 88)
 
 -- Floor look: Roblox's built-in Pavement (stone pavers) in a weathered warm grey
