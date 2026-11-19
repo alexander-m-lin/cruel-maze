@@ -18,6 +18,10 @@
 -- Line of sight = one raycast from the player to the centre of each nearby tile in that cone.
 -- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
 -- or when it's close with no wall between (then the fog clears in a small circle around it).
+--
+-- DOORS: your map remembers each door the way your team last saw it. A door's tiles count as wall
+-- (for the minimap and the fog's wall-top sheets) while you remember it shut, and only change
+-- when the door is in view again. DoorView draws the door itself the same way.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -68,6 +72,7 @@ local newlyRevealed = {}    -- tiles revealed since the last fringe update
 local count, floorY, wallH, half = 0, 0, 0, 0
 local ready = false
 local buildId = 0           -- bumps every rebuild, so an older unfinished build stops
+local doorVersion = 0       -- bumps whenever a door starts or stops moving (relic rings re-check their sight)
 
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Include  -- rays only hit the maze
@@ -154,6 +159,7 @@ local function buildFog(newMaze)
 	table.clear(animating)
 	table.clear(lastVisible)
 	table.clear(newlyRevealed)
+	FogState.doors = {}
 
 	maze = newMaze
 	local n, S = maze:GetAttribute("Cells"), maze:GetAttribute("CellSize")
@@ -270,14 +276,54 @@ local function buildFog(newMaze)
 			for x = x1, x2 do
 				for z = z1, z2 do
 					tiles[x][z].onWall = true
+					tiles[x][z].fixedWall = true
 				end
 			end
+		end
+	end
+	-- ...and which overlap a door (where its slab stands when shut). Remembered as built.
+	for _, part in maze:GetChildren() do
+		if part.Name == "Door" then
+			local cf = part:GetAttribute("ClosedCFrame") or part.CFrame
+			local p, s = cf.Position, part.Size
+			local x1, x2 = tileRange(p.X - s.X / 2, p.X + s.X / 2)
+			local z1, z2 = tileRange(p.Z - s.Z / 2, p.Z + s.Z / 2)
+			local entry = { closed = part:GetAttribute("Open") ~= true, seen = false, tiles = {} }
+			for x = x1, x2 do
+				for z = z1, z2 do
+					local tile = tiles[x][z]
+					if not tile.fixedWall then
+						table.insert(entry.tiles, tile)
+						tile.onWall = entry.closed
+					end
+				end
+			end
+			FogState.doors[part] = entry
+			part:GetAttributeChangedSignal("State"):Connect(function() doorVersion += 1 end)
 		end
 	end
 	ready = true
 	FogState.tiles, FogState.count, FogState.tileSize, FogState.half = tiles, count, TILE, half
 	FogState.visible = {}
 	FogState.maze = maze
+end
+
+-- A remembered door changed: its tiles become wall or floor (with or without a wall-top sheet)
+local function rememberDoor(entry, closed)
+	entry.closed = closed
+	for _, tile in entry.tiles do
+		tile.onWall = closed
+		if tile.mode == "explored" then
+			if closed then
+				tile.top = tile.top or makeSheet(tile, wallH)
+				tile.top.Position = tile.center + Vector3.new(0, wallH + SHEET / 2 + 0.02, 0)
+			elseif tile.top then
+				tile.top:Destroy()
+				tile.top = nil
+			end
+			applyTransparency(tile)
+		end
+	end
 end
 
 local function tileIndex(pos)
@@ -508,8 +554,8 @@ local function teammates()
 end
 
 -- RELIC WATCH RINGS: once your team has spotted a relic (the server decides, see Objectives),
--- you keep seeing all around it until it's collected. Walls don't move, so each ring's sight is
--- worked out once and reused.
+-- you keep seeing all around it until it's collected. Each ring's sight is worked out once and
+-- reused until a door starts or stops moving.
 local relicSight = {}  -- [relic info Configuration] = { seen = {...}, maze = maze }
 
 local function relicRings()
@@ -520,9 +566,10 @@ local function relicRings()
 	for _, info in folder:GetChildren() do
 		if info:GetAttribute("Discovered") and not info:GetAttribute("Collected") then
 			local cached = relicSight[info]
-			if not cached or cached.maze ~= maze then
+			if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
 				local c = info:GetAttribute("Center")
-				cached = { seen = sightFrom(Vector3.new(c.X, floorY + EYE_HEIGHT, c.Z), nil, Config.RELIC_VISION_RADIUS), maze = maze }
+				cached = { seen = sightFrom(Vector3.new(c.X, floorY + EYE_HEIGHT, c.Z), nil, Config.RELIC_VISION_RADIUS),
+					maze = maze, doors = doorVersion }
 				relicSight[info] = cached
 			end
 			table.insert(list, cached.seen)
@@ -570,6 +617,19 @@ local function updateVisibility()
 	for _, seen in relicRings() do
 		for tile, t in seen do
 			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
+	end
+
+	-- Doors your team can see right now: remember how they are
+	for part, entry in FogState.doors do
+		local seen = false
+		for _, tile in entry.tiles do
+			if merged[tile] then seen = true break end
+		end
+		entry.seen = seen
+		if seen and part.Parent then
+			local _, shut = FogState.doorPose(part)
+			if shut ~= entry.closed then rememberDoor(entry, shut) end
 		end
 	end
 

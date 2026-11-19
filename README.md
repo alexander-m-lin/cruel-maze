@@ -26,6 +26,9 @@ choose where you come back. M hides the minimap.
   you lose one of your **3 lives**.
 - **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
   for your team, and you can come back there after being caught.
+- **Doors** (wall panels between two darker posts) open and close during the match. A door shakes,
+  rumbles and kicks up dust for 2 seconds before it moves. Your map shows each door as you last saw it. With
+  every door shut, everything is still reachable: doors only send you the long way round.
 - The monster wins if time runs out or every survivor is out of lives.
 
 ## Layout
@@ -41,7 +44,8 @@ choose where you come back. M hides the minimap.
 | `ServerScriptService/Main.legacy.luau` | ServerScriptService | Starts the game (runs `Match`) |
 | `ServerStorage/Match.luau` | ServerStorage (ModuleScript) | Runs matches one after another: Waiting → Countdown → Playing → Results. Lives, being caught, respawning, the end of a match |
 | `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds each maze: walls, floors, spawn rooms, relics. Wall and floor looks |
-| `ServerStorage/MazeLayout.luau` | ServerStorage (ModuleScript) | Layout rules: carving spawn rooms, picking relic spots, keeping the maze connected |
+| `ServerStorage/MazeLayout.luau` | ServerStorage (ModuleScript) | Layout rules: carving spawn rooms, picking relic spots and door slots, keeping the maze connected (even with every door shut) |
+| `ServerStorage/Doors.luau` | ServerStorage (ModuleScript) | Opening and closing doors mid-match (warning, movement, nudging people out of the way), the door AI, and the Studio dev panel's requests |
 | `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and spawn rooms (capturing, monster barriers) |
 | `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches |
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, spawn rooms |
@@ -56,6 +60,8 @@ choose where you come back. M hides the minimap.
 | `StarterPlayerScripts/SpawnPicker.local.luau` | StarterPlayer › StarterPlayerScripts | The map for choosing a spawn room after being caught |
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
+| `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
+| `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: a panel to work the doors (and G toggles the door under the mouse) |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
 | `StarterPlayerScripts/SoundEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Plays the sound effects and music |
 
