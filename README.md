@@ -50,6 +50,8 @@ press 1-6 to choose where you come back.
 | `StarterPlayerScripts/Controls.local.luau` | StarterPlayer › StarterPlayerScripts | Facing the mouse, speed by direction, backwards running, facing a relic while collecting it |
 | `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera; watches a teammate when you have no character |
 | `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight, shared with teammates, plus the vision around spotted relics |
+| `StarterPlayerScripts/FogState.luau` | StarterPlayer › StarterPlayerScripts (ModuleScript) | What the fog knows (seen, in view), shared with the minimap |
+| `StarterPlayerScripts/Minimap.local.luau` | StarterPlayer › StarterPlayerScripts | Corner map: explored and in-view areas, and dots for you, teammates, spotted relics and a visible monster (M hides it) |
 | `StarterPlayerScripts/SpawnPicker.local.luau` | StarterPlayer › StarterPlayerScripts | The map for choosing a spawn room after being caught |
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |

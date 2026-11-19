@@ -25,6 +25,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
+local FogState = require(script.Parent:WaitForChild("FogState"))   -- shared with the minimap
 
 local TILE         = 2      -- fog tile size in studs. Smaller = smoother but more parts/raycasts (2.5 = good balance, 2 = PC limit)
 local VIEW_RANGE   = Config.VIEW_RANGE   -- how far you can see (studs; set in Config)
@@ -274,6 +275,9 @@ local function buildFog(newMaze)
 		end
 	end
 	ready = true
+	FogState.tiles, FogState.count, FogState.tileSize, FogState.half = tiles, count, TILE, half
+	FogState.visible = {}
+	FogState.maze = maze
 end
 
 local function tileIndex(pos)
@@ -608,6 +612,7 @@ local function updateVisibility()
 	end
 
 	lastVisible = visibleNow
+	FogState.visible = visibleNow
 end
 
 -- Rebuild the fog whenever the server builds a new maze
