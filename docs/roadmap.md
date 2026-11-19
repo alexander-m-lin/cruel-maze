@@ -101,6 +101,10 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 
 **Done when:** a 3 v 2 + 1 match runs with humans, and the Maze Master has useful things to do even when no survivor is visible.
 
+**Build for mobile from here on** (the plan is under Phase 6):
+- Facing comes from an *aim direction* that each device supplies (mouse, touch, gamepad), not straight from the mouse. Abilities aim along it too.
+- Every action has a button that can be tapped, not only a key. No hover-only interactions, including in the Maze Master's interface.
+
 ### [ ] 4. Heroes and abilities
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay
@@ -120,8 +124,17 @@ Lets a match start with one human player and fill up as people arrive.
 
 ### [ ] 6. Content, platforms and performance
 - Art and audio passes; landmarks that help players navigate
-- Mobile and controller support
+- Mobile and controller support (see the plan below)
 - A lighter fog system: the current one creates about 25,000 parts on each player's device, likely too heavy for phones
+  - Done early (2026-11-19): line of sight casts a fan of rays (about 106 per view) instead of one ray per tile (about 1,150), and the pocket fill only searches next to newly revealed tiles. In Studio: rays per second about 18,000 → 1,600, a fog update about 4–5 ms → 1.1–1.6 ms, with ~0.1% of tiles differing. Still to do: the parts themselves (see-through sheets), and a test on a real phone.
+
+**Why mobile matters (2026-11-19):** most Roblox players are on phones and tablets, and a 6-player match needs a big pool of players. Survivors and monsters (5 of 6 slots) must play well on touch; the Maze Master can be PC-first at launch but still needs tappable controls. Controller is a small share: keep it workable, don't design around it. Performance (the fog) and screen space (minimap, HUD, touch targets) matter as much as the controls.
+
+**Planned touch controls** (after Wild Rift and Brawl Stars, where the ability buttons are the aim sticks, so the right thumb never sits on a stick doing nothing):
+- Left thumb: a floating movement stick. With the right thumb idle, you face the way you move (full speed).
+- Right thumb: the primary action button doubles as the look stick. Tap it for the action (e.g. collect a relic); drag it to look that way while held. Looking away from where you move costs speed as on PC (the facing speed rule stays: it stops "turret" vision and gives chases texture).
+- Ability buttons in an arc around it: tap to quick-cast (auto-aimed), drag to aim and release to cast, drag to a cancel zone to cancel. While aiming, you face the aim.
+- Open: after you let go, does facing stay where you looked (like PC) or snap back to your movement direction?
 
 ### [ ] 7. Progression and monetization
 - Saved player profiles, unlocks and premium characters
