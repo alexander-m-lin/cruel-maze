@@ -20,6 +20,9 @@ local Sounds = {
 	KillScream     = { id = 87645109019991, volume = 0.8, range = 140 },              -- the victim's scream as they're torn apart...
 	KillCrack      = { id = 9113542694,  volume = 0.6, range = 140 },                 -- ...and the crack of bones
 
+	-- Background music: plays all the time, on a loop
+	Music          = { id = 138890398994853, volume = 0.7, looped = true },
+
 	-- Match flow
 	CountdownTick  = { id = 134410911353980, volume = 0.6 },                          -- each second of the countdown
 	Win            = { id = 1846901578,  volume = 0.5 },                              -- your team won

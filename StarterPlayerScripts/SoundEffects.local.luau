@@ -9,6 +9,7 @@
 --   monster kill           - a roar as it lifts its victim, their scream, then cracking bones at the rip
 --   countdown              - a tick each second
 --   match over             - a win or lose sting, depending on your team
+--   background music       - always, on a loop
 --
 -- Sounds that come from somewhere (the relic, the monster) are placed there in the world, so
 -- they get quieter with distance and come from the right side.
@@ -177,6 +178,11 @@ local function updateMatch()
 	end
 	lastState = state
 end
+
+-- Background music: one looping track, always playing
+local music = newSound(Sounds.Music, SoundService)
+music.Name = "Music"
+music:Play()
 
 RunService.Heartbeat:Connect(function()
 	updateObjectives()
