@@ -7,7 +7,23 @@ Tick a phase's box when its "Done when" is met. Update this file as plans change
 
 ## Duration estimates
 
-Not set yet for the later phases.
+Estimated 2026-11-18, after Phase 1. Hours of active work together, including playtesting in
+Studio; not counting waiting (asset approval, finding testers). Phase 0 and 1 showed that building
+the planned features is fast and the time goes into playtest-driven changes and polish, so the
+ranges are wide: the low end assumes the first design mostly works, the high end allows Phase 1's
+level of polish.
+
+| Phase | Estimate | What drives it |
+|---|---|---|
+| 2. Maze that changes mid-match | 3-6 h | Mostly technical: fog, monster routing and line of sight all assume fixed walls |
+| 3. Human roles and the Maze Master | 10-20 h | Biggest design risk; finding what's fun for the Maze Master takes several rounds; needs 3+ real players to test |
+| 4. Heroes and abilities | 10-20 h | The ability system is quick; designing and balancing 4-5 distinct characters is open-ended |
+| 5. Bots and matchmaking | 8-15 h | Bot survivors and Maze Master are harder than the monster AI; matchmaking needs the game published to test |
+| 6. Content, platforms, performance | 10-25 h | Elastic: a fog rewrite for phones, mobile and controller controls, as much art and audio as wanted |
+| 7. Progression and monetization | 6-12 h | Well-trodden ground; some setup on the Creator Dashboard; purchases need testing |
+
+Total: roughly 50-100 hours to the full design; about 25-45 hours to a playable 3v2+1 game with
+heroes (through Phase 4).
 
 Actual so far:
 - Phase 0: about 30 minutes of building (branch 12:53 → last commit 13:19 on 2026-11-18), plus two 2-player test sessions and design decisions. The 1-week guess was far too high: with Claude Code, writing code is fast, and the time goes into testing, feel and decisions. Phase 1 (more design decisions) will be a better benchmark before estimating the rest.
