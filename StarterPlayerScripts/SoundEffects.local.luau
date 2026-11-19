@@ -46,6 +46,7 @@ end
 -- Play once and clean up (cut short after def.stopAfter seconds, if set)
 local function playOnce(def, parent)
 	local s = newSound(def, parent)
+	if def.startAt then s.TimePosition = def.startAt end   -- skip the start of the recording
 	s:Play()
 	task.delay(def.stopAfter or 10, function()
 		if s.Parent then s:Destroy() end
