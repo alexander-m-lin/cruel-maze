@@ -37,11 +37,13 @@ MazeBuilder.WALL_VARIANTS = { "JungleTempleStone3", "JungleTempleStone3_V1", "Ju
 MazeBuilder.POST_SIZE = 3      -- corner posts are this many studs square (walls are WALL_T thick)
 MazeBuilder.WALL_COLOR    = Color3.fromRGB(104, 114, 88)
 
--- Floor look: AI-generated temple flagstones (MaterialVariant in MaterialService, made for Slate),
--- tinted a weathered warm grey to sit with the walls. Other options: "JungleTempleFloor1".."3"
--- (smaller cobbles and bricks; see Workspace.FloorPalette). FLOOR_VARIANT = "" = plain material.
+-- Floor look: muted temple flagstones (MaterialVariant in MaterialService.FloorVariations, made for
+-- Slate, 15 studs per tile), tinted a weathered warm grey to sit with the walls. It's an
+-- AI-generated floor toned down by tools/textures/soften.py so its tiling isn't obvious; images in
+-- assets/textures/TempleFloor. The earlier, mossier "JungleTempleFloor".."3" are still in the
+-- place (see Workspace.FloorPalette). FLOOR_VARIANT = "" = plain material.
 MazeBuilder.FLOOR_MATERIAL = Enum.Material.Slate
-MazeBuilder.FLOOR_VARIANT  = "JungleTempleFloor"
+MazeBuilder.FLOOR_VARIANT  = "TempleFloorSoft"
 MazeBuilder.FLOOR_COLOR    = Color3.fromRGB(118, 110, 94)
 
 -- Outside the walls: jungle ground
