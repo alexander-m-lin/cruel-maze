@@ -144,6 +144,18 @@ local function buildOrb()
 	return finishBody(model)
 end
 
+-- A monster's body (the rig, or the orb if the rig is missing), placed in the workspace and tagged
+-- for the animate, ping and fog scripts. Also used for monsters played by people (PlayerMonster).
+-- Returns model, groundOffset (how far its pivot sits above its feet), isRig
+function MonsterAI.buildBody()
+	local template = ServerStorage:FindFirstChild("MonsterRig")
+	local model, groundOffset
+	if template then model, groundOffset = buildFromRig(template) end
+	if model then return model, groundOffset, true end
+	return buildOrb(), 0, false
+end
+MonsterAI.HOVER = HOVER
+
 ---------------------------------------------------------------- helpers
 local function rootOf(player)
 	local character = player.Character
@@ -175,12 +187,7 @@ function MonsterAI.new(maze, options)
 	self.rayParams.FilterType = Enum.RaycastFilterType.Include
 	self.rayParams.FilterDescendantsInstances = { maze.model }
 
-	local template = ServerStorage:FindFirstChild("MonsterRig")
-	local model, groundOffset
-	if template then model, groundOffset = buildFromRig(template) end
-	self.isRig = model ~= nil
-	self.model = model or buildOrb()
-	self.groundOffset = groundOffset or 0
+	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody()
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])

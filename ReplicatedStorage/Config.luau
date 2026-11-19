@@ -28,7 +28,7 @@ Config.MIN_PLAYERS = 1            -- a match starts once this many players are i
 Config.COUNTDOWN = 3              -- seconds of "Starting in..." before each match
 Config.MATCH_TIME = 240           -- seconds survivors have to collect their relics (4 minutes)
 Config.RESULTS_TIME = 6           -- seconds the result is shown before the next match
-Config.MONSTER_COUNT = 2          -- AI monsters per match (they spread out when roaming)
+Config.MONSTER_COUNT = 2          -- monsters per match: players in the Monster role, the rest AI (they spread out when roaming)
 
 -- Relics: survivors win by collecting RELICS_NEEDED of the RELIC_TOTAL in the maze
 Config.RELIC_TOTAL = 9
@@ -61,6 +61,35 @@ Config.DOOR_AI_COUNT = 3          -- until the Maze Master is a person, an AI ch
 Config.DOOR_AI_MIN = 5            -- ...every DOOR_AI_MIN..MAX seconds
 Config.DOOR_AI_MAX = 10
 
+-- THE MAZE MASTER: spends DARK MANA (refills over time) on tools, each with its own cooldown.
+Config.DARK_MANA_MAX = 100
+Config.DARK_MANA_REGEN = 5        -- per second
+Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds
+	Door       = { cost = 10, cooldown = 1 },    -- open or shut a door (plus DOOR_COOLDOWN on that door)
+	FalseRelic = { cost = 30, cooldown = 5 },    -- place a false relic
+	Crusher    = { cost = 50, cooldown = 30 },   -- set off a crushing wall
+}
+Config.MAZE_MASTER_DOOR_COOLDOWN = 20   -- a door the Maze Master changed can't be changed again for this long
+
+-- False relics: look like relics (but their eyes go out for a moment now and then). A survivor
+-- near one is revealed to the monster side; one who clicks it is revealed and slowed.
+Config.FALSE_RELICS_PER_MATCH = 2       -- the Maze Master can place this many in a whole match
+Config.FALSE_RELIC_REVEAL_RANGE = 15    -- studs (with a clear line of sight)
+Config.FALSE_RELIC_REVEAL_TIME = 5      -- seconds a survivor who clicks one stays revealed...
+Config.FALSE_RELIC_SLOW = 0.4           -- ...moving at this fraction of their speed...
+Config.FALSE_RELIC_SLOW_TIME = 3        -- ...for this long
+Config.FALSE_RELIC_BLINK_EVERY = 5      -- seconds (roughly) between the eyes going out...
+Config.FALSE_RELIC_BLINK_TIME = 0.15    -- ...for this long
+
+-- Crushing walls: pairs of walls along straight corridor cells, built into the maze, that the Maze
+-- Master sets off. They rumble, slam together (killing survivors between), then slide back.
+Config.CRUSHERS = 6                     -- how many per maze
+Config.CRUSHER_SPACING = 3              -- at least this many cells apart (and from doors)
+Config.CRUSHER_WARNING = 2              -- seconds of rumbling
+Config.CRUSHER_SLAM_TIME = 0.3
+Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
+Config.CRUSHER_RETURN_TIME = 1
+
 -- Match states, in the order they run. The server publishes the current one (see Match).
 Config.States = {
 	Waiting = "Waiting",          -- not enough players yet
@@ -69,11 +98,22 @@ Config.States = {
 	Results = "Results",
 }
 
--- Roles. Phase 0 makes everyone a survivor; monsters and the Maze Master come later.
+-- Roles: 3 survivors, 2 monsters and 1 Maze Master. Players get roles at random; empty monster
+-- slots get AI monsters, and with no Maze Master an AI works the doors. There's always at least one
+-- survivor (survivors have no bots yet). In Studio the dev panel can pick your role.
 Config.Roles = {
 	Survivor = "Survivor",
 	Monster = "Monster",
 	MazeMaster = "MazeMaster",
 }
+Config.ROLE_SLOTS = { Survivor = 3, Monster = 2, MazeMaster = 1 }
+
+-- Monsters played by people
+Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)
+Config.LUNGE_WINDUP = 0.15        -- seconds crouched before the lunge (you can't move)
+Config.LUNGE_DISTANCE = 12        -- studs the lunge carries you
+Config.LUNGE_TIME = 0.25          -- seconds the lunge takes
+Config.LUNGE_REACH = 5            -- a survivor this close to you during the lunge is caught (studs)
+Config.LUNGE_COOLDOWN = 1.2       -- seconds before you can lunge again after a miss
 
 return Config

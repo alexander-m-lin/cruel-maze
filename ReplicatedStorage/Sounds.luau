@@ -27,6 +27,9 @@ local Sounds = {
 	DoorFarRumble  = { id = 9125486602,  volume = 0.15, stopAfter = 2.5, startAt = 0.25 },             -- ...and faintly by everyone, anywhere
 	DoorGrind      = { id = 9113807062,  volume = 0.9, range = 90, stopAfter = 1.3, startAt = 0.4 },   -- the slab rising or sinking (timed to start with it)
 
+	-- Crushing walls (see CrusherView): they rumble like doors, then slam
+	CrusherSlam    = { id = 9125393230,  volume = 1.2, range = 120, stopAfter = 1.5 },   -- big rocks dropping
+
 	-- Background music: plays all the time, on a loop
 	Music          = { id = 138890398994853, volume = 0.1, looped = true },
 

@@ -1,7 +1,8 @@
 -- The maze's DOORS during a match: opening and closing them, safely, and (until the Maze Master is
 -- a person) a simple AI that works them.
 --
---   local doors = Doors.new(maze, { monsters = list, survivors = function() return players end })
+--   local doors = Doors.new(maze, { monsters = list, survivors = function() return players end,
+--                                   ai = false })   -- (ai = false: a person is the Maze Master)
 --   doors:Request(id, open)   -- start opening/closing a door; false if it can't right now
 --   doors:Step(dt)            -- every frame while the match plays (moves doors, runs the AI)
 --   doors:Destroy()
@@ -46,6 +47,7 @@ function Doors.new(maze, options)
 	self.maze = maze
 	self.monsters = options.monsters or {}
 	self.survivors = options.survivors or function() return {} end
+	self.useAI = options.ai ~= false   -- false when a person is the Maze Master
 	self.list = {}
 	for _, door in maze.doors do
 		door.state = door.open and "open" or "closed"
@@ -176,7 +178,7 @@ end
 -- that haven't changed for DOOR_COOLDOWN seconds, usually ones near a survivor (so people see the
 -- maze shift).
 function Doors:stepAI(now)
-	if not (aiEnabled and self.running) or now < self.nextAI then return end
+	if not (aiEnabled and self.useAI and self.running) or now < self.nextAI then return end
 	self.nextAI = now + self:aiInterval()
 	local maze = self.maze
 	local cells = {}

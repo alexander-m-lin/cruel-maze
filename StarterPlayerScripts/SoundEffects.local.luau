@@ -9,6 +9,7 @@
 --   monster kill           - a roar as it lifts its victim, their scream, then cracking bones at the rip
 --   door about to move     - a rumble from the door, and a faint one for everyone anywhere
 --   door moving            - stone grinding from the door
+--   crushing wall          - the door rumble while it warns, then a crash of rock as it slams
 --   countdown              - a tick each second
 --   match over             - a win or lose sting, depending on your team
 --   background music       - always, on a loop
@@ -196,6 +197,36 @@ local function updateDoors()
 	end
 end
 
+---------------------------------------------------------------- crushing walls
+local crusherStates = {}   -- [slab] = last State seen (one slab per crusher makes the sound)
+
+local function updateCrushers()
+	local maze = workspace:FindFirstChild("Maze")
+	local heard = {}
+	if maze then
+		for _, slab in maze:GetChildren() do
+			if slab.Name ~= "Crusher" then continue end
+			local id = slab:GetAttribute("Id")
+			local state = slab:GetAttribute("State")
+			local before = crusherStates[slab]
+			crusherStates[slab] = state
+			if heard[id] or not before or state == before then continue end
+			heard[id] = true
+			local home = slab:GetAttribute("Home")
+			local at = home and home.Position or slab.Position
+			if state == "warning" then
+				playAt(Sounds.DoorRumble, at)
+				play2D(Sounds.DoorFarRumble)
+			elseif state == "slam" then
+				playAt(Sounds.CrusherSlam, at)
+			end
+		end
+	end
+	for slab in crusherStates do
+		if not slab.Parent then crusherStates[slab] = nil end
+	end
+end
+
 ---------------------------------------------------------------- match flow
 local lastTick = nil
 local lastState = nil
@@ -230,6 +261,7 @@ RunService.Heartbeat:Connect(function()
 	updateObjectives()
 	updateMonsters()
 	updateDoors()
+	updateCrushers()
 	updateMatch()
 end)
 

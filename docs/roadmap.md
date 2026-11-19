@@ -105,6 +105,19 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 - Facing comes from an *aim direction* that each device supplies (mouse, touch, gamepad), not straight from the mouse. Abilities aim along it too.
 - Every action has a button that can be tapped, not only a key. No hover-only interactions, including in the Maze Master's interface.
 
+**Decisions (2026-11-19):**
+- **Roles:** random for now; bots fill empty slots (AI monsters; the door AI stands in for a missing Maze Master). A Studio-only role picker for testing with 1–2 people. Preferences and priority come later (Phase 7).
+- **Human monsters catch by lunging:** left-click lunges a short way; a hit catches. Short wind-up, cooldown after a miss, so survivors can dodge. Base speed about equal to survivors (the facing rule applies). The AI keeps its chase speed-up as the bot. Monsters can't enter spawn rooms.
+- **Vision:** monsters have the same fog and cone as survivors, shared within the monster team. The Maze Master shares the monster team's vision. Apart from that, the Maze Master knows the whole layout, the live state of doors and traps, and every relic (location and whether collected). Monsters see a relic once their team has seen it. No sighting markers for now: see whether the overhead view gives enough information.
+- **The Maze Master's view:** the same isometric camera, free to pan, no character in the maze. The layout shows as explored everywhere; the monster team's sight shows bright; survivors appear only where the team sees them.
+- **Dark mana:** the Maze Master's energy, plus a cooldown per tool. Starting numbers: pool 100, +5/s; door 10 (1 s cooldown, plus the 20 s per-door cooldown), false relic 30 (5 s), crushing wall 50 (30 s).
+- **Tools** (a baseplate for later design work):
+  - *Doors:* the Phase 2 doors, worked by the Maze Master instead of the AI.
+  - *False relics:* placed on an empty junction cell (not next to a real relic or spawn room). Indistinguishable from a real relic except that its red eyes go out for a split second every ~5 s, so careful players can spot one. A survivor near one (~15 studs, in line of sight) is revealed to the monster team; one who clicks it is revealed for 5 s and slowed to ~40% for 3 s, sees a red screen border and "FALSE RELIC", and the false relic is used up. At most 2 per match in total.
+  - *Crushing walls:* built into the generated maze like doors (pairs of walls along straight corridor cells, looking like normal walls). The Maze Master triggers one: ~2 s rumble (like doors), a ~0.3 s slam, then ~1 s to slide back. Survivors caught between lose a life; monsters are unaffected. Letting the Maze Master place them can be explored later.
+
+**Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.
+
 ### [ ] 4. Heroes and abilities
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay

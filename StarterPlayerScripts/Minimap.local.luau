@@ -5,7 +5,9 @@
 --   in view right now - bright (yours and your teammates' sight, and the areas around spotted relics)
 --   teal              - spawn rooms your team has captured
 --   dots              - you (white), teammates (cyan), relics your team has spotted and not yet
---                       collected (gold), the monster while your team can see it (red)
+--                       collected (gold), enemies while your team can see them (red)
+-- Teams: survivors, or the monster side (monsters and the Maze Master). On the monster side every
+-- monster is a teammate, survivors are the enemies, and the Maze Master sees every relic.
 --
 -- It's turned to match the camera (the top of the map is the top of your screen), like the spawn
 -- room picker. Press M to hide or show it.
@@ -237,26 +239,41 @@ end
 
 local function drawDots(half)
 	used = 0
-	-- relics your team has spotted and not collected yet
+	local myRole = player:GetAttribute("Role")
+	local Roles = Config.Roles
+	local monsterSide = myRole == Roles.Monster or myRole == Roles.MazeMaster
+	-- relics your team has spotted and not collected yet (the Maze Master knows them all)
 	local relics = match:FindFirstChild("Relics")
 	if relics then
 		for _, info in relics:GetChildren() do
-			if info:GetAttribute("Discovered") and not info:GetAttribute("Collected") then
+			local known = (myRole == Roles.MazeMaster) or (monsterSide and info:GetAttribute("MonsterDiscovered"))
+				or (not monsterSide and info:GetAttribute("Discovered"))
+			if known and not info:GetAttribute("Collected") then
 				dot(info:GetAttribute("Center"), DOT_RELIC, 8, half, true)
 			end
 		end
 	end
-	-- the monster, while your team can see it (the fog script decides)
+	-- monsters: teammates on the monster side (except your own body: that's you), else enemies
+	-- shown while your team can see them (the fog script decides)
 	for _, monster in CollectionService:GetTagged("Monster") do
-		if monster:GetAttribute("VisibleToMe") then
+		if monsterSide then
+			if monster:GetAttribute("OwnerUserId") ~= player.UserId then
+				dot(monster:GetPivot().Position, DOT_ALLY, 10, half)
+			end
+		elseif monster:GetAttribute("VisibleToMe") then
 			dot(monster:GetPivot().Position, DOT_MONSTER, 10, half)
 		end
 	end
-	-- teammates, then you on top
-	local myRole = player:GetAttribute("Role")
+	-- survivors: teammates for survivors; for the monster side, enemies while seen
 	for _, other in Players:GetPlayers() do
-		local root = other ~= player and myRole and other:GetAttribute("Role") == myRole and aliveRoot(other.Character)
-		if root then dot(root.Position, DOT_ALLY, 8, half) end
+		if other == player or other:GetAttribute("Role") ~= Roles.Survivor then continue end
+		local root = aliveRoot(other.Character)
+		if not root then continue end
+		if not monsterSide then
+			dot(root.Position, DOT_ALLY, 8, half)
+		elseif other.Character:GetAttribute("VisibleToMe") then
+			dot(root.Position, DOT_MONSTER, 9, half)
+		end
 	end
 	local myRoot = aliveRoot(player.Character)
 	if myRoot then dot(myRoot.Position, DOT_SELF, 9, half) end

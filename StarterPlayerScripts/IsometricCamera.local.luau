@@ -3,6 +3,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
 local FogState = require(script.Parent:WaitForChild("FogState"))   -- for the doors' ghosts (DoorView)
@@ -77,17 +78,61 @@ end
 
 local lastFocus = nil
 
+-- THE MAZE MASTER has no character: their camera pans freely over the maze. WASD or the arrow
+-- keys move it across the screen (up on the screen is +X+Z in the world, since the camera looks
+-- from the -X-Z corner). It starts over the middle and can't leave the maze.
+local PAN_SPEED = 90   -- studs per second
+local panFocus = nil
+local panMaze = nil
+local PAN_KEYS = {
+	[Enum.KeyCode.W] = Vector2.new(0, 1), [Enum.KeyCode.Up] = Vector2.new(0, 1),
+	[Enum.KeyCode.S] = Vector2.new(0, -1), [Enum.KeyCode.Down] = Vector2.new(0, -1),
+	[Enum.KeyCode.A] = Vector2.new(-1, 0), [Enum.KeyCode.Left] = Vector2.new(-1, 0),
+	[Enum.KeyCode.D] = Vector2.new(1, 0), [Enum.KeyCode.Right] = Vector2.new(1, 0),
+}
+local function mazeMasterFocus(dt)
+	local maze = workspace:FindFirstChild("Maze")
+	if not maze then return panFocus end
+	local half = (maze:GetAttribute("Cells") or 15) * (maze:GetAttribute("CellSize") or 20) / 2
+	local floorY = maze:GetAttribute("FloorY") or 0
+	if panMaze ~= maze or not panFocus then
+		panMaze = maze
+		panFocus = Vector3.new(0, floorY, 0)
+	end
+	local input = Vector2.zero
+	if not UserInputService:GetFocusedTextBox() then
+		for key, v in PAN_KEYS do
+			if UserInputService:IsKeyDown(key) then input += v end
+		end
+	end
+	if input.Magnitude > 0 then
+		-- screen right and screen up, flattened onto the floor
+		local right = camera.CFrame.RightVector * Vector3.new(1, 0, 1)
+		local up = camera.CFrame.UpVector * Vector3.new(1, 0, 1)
+		local move = (right.Unit * input.X + up.Unit * input.Y)
+		panFocus += move.Unit * PAN_SPEED * dt
+		panFocus = Vector3.new(math.clamp(panFocus.X, -half, half), floorY, math.clamp(panFocus.Z, -half, half))
+	end
+	return panFocus
+end
+
 -- BindToRenderStep runs right before each frame is drawn, after Roblox's default camera
-RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value + 1, function()
+RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.FieldOfView = FOV
 
 	local character = player.Character
 	local root = aliveRoot(character)
-	if not root then
-		root, character = teammateRoot()      -- watch a teammate instead
+	local focus
+	if player:GetAttribute("Role") == Config.Roles.MazeMaster then
+		character = nil
+		focus = mazeMasterFocus(dt)
+	else
+		if not root then
+			root, character = teammateRoot()  -- watch a teammate instead
+		end
+		focus = root and root.Position or lastFocus
 	end
-	local focus = root and root.Position or lastFocus
 	if not focus then return end
 	lastFocus = focus
 

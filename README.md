@@ -17,7 +17,16 @@ Playing from the file is single player. Playing together needs the place publish
 Moving away from where you face is slower. After being caught, click a spawn room on the map to
 choose where you come back. M hides the minimap.
 
-**How a match goes:**
+**Roles:** 3 survivors, 2 monsters and a Maze Master, handed out at random (empty monster slots
+get AI monsters; with no Maze Master an AI works the doors). In Studio, the "Role" button at the
+bottom left picks yours for the next match, and "New match" starts one.
+- **Monster:** move as usual; left-click to lunge. A survivor you hit is caught. You see what your
+  team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
+- **Maze Master:** no body; pan the camera with WASD. Spend dark mana on doors (1), false relics
+  (2, two a match: they look like relics, and a survivor who clicks one is revealed and slowed) and
+  crushing walls (3: hidden in the maze, they slam together and crush survivors between them).
+
+**How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):
   **left-click** to start collecting, then stay on it for 3 seconds (leaving or getting caught
   resets it; the monster turning up doesn't). Once anyone on your team has seen a relic,
@@ -48,7 +57,10 @@ choose where you come back. M hides the minimap.
 | `ServerStorage/MazeLayout.luau` | ServerStorage (ModuleScript) | Layout rules: carving spawn rooms, picking relic spots and door slots, keeping the maze connected (even with every door shut) |
 | `ServerStorage/Doors.luau` | ServerStorage (ModuleScript) | Opening and closing doors mid-match (warning, movement, nudging people out of the way), the door AI, and the Studio dev panel's requests |
 | `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and spawn rooms (capturing, monster barriers) |
-| `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches |
+| `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches. Also builds the monster body |
+| `ServerStorage/PlayerMonster.luau` | ServerStorage (ModuleScript) | A monster played by a person: dresses their invisible character in the monster body; the lunge and its catches |
+| `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, false relics, crushing walls |
+| `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, spawn rooms |
 | `ReplicatedStorage/Sounds.luau` | ReplicatedStorage (ModuleScript) | Every sound effect and the music, with volumes |
 | `ReplicatedStorage/Net.luau` | ReplicatedStorage (ModuleScript) | Creates/finds the remote events used to message between server and players |
@@ -62,6 +74,11 @@ choose where you come back. M hides the minimap.
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
+| `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's lunge (left click, or a button on touch screens) |
+| `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's dark mana bar, tool buttons and clicking on doors, cells and crushing walls |
+| `StarterPlayerScripts/CrusherView.local.luau` | StarterPlayer › StarterPlayerScripts | A crushing wall's warning: its walls shake and dust pours out |
+| `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
+| `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: pick your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: a panel to work the doors (and G toggles the door under the mouse) |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
 | `StarterPlayerScripts/SoundEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Plays the sound effects and music |

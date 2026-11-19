@@ -19,7 +19,11 @@
 -- BACKWARDS RUNNING: when you move away from where you face, the walk/run animation plays in
 -- reverse, so your legs match your movement instead of moonwalking.
 --
--- HELD BY A MONSTER (the "Seized" attribute): no control at all until it's over.
+-- FALSE RELIC: clicking one slows you to Config.FALSE_RELIC_SLOW for a few seconds ("SlowUntil").
+--
+-- HELD BY A MONSTER (the "Seized" attribute): no control at all until it's over. The same while
+-- a monster player is killing someone ("Killing") or crouched to lunge ("Lunging", set by
+-- MonsterControls on this computer).
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -108,7 +112,8 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root) or humanoid.Health <= 0 then return end
-	if player:GetAttribute("Seized") then
+	-- held by a monster, killing someone (monster players), or crouched to lunge: can't move
+	if player:GetAttribute("Seized") or player:GetAttribute("Killing") or player:GetAttribute("Lunging") then
 		humanoid.WalkSpeed = 0
 		return
 	end
@@ -142,6 +147,10 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 		multiplier = Config.FACING_BACK_SPEED
 	elseif aimWithMouse and move.Magnitude > 0.1 then
 		multiplier = facingSpeed(angle)
+	end
+	-- tricked by a false relic: slowed for a while
+	if (player:GetAttribute("SlowUntil") or 0) > workspace:GetServerTimeNow() then
+		multiplier *= Config.FALSE_RELIC_SLOW
 	end
 	humanoid.WalkSpeed = base * multiplier
 	setRunBackwards(humanoid, angle > BACKWARDS_FROM)

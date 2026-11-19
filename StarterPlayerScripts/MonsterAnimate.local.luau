@@ -1,5 +1,7 @@
 -- Moves and animates the monster's body on each player's computer.
 --
+-- (Monsters played by people get the same body and the same treatment: see PlayerMonster.)
+--
 -- 1. SMOOTH MOVEMENT. The server publishes where the monster is in a "Pivot" attribute, about 30
 --    times a second. Jumping straight to each update would look jittery (the screen draws 60+
 --    times a second), so we show the monster slightly in the past - INTERP_DELAY seconds - and
@@ -436,6 +438,17 @@ RunService.RenderStepped:Connect(function(dt)
 			continue
 		end
 		local cf = smoothPivot(s)
+		-- Your own monster body (you're playing a monster): follow your character directly, so it
+		-- never lags behind your controls. (Except mid-kill, when it faces its victim.)
+		if cf and model:GetAttribute("OwnerUserId") == Players.LocalPlayer.UserId and not model:GetAttribute("KillStart") then
+			local character = Players.LocalPlayer.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if root then
+				local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+				local at = Vector3.new(root.Position.X, cf.Position.Y, root.Position.Z)
+				cf = CFrame.lookAt(at, at + (look.Magnitude > 0.01 and look.Unit or cf.LookVector))
+			end
+		end
 		if cf then
 			if s.shown and dt > 0 then
 				local moved = (cf.Position - s.shown.Position) * Vector3.new(1, 0, 1)

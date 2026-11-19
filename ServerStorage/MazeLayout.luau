@@ -345,6 +345,57 @@ function MazeLayout.placeDoors(walls, n, rooms, relics, options)
 	return doors
 end
 
+---------------------------------------------------------------- crushing walls
+-- Picks CRUSHER cells: straight corridor cells (open at two opposite ends, ordinary walls on the
+-- other two sides) whose side walls can slam together. Not in or next to a spawn room, not a relic
+-- cell, and at least `spacing` cells from every door and other crusher. They never change how the
+-- maze connects (they only shut for a moment).
+-- Returns a list of { x, z, along = "X" or "Z" (the way the corridor runs) }.
+function MazeLayout.placeCrushers(walls, n, rooms, relics, doors, count, spacing)
+	local avoid = {}
+	for _, room in rooms do
+		for dx = -1, 2 do
+			for dz = -1, 2 do avoid[key(room.x + dx, room.z + dz)] = true end
+		end
+	end
+	for _, r in relics do avoid[key(r[1], r[2])] = true end
+	-- door slots, by the cell side they're on (both cells' views of it)
+	local doorSide = {}
+	for _, door in doors do
+		doorSide[key(door.x, door.z) .. door.d[3]] = true
+		doorSide[key(door.x + door.d[1], door.z + door.d[2]) .. door.d[4]] = true
+	end
+	local candidates = {}
+	for x = 1, n do
+		for z = 1, n do
+			if avoid[key(x, z)] then continue end
+			local w = walls[x][z]
+			local along
+			if not w.E and not w.W and w.N and w.S then along = "X"
+			elseif not w.N and not w.S and w.E and w.W then along = "Z" end
+			if not along then continue end
+			local sides = along == "X" and { "N", "S" } or { "E", "W" }
+			if doorSide[key(x, z) .. sides[1]] or doorSide[key(x, z) .. sides[2]] then continue end
+			table.insert(candidates, { x = x, z = z, along = along })
+		end
+	end
+	shuffle(candidates)
+	local picks = {}
+	for _, c in candidates do
+		if #picks >= count then break end
+		local ok = true
+		for _, p in picks do
+			if math.max(math.abs(p.x - c.x), math.abs(p.z - c.z)) < spacing then ok = false break end
+		end
+		for _, door in doors do
+			local mx, mz = door.x + door.d[1] / 2, door.z + door.d[2] / 2
+			if math.max(math.abs(mx - c.x), math.abs(mz - c.z)) < spacing - 0.5 then ok = false break end
+		end
+		if ok then table.insert(picks, c) end
+	end
+	return picks
+end
+
 MazeLayout.setWall = setWall
 MazeLayout.components = components
 

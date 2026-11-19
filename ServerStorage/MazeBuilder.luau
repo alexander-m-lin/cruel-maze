@@ -198,6 +198,53 @@ local function makeRelicSkull(pedestalTop, parent)
 	return skull
 end
 
+-- A relic on its pedestal at `center` (a cell centre on the floor), with a progress bar above it
+-- that fills while it's being collected. Also used for false relics (Objectives), which must look
+-- exactly the same. Returns the relic's model ("Relic<id>") and its gem (the skull).
+function MazeBuilder.buildRelic(parent, center, id)
+	local function decor(name, size, cf, color, material, into)
+		local p = Instance.new("Part")
+		p.Name, p.Size, p.CFrame = name, size, cf
+		p.Anchored = true
+		p.CanCollide, p.CanTouch, p.CanQuery = false, false, false
+		p.CastShadow = false
+		p.Color, p.Material = color, material
+		p.Parent = into
+		return p
+	end
+	local relicModel = Instance.new("Model")
+	relicModel.Name = "Relic" .. id
+	relicModel.Parent = parent
+	decor("Pedestal", Vector3.new(3, 2, 3), CFrame.new(center + Vector3.new(0, 1, 0)),
+		Color3.fromRGB(120, 112, 96), Enum.Material.Slate, relicModel)
+	local gem = makeRelicSkull(center + Vector3.new(0, 2, 0), relicModel)
+		or decor("Gem", Vector3.new(1.6, 1.6, 1.6),
+			CFrame.new(center + Vector3.new(0, 3.4, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+			RELIC_COLOR, Enum.Material.Neon, relicModel)
+	local light = Instance.new("PointLight")
+	light.Color, light.Range, light.Brightness = RELIC_COLOR, 16, 2.5   -- the golden glow around it
+	light.Parent = gem
+	local bar = Instance.new("BillboardGui")
+	bar.Name = "Progress"
+	bar.Size = UDim2.fromOffset(70, 10)
+	bar.StudsOffsetWorldSpace = Vector3.new(0, 6, 0)
+	bar.Enabled = false                   -- shown and filled by players' computers (HUD) while someone collects
+	bar.Adornee = gem
+	local back = Instance.new("Frame")
+	back.Size = UDim2.fromScale(1, 1)
+	back.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+	back.BorderSizePixel = 0
+	back.Parent = bar
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.BackgroundColor3 = RELIC_COLOR
+	fill.BorderSizePixel = 0
+	fill.Parent = back
+	bar.Parent = relicModel
+	return relicModel, gem
+end
+
 -- Builds the maze in the workspace (replacing any previous one).
 -- Returns a maze table (see the end): the layout, plus its spawn rooms and relics.
 function MazeBuilder.build(options)
@@ -261,6 +308,8 @@ function MazeBuilder.build(options)
 		corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
 		spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
 	})
+	local crusherPlans = MazeLayout.placeCrushers(walls, n, roomPlans, relicPlans, doorPlans,
+		options.crushers or 0, options.crusherSpacing or 3)
 	-- isDoor[x][z].E / .S: that side of the cell is a door slot (doors are always on an E or S side)
 	local isDoor = {}
 	for x = 1, n do isDoor[x] = {} for z = 1, n do isDoor[x][z] = {} end end
@@ -278,12 +327,13 @@ function MazeBuilder.build(options)
 	local function corner(i, j)
 		return Vector3.new(i * S - half, y0, j * S - half)
 	end
+	local panelsX, panelsZ = {}, {}   -- [i * 1000 + j] = the wall panel starting at corner (i, j)
 	local function panelX(i, j)   -- from corner (i, j) to (i + 1, j)
-		wall((corner(i, j) + corner(i + 1, j)) / 2, Vector3.new(S, H, T))
+		panelsX[i * 1000 + j] = wall((corner(i, j) + corner(i + 1, j)) / 2, Vector3.new(S, H, T))
 		sides[i][j].E, sides[i + 1][j].W = true, true
 	end
 	local function panelZ(i, j)   -- from corner (i, j) to (i, j + 1)
-		wall((corner(i, j) + corner(i, j + 1)) / 2, Vector3.new(T, H, S))
+		panelsZ[i * 1000 + j] = wall((corner(i, j) + corner(i, j + 1)) / 2, Vector3.new(T, H, S))
 		sides[i][j].S, sides[i][j + 1].N = true, true
 	end
 	for x = 1, n do
@@ -365,41 +415,12 @@ function MazeBuilder.build(options)
 			floor = floor, wards = wards })
 	end
 
-	-- RELICS: a relic on a pedestal, with a progress bar above it that fills while it's being collected
+	-- RELICS: a relic on a pedestal (see MazeBuilder.buildRelic)
 	local relics = {}
 	for i, plan in relicPlans do
 		local x, z = plan[1], plan[2]
 		local center = cellCenter(x, z)
-		local relicModel = Instance.new("Model")
-		relicModel.Name = "Relic" .. i
-		relicModel.Parent = model
-		decor("Pedestal", Vector3.new(3, 2, 3), CFrame.new(center + Vector3.new(0, 1, 0)),
-			Color3.fromRGB(120, 112, 96), Enum.Material.Slate, relicModel)
-		local gem = makeRelicSkull(center + Vector3.new(0, 2, 0), relicModel)
-			or decor("Gem", Vector3.new(1.6, 1.6, 1.6),
-				CFrame.new(center + Vector3.new(0, 3.4, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
-				RELIC_COLOR, Enum.Material.Neon, relicModel)
-		local light = Instance.new("PointLight")
-		light.Color, light.Range, light.Brightness = RELIC_COLOR, 16, 2.5   -- the golden glow around it
-		light.Parent = gem
-		local bar = Instance.new("BillboardGui")
-		bar.Name = "Progress"
-		bar.Size = UDim2.fromOffset(70, 10)
-		bar.StudsOffsetWorldSpace = Vector3.new(0, 6, 0)
-		bar.Enabled = false                   -- shown and filled by players' computers (HUD) while someone collects
-		bar.Adornee = gem
-		local back = Instance.new("Frame")
-		back.Size = UDim2.fromScale(1, 1)
-		back.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-		back.BorderSizePixel = 0
-		back.Parent = bar
-		local fill = Instance.new("Frame")
-		fill.Name = "Fill"
-		fill.Size = UDim2.fromScale(0, 1)
-		fill.BackgroundColor3 = RELIC_COLOR
-		fill.BorderSizePixel = 0
-		fill.Parent = back
-		bar.Parent = relicModel
+		local relicModel, gem = MazeBuilder.buildRelic(model, center, i)
 		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem })
 	end
 
@@ -427,6 +448,43 @@ function MazeBuilder.build(options)
 		table.insert(doors, { id = id, x = i, z = j, d = plan.d, kind = plan.kind, open = plan.open,
 			part = p, closedCF = closedCF, openCF = openCF,
 			other = { i + plan.d[1], j + plan.d[2] } })  -- the cell on the far side
+	end
+
+	-- CRUSHING WALLS: inside each side wall of a crusher cell hides a slab of the same stone, a bit
+	-- thinner, shorter and lower than the wall so no face of it shows. Set off (see Crushers), the
+	-- two slabs slide out of the walls and meet in the middle of the cell; the walls themselves never
+	-- move, so the maze never opens up. The wall panels are tagged with the crusher's id, so players'
+	-- computers can shake them while it rumbles.
+	local crushers = {}
+	for id, plan in crusherPlans do
+		local x, z = plan.x, plan.z
+		local c = cellCenter(x, z) + Vector3.new(0, 0, 0)
+		local alongX = plan.along == "X"
+		-- the two side walls: N and S for a corridor running along X, W and E for one along Z
+		local panelA = alongX and panelsX[(x - 1) * 1000 + (z - 1)] or panelsZ[(x - 1) * 1000 + (z - 1)]
+		local panelB = alongX and panelsX[(x - 1) * 1000 + z] or panelsZ[x * 1000 + (z - 1)]
+		local inward = alongX and Vector3.new(0, 0, 1) or Vector3.new(1, 0, 0)   -- from side A into the cell
+		local slabT = T - 0.4
+		local slabSize = alongX and Vector3.new(S - 0.4, H - 0.3, slabT) or Vector3.new(slabT, H - 0.3, S - 0.4)
+		local mid = c + Vector3.new(0, (H - 0.3) / 2, 0)
+		local homeA = CFrame.new(mid - inward * (S / 2))
+		local homeB = CFrame.new(mid + inward * (S / 2))
+		local shutA = CFrame.new(mid - inward * (slabT / 2))
+		local shutB = CFrame.new(mid + inward * (slabT / 2))
+		local slabs = {}
+		for k, home in { homeA, homeB } do
+			local slab = block("Crusher", slabSize, home.Position, MazeBuilder.WALL_COLOR, MazeBuilder.WALL_MATERIAL)
+			slab.MaterialVariant = variants[math.random(#variants)]
+			slab:SetAttribute("Id", id)
+			slab:SetAttribute("Home", home)
+			slab:SetAttribute("Shut", k == 1 and shutA or shutB)
+			slabs[k] = slab
+		end
+		for _, panel in { panelA, panelB } do
+			if panel then panel:SetAttribute("CrusherId", id) end
+		end
+		table.insert(crushers, { id = id, x = x, z = z, along = plan.along, center = c, slabs = slabs,
+			homes = { homeA, homeB }, shuts = { shutA, shutB }, inward = inward })
 	end
 
 	-- Move the spawn pad into the start room (players are moved to their own spots from there)
@@ -462,6 +520,7 @@ function MazeBuilder.build(options)
 		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
 		relics = relics,                        -- relics: { id, x, z, center, model, gem (the skull) }
 		doors = doors,                          -- doors: { id, x, z, d, other, kind, open, part, closedCF, openCF }
+		crushers = crushers,                    -- crushing walls: { id, x, z, along, center, slabs, homes, shuts, inward }
 	}
 end
 
