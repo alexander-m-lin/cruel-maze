@@ -1,5 +1,5 @@
 -- When you're caught (and have lives left), shows a small map of the maze with a button on each
--- spawn room your team has captured. Click one, or press its number key, to respawn there.
+-- spawn room your team has captured. Click one to respawn there.
 -- If you don't choose in time, the server brings you back in your last room.
 --
 -- The map is turned 45° to match the isometric camera, so "up" on the map is "up" on screen.
@@ -8,7 +8,6 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
 
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local chooseSpawn = Net.event("ChooseSpawn")
@@ -93,14 +92,11 @@ local function rebuild()
 		if not info:GetAttribute("Captured") then continue end   -- only rooms your team has found
 		local id = info:GetAttribute("Id")
 		local b = Instance.new("TextButton")
+		b.Text = ""                                -- no label: rooms are picked by where they are
 		b.AnchorPoint = Vector2.new(0.5, 0.5)
 		b.Position = UDim2.fromOffset(toMap(info:GetAttribute("Center")).X, toMap(info:GetAttribute("Center")).Y)
 		b.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
 		b.BackgroundColor3 = CAPTURED_COLOR
-		b.Font = Enum.Font.GothamBold
-		b.TextSize = 18
-		b.TextColor3 = Color3.new(1, 1, 1)
-		b.Text = tostring(id)
 		b.ZIndex = 3
 		b.Parent = map
 		Instance.new("UICorner", b).CornerRadius = UDim.new(1, 0)
@@ -124,13 +120,3 @@ end
 player:GetAttributeChangedSignal("Respawning"):Connect(update)
 update()
 
--- Number keys pick a room too
-local NUMBER_KEYS = {
-	[Enum.KeyCode.One] = 1, [Enum.KeyCode.Two] = 2, [Enum.KeyCode.Three] = 3, [Enum.KeyCode.Four] = 4,
-	[Enum.KeyCode.Five] = 5, [Enum.KeyCode.Six] = 6,
-}
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed or not screen.Enabled then return end
-	local id = NUMBER_KEYS[input.KeyCode]
-	if id and buttons[id] then choose(id) end
-end)

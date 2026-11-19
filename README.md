@@ -14,8 +14,8 @@ Playing from the file is single player. Playing together needs the place publish
 (or Studio's Team Create).
 
 **Controls (PC):** WASD to move. Your character faces the mouse, and you see in a cone that way.
-Moving away from where you face is slower. After being caught, click a spawn room on the map or
-press 1-6 to choose where you come back.
+Moving away from where you face is slower. After being caught, click a spawn room on the map to
+choose where you come back. M hides the minimap.
 
 **How a match goes:**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Stand on a relic for 3 seconds to

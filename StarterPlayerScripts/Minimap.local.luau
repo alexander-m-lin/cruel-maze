@@ -3,6 +3,7 @@
 --   never seen        - dark
 --   seen before       - dim (walls a little lighter than floor)
 --   in view right now - bright (yours and your teammates' sight, and the areas around spotted relics)
+--   teal              - spawn rooms your team has captured
 --   dots              - you (white), teammates (cyan), relics your team has spotted and not yet
 --                       collected (gold), the monster while your team can see it (red)
 --
@@ -37,6 +38,8 @@ local SEEN_FLOOR   = { 88, 86, 76, 245 }
 local SEEN_WALL    = { 140, 148, 118, 255 }
 local VIEW_FLOOR   = { 185, 180, 156, 255 }
 local VIEW_WALL    = { 235, 240, 205, 255 }
+local ROOM_SEEN    = { 48, 112, 120, 250 }     -- a spawn room your team has captured...
+local ROOM_VIEW    = { 80, 178, 190, 255 }     -- ...and while it's in view
 local DOT_SELF     = Color3.fromRGB(255, 255, 255)
 local DOT_ALLY     = Color3.fromRGB(80, 220, 235)
 local DOT_RELIC    = Color3.fromRGB(255, 205, 80)
@@ -124,6 +127,7 @@ end
 
 local buf = buffer.create(PIXELS * PIXELS * 4)
 local pixelTile = {}          -- [pixel index] = the fog tile it shows, or false (outside the maze)
+local pixelX, pixelZ = {}, {} -- [pixel index] = the world position it shows
 local builtFor = nil          -- the FogState.tiles table pixelTile was worked out for
 
 -- Which tile each pixel shows, worked out once per maze
@@ -137,7 +141,9 @@ local function mapPixels()
 			local tx = math.floor((x + half) / size) + 1
 			local tz = math.floor((z + half) / size) + 1
 			local row = tiles[tx]
-			pixelTile[j * PIXELS + i] = row and row[tz] or false
+			local index = j * PIXELS + i
+			pixelTile[index] = row and row[tz] or false
+			pixelX[index], pixelZ[index] = x, z
 		end
 	end
 	builtFor = tiles
@@ -155,10 +161,30 @@ local function drawFog()
 	if not image or not FogState.tiles then return end
 	if builtFor ~= FogState.tiles then mapPixels() end
 	local visible = FogState.visible
+
+	-- captured spawn rooms: 2x2 cells around each room's centre
+	local rooms = {}
+	local folder = match:FindFirstChild("SpawnRooms")
+	local cell = FogState.maze and FogState.maze:GetAttribute("CellSize") or 20
+	if folder then
+		for _, info in folder:GetChildren() do
+			if info:GetAttribute("Captured") then table.insert(rooms, info:GetAttribute("Center")) end
+		end
+	end
+	local function inRoom(index)
+		local x, z = pixelX[index], pixelZ[index]
+		for _, c in rooms do
+			if math.abs(x - c.X) < cell and math.abs(z - c.Z) < cell then return true end
+		end
+		return false
+	end
+
 	for index = 0, PIXELS * PIXELS - 1 do
 		local tile = pixelTile[index]
 		if not tile then
 			buffer.writeu32(buf, index * 4, 0)              -- outside the maze: see-through
+		elseif not tile.onWall and #rooms > 0 and inRoom(index) then
+			put(index, visible[tile] and ROOM_VIEW or ROOM_SEEN)
 		elseif not tile.explored then
 			put(index, NEVER_SEEN)
 		elseif visible[tile] then
