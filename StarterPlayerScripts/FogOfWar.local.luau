@@ -652,8 +652,41 @@ local function relicRings()
 	return list
 end
 
+-- CAPTURED SPAWN ROOMS: your team knows its own rooms. The start room (captured from the start)
+-- and every room your team captures are added to your map whole - floor and walls - rather than
+-- only the parts someone happened to look at. Remembered, not in view: they show dim until seen.
+local roomsShown = {}  -- [room info Configuration] = the maze it was shown for
+
+local function showCapturedRooms()
+	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	local folder = status and status:FindFirstChild("SpawnRooms")
+	if not folder or player:GetAttribute("Role") ~= Config.Roles.Survivor then return end
+	local reach = maze:GetAttribute("CellSize") + 1.5   -- a 2x2-cell room around its centre, plus its walls
+	for _, info in folder:GetChildren() do
+		if info:GetAttribute("Captured") and roomsShown[info] ~= maze then
+			roomsShown[info] = maze
+			local c = info:GetAttribute("Center")
+			local x1, x2 = tileRange(c.X - reach, c.X + reach)
+			local z1, z2 = tileRange(c.Z - reach, c.Z + reach)
+			for x = x1, x2 do
+				for z = z1, z2 do
+					local tile = tiles[x][z]
+					if not tile.explored then
+						reveal(tile)
+						setTarget(tile, T_EXPLORED)
+					end
+				end
+			end
+		end
+	end
+	for info in roomsShown do
+		if not info.Parent then roomsShown[info] = nil end   -- an old match's room
+	end
+end
+
 local function updateVisibility()
 	if not ready or not (maze and maze.Parent) then return end
+	showCapturedRooms()
 	-- Your own sight, every update (if you have a character: while respawning or out of lives you
 	-- see only through your teammates)
 	local eye, facing = eyesOf(player.Character)

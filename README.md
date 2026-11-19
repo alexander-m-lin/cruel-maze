@@ -25,7 +25,8 @@ choose where you come back. M hides the minimap.
 - An AI **monster** roams the maze, and chases you when it sees or hears you. If it catches you,
   you lose one of your **3 lives**.
 - **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
-  for your team, and you can come back there after being caught.
+  for your team, and you can come back there after being caught. Your team's rooms (the start
+  room, and any you capture) are on your map whole.
 - **Doors** (wall panels between two darker posts) open and close during the match. A door shakes,
   rumbles and kicks up dust for 2 seconds before it moves. Your map shows each door as you last saw it. With
   every door shut, everything is still reachable: doors only send you the long way round.
