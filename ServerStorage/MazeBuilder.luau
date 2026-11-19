@@ -184,7 +184,7 @@ function MazeBuilder.build(options)
 	end
 	MazeLayout.connect(walls, n, blocked)
 	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans,
-		options.relics or 9, options.relicSpacing or 4)
+		options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
 
 	for x = 1, n do
 		for z = 1, n do
@@ -259,7 +259,7 @@ function MazeBuilder.build(options)
 		bar.Name = "Progress"
 		bar.Size = UDim2.fromOffset(70, 10)
 		bar.StudsOffsetWorldSpace = Vector3.new(0, 6, 0)
-		bar.Enabled = false                   -- shown only while someone is collecting
+		bar.Enabled = false                   -- shown and filled by players' computers (HUD) while someone collects
 		bar.Adornee = gem
 		local back = Instance.new("Frame")
 		back.Size = UDim2.fromScale(1, 1)
@@ -273,8 +273,7 @@ function MazeBuilder.build(options)
 		fill.BorderSizePixel = 0
 		fill.Parent = back
 		bar.Parent = relicModel
-		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem,
-			bar = bar, fill = fill })
+		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem })
 	end
 
 	-- Move the spawn pad into the start room (players are moved to their own spots from there)
@@ -308,7 +307,7 @@ function MazeBuilder.build(options)
 		n = n, S = S, half = half, floorY = y0,
 		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
 		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
-		relics = relics,                        -- relics: { id, x, z, center, model, gem, bar, fill }
+		relics = relics,                        -- relics: { id, x, z, center, model, gem }
 	}
 end
 

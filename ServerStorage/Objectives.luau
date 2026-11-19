@@ -16,7 +16,8 @@
 -- Players' computers follow along through ReplicatedStorage.Match:
 --   attributes RelicsCollected, RelicsNeeded, RelicsTotal
 --   a "SpawnRooms" folder with one Configuration per room: attributes Id, Center (Vector3), Captured
---   a "Relics" folder with one Configuration per relic: attributes Id, Center, Discovered, Collected
+--   a "Relics" folder with one Configuration per relic: attributes Id, Center, Discovered, Collected,
+--   CollectSince (server time collecting started; nil when nobody is collecting)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -147,8 +148,8 @@ local function collect(self, relic, player)
 	relic.info:SetAttribute("Collected", true)
 	self.collected += 1
 	self.status:SetAttribute("RelicsCollected", self.collected)
+	relic.info:SetAttribute("CollectSince", nil)
 	relic.gem:Destroy()                         -- the relic is gone from its pedestal
-	relic.bar.Enabled = false
 	if self.callbacks.onRelic then self.callbacks.onRelic(player, relic) end
 end
 
@@ -203,22 +204,20 @@ function Objectives:Update(survivors)
 		if room and not room.captured then capture(self, room, player) end
 	end
 
-	-- Collecting: the bar fills while someone stands on the relic, and empties the moment nobody does
+	-- Collecting: progress builds while someone stands on the relic, and resets the moment nobody
+	-- does. Players' computers draw the bar from CollectSince (when it started), so it's smooth.
 	for _, relic in self.maze.relics do
 		if relic.collected then continue end
 		local player = collecting[relic]
 		if player then
 			discover(relic)
+			if relic.progress == 0 then relic.info:SetAttribute("CollectSince", workspace:GetServerTimeNow()) end
 			relic.progress += dt
-			if relic.progress >= Config.RELIC_COLLECT_TIME then
-				collect(self, relic, player)
-				continue
-			end
-		else
+			if relic.progress >= Config.RELIC_COLLECT_TIME then collect(self, relic, player) end
+		elseif relic.progress > 0 then
 			relic.progress = 0
+			relic.info:SetAttribute("CollectSince", nil)
 		end
-		relic.bar.Enabled = relic.progress > 0
-		relic.fill.Size = UDim2.fromScale(relic.progress / Config.RELIC_COLLECT_TIME, 1)
 	end
 end
 

@@ -86,4 +86,22 @@ RunService.RenderStepped:Connect(function()
 	if os.clock() < flashUntil then text = flashText end
 	announceLabel.Text = text
 	announceLabel.Visible = text ~= ""
+
+	-- Relic progress bars: the server says when collecting started (CollectSince); the bar is
+	-- filled here every frame so it moves smoothly
+	local relics = match:FindFirstChild("Relics")
+	local maze = workspace:FindFirstChild("Maze")
+	if relics and maze then
+		for _, info in relics:GetChildren() do
+			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
+			local bar = relicModel and relicModel:FindFirstChild("Progress")
+			local fill = bar and bar:FindFirstChild("Fill", true)
+			if not fill then continue end
+			local since = info:GetAttribute("CollectSince")
+			bar.Enabled = since ~= nil and not info:GetAttribute("Collected")
+			if bar.Enabled then
+				fill.Size = UDim2.fromScale(math.clamp((now - since) / Config.RELIC_COLLECT_TIME, 0, 1), 1)
+			end
+		end
+	end
 end)

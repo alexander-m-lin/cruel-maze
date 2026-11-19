@@ -220,6 +220,7 @@ local function runCountdown()
 		roomSpacing = Config.SPAWN_ROOM_SPACING,
 		relics = Config.RELIC_TOTAL,
 		relicSpacing = Config.RELIC_SPACING,
+		relicsNearStart = Config.RELICS_NEAR_START,
 	})
 	objectives = Objectives.new(maze, {
 		onRelic = function(player, relic)

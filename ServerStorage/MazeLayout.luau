@@ -95,14 +95,28 @@ function MazeLayout.connect(walls, n, blocked)
 	end
 end
 
+-- Which quarter of the maze a cell is in: 1-4 (the middle row/column counts as east/south)
+function MazeLayout.quadrant(x, z, n)
+	local east = x * 2 > n and 1 or 0
+	local south = z * 2 > n and 1 or 0
+	return 1 + east + 2 * south
+end
+local quadrant = MazeLayout.quadrant
+
 ---------------------------------------------------------------- spawn rooms
 -- Carves `count` 2x2 rooms. The first is always the start room at cells (1,1)-(2,2). The others
--- are placed at random, at least `spacing` cells (Chebyshev distance) from every other room.
+-- are placed at random, each wholly inside a quarter of the maze that no other room is in (while
+-- there are free quarters left), and at least `spacing` cells (Chebyshev distance) from every
+-- other room.
 -- Returns a list of rooms: { id, x, z (top-left cell), cells = {[key]=true}, exits = {...} }
 function MazeLayout.carveRooms(walls, n, count, spacing)
 	local rooms = {}
+	local usedQuadrants = {}
 	local function fits(x, z)
 		if x < 1 or z < 1 or x + 1 > n or z + 1 > n then return false end
+		local q = quadrant(x, z, n)
+		if quadrant(x + 1, z + 1, n) ~= q then return false end      -- straddles the middle
+		if usedQuadrants[q] and #rooms < 4 then return false end
 		for _, r in rooms do
 			if math.max(math.abs(r.x - x), math.abs(r.z - z)) < spacing then return false end
 		end
@@ -119,6 +133,7 @@ function MazeLayout.carveRooms(walls, n, count, spacing)
 		setWall(walls, x, z, DIRS[3], false)       -- (x,z)   / (x,z+1)
 		setWall(walls, x + 1, z, DIRS[3], false)   -- (x+1,z) / (x+1,z+1)
 		table.insert(rooms, room)
+		usedQuadrants[quadrant(x, z, n)] = true
 	end
 
 	addRoom(1, 1)   -- the start room
@@ -164,24 +179,27 @@ end
 
 ---------------------------------------------------------------- relic rooms
 -- Picks up to `count` relic cells: cells with 2-3 openings (so there's more than one way out),
--- not in or right next to a spawn room, at least `spacing` cells apart (straight-line distance).
+-- not in or right next to a spawn room, at least `spacing` cells apart (straight-line distance),
+-- and at most `nearStart` of them in the start room's quarter of the maze.
 -- Monsters can walk through relic cells, so picks never affect how the maze connects.
 -- If it can't fit `count` relics that far apart, it tries again with the spacing reduced in
 -- half-cell steps (down to 2), so the match always gets its full set.
 -- Returns a list of { x, z }, and the spacing actually used.
 local tryPick
-function MazeLayout.pickRelics(walls, n, rooms, count, spacing)
+function MazeLayout.pickRelics(walls, n, rooms, count, spacing, nearStart)
 	local picks
 	local s = spacing
 	while true do
-		picks = tryPick(walls, n, rooms, count, s)
+		picks = tryPick(walls, n, rooms, count, s, nearStart or count)
 		if #picks >= count or s <= 2 then break end
 		s -= 0.5
 	end
 	return picks, s
 end
 
-function tryPick(walls, n, rooms, count, spacing)
+function tryPick(walls, n, rooms, count, spacing, nearStart)
+	local startQuadrant = quadrant(rooms[1].x, rooms[1].z, n)
+	local inStart = 0
 	local nearRoom = {}
 	for _, room in rooms do
 		for dx = -1, 2 do
@@ -206,7 +224,12 @@ function tryPick(walls, n, rooms, count, spacing)
 		for _, p in picks do
 			if (Vector2.new(p[1], p[2]) - Vector2.new(c[1], c[2])).Magnitude < spacing then ok = false break end
 		end
-		if ok then table.insert(picks, c) end
+		local q = quadrant(c[1], c[2], n)
+		if ok and q == startQuadrant and inStart >= nearStart then ok = false end
+		if ok then
+			table.insert(picks, c)
+			if q == startQuadrant then inStart += 1 end
+		end
 	end
 	return picks
 end

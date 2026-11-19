@@ -34,6 +34,7 @@ Config.MONSTER_COUNT = 1          -- AI monsters per match
 Config.RELIC_TOTAL = 9
 Config.RELICS_NEEDED = 6
 Config.RELIC_SPACING = 4          -- minimum distance between relics, in maze cells (shrinks a little if they can't fit)
+Config.RELICS_NEAR_START = 1      -- at most this many relics in the start room's quarter of the maze
 Config.RELIC_COLLECT_TIME = 3     -- seconds a survivor must stay in a relic's cell to collect it (leaving or being caught resets it)
 Config.RELIC_VISION_RADIUS = 30   -- once a survivor has seen a relic, your team keeps seeing this many studs around it until it's collected
 
@@ -43,7 +44,8 @@ Config.RESPAWN_CHOICE_TIME = 6    -- seconds to pick a spawn room after being ca
 
 -- Spawn rooms: 2x2-cell rooms with 2-3 exits that monsters can never enter. Your team starts with
 -- the start room; walking into another one captures it, and you can respawn in any captured room.
-Config.SPAWN_ROOMS = 4            -- including the start room
+-- Each room is in its own quarter of the maze (up to 4 rooms).
+Config.SPAWN_ROOMS = 3            -- including the start room
 Config.SPAWN_ROOM_SPACING = 5     -- minimum distance between rooms, in cells
 
 -- Match states, in the order they run. The server publishes the current one (see Match).
