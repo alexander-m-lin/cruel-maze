@@ -1,5 +1,6 @@
 -- The relic-collecting effect: whoever is collecting a relic reaches out a hand toward it, and a
--- beam of light runs from their hand to the relic. Also the prompt to collect one (at the end).
+-- beam of light runs from their hand to the relic. Also the prompt to collect one, and the relics
+-- floating and turning above their pedestals (both at the end).
 -- Runs on every player's computer, for every collector, so everyone sees it (the server says who
 -- is collecting each relic in its "Collector" attribute; see Objectives). Everything made here
 -- exists only on this computer.
@@ -235,4 +236,39 @@ end)
 button.Activated:Connect(tryCollect)
 UserInputService.InputBegan:Connect(function(input, processed)
 	if not processed and input.UserInputType == Enum.UserInputType.MouseButton1 then tryCollect() end
+end)
+
+---------------------------------------------------------------- floating relics
+-- Each relic (the skull and everything on it) floats above its pedestal, bobbing gently and
+-- slowly turning. Only for show, on this computer: the server's copy stays put.
+local FLOAT_HEIGHT = 1.0     -- studs above where it rests on the pedestal
+local BOB_HEIGHT   = 0.25    -- studs up and down
+local BOB_TIME     = 2.6     -- seconds for one bob
+local TURN_TIME    = 9       -- seconds for one full turn
+
+local floating = {}          -- [gem] = { base = CFrame, phase = number, parts = { {part, offset} } }
+
+RunService.RenderStepped:Connect(function()
+	local maze = workspace:FindFirstChild("Maze")
+	if not maze then return end
+	local t = os.clock()
+	for _, relicModel in maze:GetChildren() do
+		local gem = relicModel.Name:sub(1, 5) == "Relic" and relicModel:FindFirstChild("Gem")
+		if not gem then continue end
+		local f = floating[gem]
+		if not f then
+			-- remember where the server put it, and where its eyes sit relative to it
+			f = { base = gem.CFrame, phase = (tonumber(relicModel.Name:sub(6)) or 0) * 1.7, parts = {} }
+			for _, part in gem:GetChildren() do
+				if part:IsA("BasePart") then table.insert(f.parts, { part, gem.CFrame:Inverse() * part.CFrame }) end
+			end
+			floating[gem] = f
+			gem.Destroying:Once(function() floating[gem] = nil end)
+		end
+		local lift = FLOAT_HEIGHT + math.sin((t / BOB_TIME) * 2 * math.pi + f.phase) * BOB_HEIGHT
+		local turn = (t / TURN_TIME) * 2 * math.pi + f.phase
+		local cf = CFrame.new(f.base.Position + Vector3.new(0, lift, 0)) * CFrame.Angles(0, turn, 0) * f.base.Rotation
+		gem.CFrame = cf
+		for _, p in f.parts do p[1].CFrame = cf * p[2] end
+	end
 end)
