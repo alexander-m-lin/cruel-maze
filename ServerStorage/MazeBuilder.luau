@@ -21,18 +21,27 @@ MazeBuilder.CELL   = 20   -- studs per cell (hallways are CELL - WALL_T wide)
 MazeBuilder.WALL_H = 7    -- wall height (low enough for the isometric camera to see into corridors)
 MazeBuilder.WALL_T = 2    -- wall thickness
 
--- Wall look. WALL_VARIANT names an AI-generated MaterialVariant stored in MaterialService (it lives
--- in the place file); WALL_MATERIAL must be the base material it was made for. Options generated:
---   "JungleTempleStone" .. "JungleTempleStone3"  (base Cobblestone) - mossy grey-green temple blocks
---   "AncientTombStone"  .. "AncientTombStone3"   (base Sandstone)   - weathered tomb sandstone
--- WALL_COLOR tints the texture; white shows it as generated. WALL_VARIANT = "" uses the plain
--- base material. To compare them all side by side, see Workspace.WallPalette in the place.
+-- Wall look. Walls are built from panels exactly one cell (CELL studs) long, with posts where
+-- walls turn, branch or end. Each panel picks one of WALL_VARIANTS at random; posts use the first.
+-- The variants are AI-generated MaterialVariants stored in MaterialService (they live in the place
+-- file), all made for WALL_MATERIAL. The JungleTempleStone3_V1..V4 variations share their
+-- edges with JungleTempleStone3, so any two panels meet seamlessly in a straight run. That only
+-- works because each panel is a whole number of texture tiles long (CELL = 20 studs, the
+-- variants tile every 10 studs): Roblox starts a texture afresh on each part.
+-- Other options: "JungleTempleStone" .. "JungleTempleStone2" (Cobblestone),
+-- "AncientTombStone" .. "AncientTombStone3" (Sandstone). See Workspace.WallPalette in the place.
+-- WALL_COLOR tints the texture; white shows it as generated.
 MazeBuilder.WALL_MATERIAL = Enum.Material.Cobblestone
-MazeBuilder.WALL_VARIANT  = "JungleTempleStone3"
+MazeBuilder.WALL_VARIANTS = { "JungleTempleStone3", "JungleTempleStone3_V1", "JungleTempleStone3_V2",
+	"JungleTempleStone3_V3", "JungleTempleStone3_V4" }   -- images and script in assets/textures/JungleTempleStone3
+MazeBuilder.POST_SIZE = 3      -- corner posts are this many studs square (walls are WALL_T thick)
 MazeBuilder.WALL_COLOR    = Color3.fromRGB(104, 114, 88)
 
--- Floor look: Roblox's built-in Pavement (stone pavers) in a weathered warm grey
-MazeBuilder.FLOOR_MATERIAL = Enum.Material.Pavement
+-- Floor look: AI-generated temple flagstones (MaterialVariant in MaterialService, made for Slate),
+-- tinted a weathered warm grey to sit with the walls. Other options: "JungleTempleFloor1".."3"
+-- (smaller cobbles and bricks; see Workspace.FloorPalette). FLOOR_VARIANT = "" = plain material.
+MazeBuilder.FLOOR_MATERIAL = Enum.Material.Slate
+MazeBuilder.FLOOR_VARIANT  = "JungleTempleFloor"
 MazeBuilder.FLOOR_COLOR    = Color3.fromRGB(118, 110, 94)
 
 -- Outside the walls: jungle ground
@@ -156,17 +165,19 @@ function MazeBuilder.build(options)
 		return p
 	end
 
-	local function wall(pos, size)
+	local variants = MazeBuilder.WALL_VARIANTS
+	local function wall(pos, size, variant)
 		local p = block("Wall", size, pos + Vector3.new(0, H / 2, 0), MazeBuilder.WALL_COLOR, MazeBuilder.WALL_MATERIAL)
-		p.MaterialVariant = MazeBuilder.WALL_VARIANT
+		p.MaterialVariant = variant or variants[math.random(#variants)]
 	end
 
 	-- Paved floor inside the walls; jungle ground outside them. The ground is one big slab reaching
 	-- BORDER studs past the walls, sitting a hair lower than the pavers so they cover it inside
 	-- (exactly level surfaces would flicker where they overlap).
 	local floorSize = n * S + T
-	block("Floor", Vector3.new(floorSize, 1, floorSize), Vector3.new(0, y0 + 0.5, 0),
+	local floor = block("Floor", Vector3.new(floorSize, 1, floorSize), Vector3.new(0, y0 + 0.5, 0),
 		MazeBuilder.FLOOR_COLOR, MazeBuilder.FLOOR_MATERIAL)
+	floor.MaterialVariant = MazeBuilder.FLOOR_VARIANT
 	local groundSize = floorSize + 2 * MazeBuilder.BORDER
 	block("Ground", Vector3.new(groundSize, 1, groundSize), Vector3.new(0, y0 + 0.5 - 0.05, 0),
 		MazeBuilder.GROUND_COLOR, MazeBuilder.GROUND_MATERIAL)
@@ -183,16 +194,44 @@ function MazeBuilder.build(options)
 	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans,
 		options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
 
+	-- WALLS. Grid points (i, j) are the cell corners, 0..n each way. A wall panel runs along one
+	-- cell side, corner to corner. Each cell builds its North and West sides; the last row/column
+	-- also build South/East, so no side is built twice. sides[i][j] records which directions
+	-- leave each corner, to decide where posts go.
+	local sides = {}
+	for i = 0, n do
+		sides[i] = {}
+		for j = 0, n do sides[i][j] = {} end
+	end
+	local function corner(i, j)
+		return Vector3.new(i * S - half, y0, j * S - half)
+	end
+	local function panelX(i, j)   -- from corner (i, j) to (i + 1, j)
+		wall((corner(i, j) + corner(i + 1, j)) / 2, Vector3.new(S, H, T))
+		sides[i][j].E, sides[i + 1][j].W = true, true
+	end
+	local function panelZ(i, j)   -- from corner (i, j) to (i, j + 1)
+		wall((corner(i, j) + corner(i, j + 1)) / 2, Vector3.new(T, H, S))
+		sides[i][j].S, sides[i][j + 1].N = true, true
+	end
 	for x = 1, n do
 		for z = 1, n do
-			local c = cellCenter(x, z)
 			local w = walls[x][z]
-			-- Each cell builds its North and West walls; the last row/column also build South/East.
-			-- That way no wall is built twice.
-			if w.N then wall(c + Vector3.new(0, 0, -S/2), Vector3.new(S + T, H, T)) end
-			if w.W then wall(c + Vector3.new(-S/2, 0, 0), Vector3.new(T, H, S + T)) end
-			if z == n and w.S then wall(c + Vector3.new(0, 0, S/2), Vector3.new(S + T, H, T)) end
-			if x == n and w.E then wall(c + Vector3.new(S/2, 0, 0), Vector3.new(T, H, S + T)) end
+			if w.N then panelX(x - 1, z - 1) end
+			if w.W then panelZ(x - 1, z - 1) end
+			if z == n and w.S then panelX(x - 1, z) end
+			if x == n and w.E then panelZ(x, z - 1) end
+		end
+	end
+	-- A post at every corner where walls meet, except where two panels just continue in a
+	-- straight line (there the panels join seamlessly on their own)
+	local P = MazeBuilder.POST_SIZE
+	for i = 0, n do
+		for j = 0, n do
+			local d = sides[i][j]
+			local count = (d.N and 1 or 0) + (d.S and 1 or 0) + (d.E and 1 or 0) + (d.W and 1 or 0)
+			local straight = count == 2 and ((d.N and d.S) or (d.E and d.W))
+			if count > 0 and not straight then wall(corner(i, j), Vector3.new(P, H, P), variants[1]) end
 		end
 	end
 
@@ -228,6 +267,7 @@ function MazeBuilder.build(options)
 		folder.Parent = model
 		local floor = decor("RoomFloor", Vector3.new(2 * S - T, 0.1, 2 * S - T), CFrame.new(center + Vector3.new(0, 0.05, 0)),
 			ROOM_FLOOR_COLOR, Enum.Material.Slate, folder)
+		floor.MaterialVariant = MazeBuilder.FLOOR_VARIANT   -- same flagstones, tinted (needs a Slate-based variant)
 		local wards = {}
 		for _, e in plan.exits do
 			table.insert(wards, ward(e[1], e[2], e[3], ROOM_WARD_COLOR, folder))

@@ -24,15 +24,21 @@ Because every variation shares the original's border, any two of them placed sid
 meet the way the original meets itself. A few interior seams still clip a stone. Rerun the
 script with different settings (`BAND`, `DARK`, `FEATHER`) or new sources to change them.
 
-## Using them
+## In the game
 
-1. **Upload:** in Studio, add a MaterialVariant per folder (base material Cobblestone,
-   StudsPerTile 10) and import its colour, normal, roughness and metalness maps. New images
-   need Roblox moderation before they load.
-2. **Build walls in whole tiles.** Roblox starts a part's texture at the part's own corner. It
-   does not line up with neighbouring parts (tested 2026-11-18: one wall split at an odd
-   point shows a visible jump). So a variation only joins seamlessly when each wall piece is
-   a whole number of tiles long and tall: multiples of 10 studs at StudsPerTile 10. Today's
-   walls are 22 studs long and overlap at the corners, so MazeBuilder needs a change first.
-   One option is panels on the tile grid with corner posts.
-3. Then pick a variation at random for each wall piece.
+Uploaded 2026-11-18 as MaterialVariants `JungleTempleStone3_V1`..`V4` (in
+`MaterialService.WallVariations`, base Cobblestone, 10 studs per tile; metalness reuses the
+original's map). MazeBuilder's `WALL_VARIANTS` lists them with the original, and each wall panel
+picks one at random.
+
+| Variant | Colour | Normal | Roughness |
+|---|---|---|---|
+| V1 | 79252408532207 | 118563323434796 | 135625723940166 |
+| V2 | 113602389430361 | 88631979324847 | 138431187460297 |
+| V3 | 117869914617965 | 135022853640135 | 95960798928170 |
+| V4 | 78321734725827 | 84085364297526 | 80134679172251 |
+
+The variations only join seamlessly because MazeBuilder builds walls as panels exactly one cell
+(20 studs, 2 tiles) long, with posts at corners. Roblox starts a texture afresh at each part's
+corner and does not line it up with neighbouring parts (tested 2026-11-18). Keep wall pieces a
+whole number of tiles long and tall if the wall building changes.
