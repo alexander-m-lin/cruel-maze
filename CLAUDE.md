@@ -4,6 +4,30 @@ This project is the start of **Cruel Maze**. The design overview below is the di
 
 The implementation plan, with phases, estimates and progress checkboxes, is in [docs/roadmap.md](docs/roadmap.md). Read it before planning new work, and tick a phase off there when it's done.
 
+## Working on this project
+
+**Status (2026-11-18):** Phases 0 and 1 are done, and Phase 2 (a maze that changes mid-match) is next. Don't start it until the user says to. The README has how to play and what every script does.
+
+**Files and Studio**
+- The place is `CruelMaze.rbxl` (renamed from `Place2.rbxl`). Scripts are mirrored between Studio and the repo folders by Studio's **Script Sync**: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript. In Script Sync, each service (ServerScriptService, ServerStorage, ReplicatedStorage, StarterPlayerScripts, StarterGui › MazeHUD) is linked at the **repo root**. Linking a service to its own folder nests a duplicate folder inside it.
+- Script Sync mirrors deletions. Deleting a synced file deletes the script in Studio, so check what is linked before removing files.
+- Edits to files don't reach Studio during a playtest. Stop the playtest, check the edit landed (search the Studio copy's Source), then start a new one. `ReplicatedStorage/Config.luau` has sometimes stopped syncing; if so, set the Studio script's Source to the file's text and compare byte counts.
+- Non-script things live only in the place file: the monster rig (`ServerStorage.MonsterRig`), the relic skull (`ServerStorage.SkullRelic`, Creator Store asset 98498294), the wall and floor materials (`MaterialService`), and dev previews (`Workspace.WallPalette`, `Workspace.FloorPalette`, `SoundService.SoundBoard`). Save the place before committing.
+- Tunable numbers are in `ReplicatedStorage/Config.luau` (match rules), `ReplicatedStorage/Sounds.luau` (sounds and music), and the settings at the top of each script.
+
+**Testing through the Studio MCP**
+- Test in playtests with `execute_luau` on the Server or Client, measuring with numbers. Screenshots show the 3D view only while the Studio window is visible, and never show BillboardGuis (floating labels). To check one visually, copy it onto a ScreenGui. Close-up visual checks work best in Edit mode with a camera position.
+- Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
+- The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.
+- The isometric camera sits 210 studs away, so sounds are heard from the camera's focus (see `SoundEffects`), not the camera.
+- Player avatars here use AnimationConstraints and BallSocketConstraints rather than Motor6Ds. A Humanoid forces limbs to be non-colliding.
+
+**Git**
+- The public repo is https://github.com/alexander-m-lin/cruel-maze, and `main` is the only branch. Work each phase on a `phase-N` branch and merge it with `--no-ff` when its "done when" is met.
+- Commits use the GitHub no-reply email set in the repo config. Keep it, so the user's personal email never goes public. Commit when asked; push only when asked.
+
+**Assets:** uploaded textures and their asset IDs are documented in `assets/textures/*/README.md`, with the scripts that made them in `tools/textures/`. New uploads need Roblox moderation before they show for other players.
+
 ---
 
 # Cruel Maze — Game Design Overview
