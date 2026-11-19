@@ -28,7 +28,7 @@ Config.MIN_PLAYERS = 1            -- a match starts once this many players are i
 Config.COUNTDOWN = 3              -- seconds of "Starting in..." before each match
 Config.MATCH_TIME = 240           -- seconds survivors have to collect their relics (4 minutes)
 Config.RESULTS_TIME = 6           -- seconds the result is shown before the next match
-Config.MONSTER_COUNT = 1          -- AI monsters per match
+Config.MONSTER_COUNT = 2          -- AI monsters per match (they spread out when roaming)
 
 -- Relics: survivors win by collecting RELICS_NEEDED of the RELIC_TOTAL in the maze
 Config.RELIC_TOTAL = 9

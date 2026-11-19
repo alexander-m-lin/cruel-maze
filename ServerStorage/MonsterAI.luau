@@ -14,7 +14,8 @@
 -- comes straight at you from any angle.
 --
 -- Behaviour:
---   ROAM   - wander to random cells
+--   ROAM   - wander the maze. With other monsters about (options.pack), it heads for places far
+--            from them and from where they're going, so a pack spreads out and covers the maze
 --   CHASE  - it saw you (line of sight) or heard you (very close, even through walls)
 --   SEARCH - lost you: go to where it last saw you, then go back to roaming
 -- If it gets close enough to you, you're caught (what that means is up to the match: onCatch).
@@ -44,6 +45,7 @@ local HOVER        = 3.2    -- how high the fallback orb floats above the floor 
 local BODY_RADIUS  = 4      -- how wide it is, for checking it can fit past wall corners
 local RIG_SCALE    = 1.8    -- the rig is scaled up by this much (bigger = longer, slower strides)
 local TURN_SPEED   = 8      -- how quickly it turns to face where it's going
+local ROAM_CHOICES = 12     -- when roaming with other monsters, how many random cells it weighs up
 
 -- THE KILL: when it catches someone it stops, lifts them over its head, and tears them apart.
 -- Times in seconds from the catch. MonsterAnimate draws it on players' computers (arms, victim
@@ -157,11 +159,13 @@ end
 --   The monster then stands still for KILL.DONE seconds while the kill plays out.
 -- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
 -- options.startCell = {x, z}: where it appears.
+-- options.pack: a list of all the match's monsters (this one included), to spread out from.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
 	self.maze = maze
 	self.isBlocked = options.isBlocked or function() return false end
+	self.pack = options.pack or {}
 	self.onCatch = options.onCatch or function(player)
 		local _, humanoid = rootOf(player)
 		if humanoid then humanoid.Health = 0 end
@@ -285,6 +289,39 @@ function MonsterAI:publish(now)
 	end
 end
 
+-- Where to roam next: a random cell it's allowed into. With other monsters about, it weighs up
+-- several random cells and takes the one furthest from the others - both where they are and
+-- where they're heading - so they spread out instead of bunching up.
+function MonsterAI:pickRoamCell()
+	local maze = self.maze
+	local function randomCell()
+		local tx, tz
+		for _ = 1, 20 do
+			tx, tz = math.random(maze.n), math.random(maze.n)
+			if not self.isBlocked(tx, tz) then break end
+		end
+		return tx, tz
+	end
+	local others = {}
+	for _, other in self.pack do
+		if other ~= self and other.model then
+			table.insert(others, { self:cellOf(other.pos) })
+			if other.roamGoal then table.insert(others, other.roamGoal) end
+		end
+	end
+	if #others == 0 then return randomCell() end
+	local bestX, bestZ, bestScore
+	for _ = 1, ROAM_CHOICES do
+		local tx, tz = randomCell()
+		local nearest = math.huge
+		for _, c in others do
+			nearest = math.min(nearest, math.abs(c[1] - tx) + math.abs(c[2] - tz))
+		end
+		if not bestScore or nearest > bestScore then bestX, bestZ, bestScore = tx, tz, nearest end
+	end
+	return bestX, bestZ
+end
+
 ---------------------------------------------------------------- every frame
 -- targets: the players it's allowed to hunt
 function MonsterAI:Step(dt, targets)
@@ -369,11 +406,8 @@ function MonsterAI:Step(dt, targets)
 				if #self.path == 0 and self.mode == "search" then self.mode = "roam" end   -- reached it, nobody here
 			end
 			if self.mode == "roam" and #self.path == 0 then
-				local tx, tz
-				for _ = 1, 20 do                             -- a random cell it's allowed into
-					tx, tz = math.random(maze.n), math.random(maze.n)
-					if not self.isBlocked(tx, tz) then break end
-				end
+				local tx, tz = self:pickRoamCell()
+				self.roamGoal = { tx, tz }
 				self.path = self:findPath(cx, cz, tx, tz)
 			end
 			-- if we're off-centre (e.g. after lunging at a player), go back to the cell centre first

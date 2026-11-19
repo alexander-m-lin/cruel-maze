@@ -227,15 +227,25 @@ local function cleanUp()
 end
 
 -- The free cell nearest the middle of the maze, for a monster to appear in
-local function monsterStartCell()
+-- Where each monster appears. The first: the free cell nearest the middle. Each one after: as far
+-- as possible from those already placed, but never near the start room (survivors spawn there).
+local START_ROOM_CLEARANCE = 6   -- cells
+local function monsterStartCell(taken)
 	local mid = math.ceil(maze.n / 2)
-	local best, bestDist
+	local startRoom = maze.rooms[1]
+	local best, bestScore
 	for x = 1, maze.n do
 		for z = 1, maze.n do
-			if not objectives:IsBlocked(x, z) then
-				local d = math.abs(x - mid) + math.abs(z - mid)
-				if not bestDist or d < bestDist then best, bestDist = { x, z }, d end
+			if objectives:IsBlocked(x, z) then continue end
+			if math.abs(x - startRoom.x) + math.abs(z - startRoom.z) < START_ROOM_CLEARANCE then continue end
+			local score
+			if #taken == 0 then
+				score = -(math.abs(x - mid) + math.abs(z - mid))       -- nearest the middle
+			else
+				score = math.huge
+				for _, c in taken do score = math.min(score, math.abs(x - c[1]) + math.abs(z - c[2])) end
 			end
+			if not bestScore or score > bestScore then best, bestScore = { x, z }, score end
 		end
 	end
 	return best
@@ -274,11 +284,15 @@ local function runCountdown()
 		end,
 	})
 
+	local starts = {}
 	for _ = 1, Config.MONSTER_COUNT do
+		local startCell = monsterStartCell(starts)
+		table.insert(starts, startCell)
 		local monster = MonsterAI.new(maze, {
 			onCatch = onCaught,
 			isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
-			startCell = monsterStartCell(),
+			startCell = startCell,
+			pack = monsters,                            -- they spread out from each other when roaming
 		})
 		monster.active = false
 		table.insert(monsters, monster)
