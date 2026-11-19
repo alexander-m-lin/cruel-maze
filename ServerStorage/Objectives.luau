@@ -2,14 +2,17 @@
 --
 --   local objectives = Objectives.new(maze, { onRelic = fn(player, relic), onCapture = fn(player, room) })
 --   objectives:Update(survivors)   -- a few times a second: spotting, collecting, captures
+--   objectives:StartCollecting(player, relicId)  -- they clicked to collect a relic (checked here)
 --   objectives:IsBlocked(x, z)     -- can a monster enter this cell?
 --   objectives:IsSafe(position)    -- is a survivor standing here protected from monsters?
 --   objectives:Destroy()           -- at the end of the match
 --
 -- Relics: monsters can go anywhere near them. Once any survivor has seen a relic it is
 --   "discovered", and survivors' fog stays clear around it until it's collected (FogOfWar), so a
---   monster waiting there is seen. Standing in a relic's cell for Config.RELIC_COLLECT_TIME
---   seconds collects it; leaving the cell or being caught resets the bar.
+--   monster waiting there is seen. Standing in a relic's cell shows a prompt; clicking starts
+--   collecting, and staying in the cell for Config.RELIC_COLLECT_TIME seconds collects it.
+--   Leaving the cell or being caught resets it (click again to restart); nothing else interrupts
+--   it, not even the monster turning up.
 -- Spawn rooms: monsters can never enter one. The start room is yours from the beginning; walking
 --   into another captures it for your team, and you can respawn there.
 --
@@ -186,7 +189,7 @@ function Objectives:Update(survivors)
 	local dt = math.min(now - self.lastUpdate, 0.5)
 	self.lastUpdate = now
 
-	local collecting = {}   -- [relic] = the first survivor standing on it
+	local onRelic = {}      -- [player] = the relic whose cell they're standing in
 	for _, player in survivors do
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -201,28 +204,45 @@ function Objectives:Update(survivors)
 		if not x then continue end
 		local k = key(x, z)
 		local relic = self.relicAt[k]
-		if relic and not relic.collected and not collecting[relic] then collecting[relic] = player end
+		if relic and not relic.collected then onRelic[player] = relic end
 		local room = self.roomAt[k]
 		if room and not room.captured then capture(self, room, player) end
 	end
 
-	-- Collecting: progress builds while someone stands on the relic, and resets the moment nobody
-	-- does. Players' computers draw the bar from CollectSince (when it started), so it's smooth.
+	-- Collecting: progress builds while the player who started it stays on the relic, and resets
+	-- if they leave (or are caught). Players' computers draw the bar from CollectSince (when it
+	-- started), so it's smooth.
 	for _, relic in self.maze.relics do
-		if relic.collected then continue end
-		local player = collecting[relic]
-		if player then
-			discover(relic)
-			if relic.progress == 0 then relic.info:SetAttribute("CollectSince", workspace:GetServerTimeNow()) end
-			if relic.info:GetAttribute("Collector") ~= player.UserId then relic.info:SetAttribute("Collector", player.UserId) end
+		local player = relic.collector
+		if relic.collected or not player then continue end
+		if onRelic[player] == relic then
 			relic.progress += dt
 			if relic.progress >= Config.RELIC_COLLECT_TIME then collect(self, relic, player) end
-		elseif relic.progress > 0 then
+		else
+			relic.collector = nil
 			relic.progress = 0
 			relic.info:SetAttribute("CollectSince", nil)
 			relic.info:SetAttribute("Collector", nil)
 		end
 	end
+	self.onRelic = onRelic
+end
+
+-- A player clicked to collect a relic. Check it all: alive, standing in its cell, and nobody is
+-- already collecting it.
+function Objectives:StartCollecting(player, relicId)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (root and humanoid and humanoid.Health > 0) then return end
+	local x, z = self:CellOf(root.Position)
+	local relic = x and self.relicAt[key(x, z)]
+	if not relic or relic.id ~= relicId or relic.collected or relic.collector then return end
+	discover(relic)
+	relic.collector = player
+	relic.progress = 0
+	relic.info:SetAttribute("CollectSince", workspace:GetServerTimeNow())
+	relic.info:SetAttribute("Collector", player.UserId)
 end
 
 return Objectives

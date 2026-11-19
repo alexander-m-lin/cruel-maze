@@ -49,6 +49,7 @@ status.Parent = ReplicatedStorage
 local caughtEvent = Net.event("Caught")              -- server -> player: you were caught (lives left)
 local chooseSpawnEvent = Net.event("ChooseSpawn")    -- player -> server: respawn me in this room
 local noticeEvent = Net.event("Notice")              -- server -> everyone: a short message (relic found...)
+local collectEvent = Net.event("CollectRelic")       -- player -> server: I clicked to collect this relic
 
 local state = nil
 local maze = nil         -- this match's maze (see MazeBuilder.build)
@@ -189,6 +190,13 @@ local function onCaught(player, monster)
 		end)
 	end)
 end
+
+-- A player clicked to collect a relic (Objectives checks they're really on it)
+collectEvent.OnServerEvent:Connect(function(player, relicId)
+	if state ~= States.Playing or not objectives or typeof(relicId) ~= "number" then return end
+	if player:GetAttribute("Role") ~= Roles.Survivor or player:GetAttribute("Seized") then return end
+	objectives:StartCollecting(player, relicId)
+end)
 
 -- A player picked a spawn room. Check everything: never trust what a client sends.
 chooseSpawnEvent.OnServerEvent:Connect(function(player, roomId)

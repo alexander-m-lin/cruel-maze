@@ -18,8 +18,9 @@ Moving away from where you face is slower. After being caught, click a spawn roo
 choose where you come back. M hides the minimap.
 
 **How a match goes:**
-- Find and collect **6 of the 9 relics** within **4 minutes**. Stand on a relic for 3 seconds to
-  collect it (leaving or getting caught resets it). Once anyone on your team has seen a relic,
+- Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt:
+  **left-click** to start collecting, then stay on it for 3 seconds (leaving or getting caught
+  resets it; the monster turning up doesn't). Once anyone on your team has seen a relic,
   the area around it stays visible to your team until it's collected.
 - An AI **monster** roams the maze, and chases you when it sees or hears you. If it catches you,
   you lose one of your **3 lives**.
