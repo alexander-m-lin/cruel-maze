@@ -12,7 +12,7 @@ local Sounds = {
 	-- everyone hears it. A soft bell, slowed a touch to make it warmer. Alternatives to try:
 	-- 90773963263404 ("completedtask"), 96659579913194 ("PathComplete"); the old sharp one was 4612374036
 	RelicCollected = { id = 9118587701, volume = 1.0 },
-	RoomCaptured   = { id = 132574644259001, volume = 0.15 },                          -- everyone hears it
+	RoomCaptured   = { id = 9125879007, volume = 1.0 },                          -- everyone hears it
 
 	-- The monster
 	MonsterRoar    = { id = 9113980319,  volume = 2.0, range = 140 },                 -- when it starts chasing someone
