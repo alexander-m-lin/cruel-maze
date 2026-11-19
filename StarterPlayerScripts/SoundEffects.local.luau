@@ -6,7 +6,7 @@
 --   relic collected        - a chime (everyone)
 --   spawn room captured    - a chime (everyone)
 --   monster starts a chase - a roar from the monster
---   monster kill           - a roar as it lifts its victim, then a scream and cracking bones
+--   monster kill           - a roar as it lifts its victim, their scream, then cracking bones at the rip
 --   countdown              - a tick each second
 --   match over             - a win or lose sting, depending on your team
 --
@@ -25,6 +25,7 @@ local Sounds = require(ReplicatedStorage:WaitForChild("Sounds"))
 local player = Players.LocalPlayer
 local match = ReplicatedStorage:WaitForChild("Match")
 local KILL_RIP = 1.7   -- seconds from catch to the rip (MonsterAI.KILL.RIP on the server)
+local SCREAM_LENGTH = 1.2  -- seconds: the KillScream sound's length, so it ends at the rip
 
 local function newSound(def, parent)
 	local s = Instance.new("Sound")
@@ -136,13 +137,14 @@ local function updateMonsters()
 		local killStart = model:GetAttribute("KillStart")
 		if killStart and killStart ~= st.killStart then
 			playAt(Sounds.KillGrab, monsterHead(model))
-			local wait = killStart + KILL_RIP - workspace:GetServerTimeNow()
-			task.delay(math.max(0, wait), function()
-				if not model.Parent then return end
-				local at = monsterHead(model) + Vector3.new(0, 3, 0)
-				playAt(Sounds.KillScream, at)
-				playAt(Sounds.KillCrack, at)
-			end)
+			local function at(seconds, fn)   -- run fn this many seconds after the catch
+				task.delay(math.max(0, killStart + seconds - workspace:GetServerTimeNow()), function()
+					if model.Parent then fn(monsterHead(model) + Vector3.new(0, 3, 0)) end
+				end)
+			end
+			-- the scream starts while they're being lifted and ends right at the rip
+			at(KILL_RIP - SCREAM_LENGTH, function(pos) playAt(Sounds.KillScream, pos) end)
+			at(KILL_RIP, function(pos) playAt(Sounds.KillCrack, pos) end)
 		end
 		st.killStart = killStart
 	end

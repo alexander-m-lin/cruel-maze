@@ -27,8 +27,8 @@
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 
-local ROAM_SPEED   = 10     -- studs per second (players walk at Config.PLAYER_SPEED)
-local SEARCH_SPEED = 15
+local ROAM_SPEED   = 15     -- studs per second (players walk at Config.PLAYER_SPEED)
+local SEARCH_SPEED = 18
 -- Chase speed is relative to the WalkSpeed of the player being chased: it starts a bit slower than
 -- you, then speeds up the longer the chase lasts, until it's faster than you. So escaping takes
 -- breaking line of sight early, not just outrunning it.
