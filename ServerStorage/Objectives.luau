@@ -17,7 +17,8 @@
 --   attributes RelicsCollected, RelicsNeeded, RelicsTotal
 --   a "SpawnRooms" folder with one Configuration per room: attributes Id, Center (Vector3), Captured
 --   a "Relics" folder with one Configuration per relic: attributes Id, Center, Discovered, Collected,
---   CollectSince (server time collecting started; nil when nobody is collecting)
+--   CollectSince (server time collecting started; nil when nobody is collecting), Collector (the
+--   UserId of the survivor collecting it: their character reaches for it with a beam of light)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -149,6 +150,7 @@ local function collect(self, relic, player)
 	self.collected += 1
 	self.status:SetAttribute("RelicsCollected", self.collected)
 	relic.info:SetAttribute("CollectSince", nil)
+	relic.info:SetAttribute("Collector", nil)
 	relic.gem:Destroy()                         -- the relic is gone from its pedestal
 	if self.callbacks.onRelic then self.callbacks.onRelic(player, relic) end
 end
@@ -212,11 +214,13 @@ function Objectives:Update(survivors)
 		if player then
 			discover(relic)
 			if relic.progress == 0 then relic.info:SetAttribute("CollectSince", workspace:GetServerTimeNow()) end
+			if relic.info:GetAttribute("Collector") ~= player.UserId then relic.info:SetAttribute("Collector", player.UserId) end
 			relic.progress += dt
 			if relic.progress >= Config.RELIC_COLLECT_TIME then collect(self, relic, player) end
 		elseif relic.progress > 0 then
 			relic.progress = 0
 			relic.info:SetAttribute("CollectSince", nil)
+			relic.info:SetAttribute("Collector", nil)
 		end
 	end
 end

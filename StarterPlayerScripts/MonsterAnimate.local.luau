@@ -25,6 +25,11 @@ local REACH_ANGLE  = 0.75   -- when chasing, how far the arms raise forward (rad
 local REACH_SPREAD = 0.15  -- ...and how far apart they spread
 local REACH_EASE   = 4      -- how quickly it raises/lowers its arms when a chase starts/ends
 local INTERP_DELAY = 0.08  -- show the monster this many seconds in the past, to move it smoothly
+-- The kill (timing must match MonsterAI.KILL on the server): arms lift the victim overhead, hold
+-- them shaking, then fling apart as they're torn in two
+local KILL_LIFT, KILL_RIP, KILL_DONE = 0.7, 1.7, 2.6
+local OVERHEAD    = 2.75   -- shoulder angle with the arms straight up (radians)
+local FLING       = 1.5    -- how far the arms fling out to the sides at the rip
 
 ---------------------------------------------------------------- helpers
 local JOINT_NAMES = { "Root", "Waist", "Neck", "LeftShoulder", "RightShoulder", "LeftElbow",
@@ -167,7 +172,6 @@ local function pose(s, dt)
 	local roll = math.sin(p) * 0.08 * move
 	-- (lean only at the waist: tilting the root would tilt the hips and lift the feet)
 	j.Root.Transform = CFrame.new(0, -bob, 0) * CFrame.Angles(0, 0, roll)
-	j.Waist.Transform = CFrame.Angles(lean + breathe, -math.sin(p) * 0.15 * move, -roll * 0.5)
 
 	-- Arms. Two poses, blended by s.reach (0 = not chasing, 1 = chasing; eases between them):
 	--   loose: long arms swing opposite the legs but lag behind, flop outward a little, and sway
@@ -187,20 +191,55 @@ local function pose(s, dt)
 	local reachR = REACH_ANGLE + math.sin(claw + math.pi) * 0.12 + math.sin(p) * 0.06
 	local shL = lerp(looseL, reachL, reach)
 	local shR = lerp(looseR, reachR, reach)
-	-- spread: rotating about Z moves the left arm out with a negative angle, the right with positive
+	-- how far apart the arms spread
 	local outward = lerp(0.08 + 0.1 * run, REACH_SPREAD, reach)
-	if j.LeftShoulder then j.LeftShoulder.Transform = CFrame.Angles(shL, 0, -outward) end
-	if j.RightShoulder then j.RightShoulder.Transform = CFrame.Angles(shR, 0, outward) end
+	local outL, outR = outward, outward
 	-- Elbows: bend more on the forward swing; when reaching, nearly straight and flexing as it claws
 	local elbowL = lerp(math.max(0, looseL) * 0.5 + 0.1, 0.15 + math.max(0, -math.sin(claw)) * 0.35, reach)
 	local elbowR = lerp(math.max(0, looseR) * 0.5 + 0.1, 0.15 + math.max(0, math.sin(claw)) * 0.35, reach)
-	if j.LeftElbow then j.LeftElbow.Transform = rx(elbowL) end
-	if j.RightElbow then j.RightElbow.Transform = rx(elbowR) end
 	-- Wrists: flop with the swing; when reaching, claws cock back then snap forward
 	local wristL = lerp(math.sin(p + math.pi - lag * 2) * 0.3 * move, -0.35 + math.sin(claw - 0.8) * 0.35, reach)
 	local wristR = lerp(math.sin(p - lag * 2) * 0.3 * move, -0.35 + math.sin(claw + math.pi - 0.8) * 0.35, reach)
+	local lookUp, leanBack = 0, 0
+
+	-- THE KILL: blend from the normal pose to "holding someone overhead", then to "arms flung apart"
+	local k = s.killStart and (workspace:GetServerTimeNow() - s.killStart) or nil
+	if k and k < KILL_DONE + 0.5 then
+		local function smooth(x) x = math.clamp(x, 0, 1) return x * x * (3 - 2 * x) end
+		local settle = 1 - smooth((k - (KILL_RIP + 0.5)) / (KILL_DONE + 0.5 - KILL_RIP - 0.5))  -- back to normal at the end
+		local hold = smooth(k / KILL_LIFT) * settle
+		local fling = smooth((k - KILL_RIP) / 0.12) * settle
+		local struggle = math.clamp((k - KILL_LIFT) / (KILL_RIP - KILL_LIFT), 0, 1) * (1 - fling)
+		local shake = math.sin(k * 45) * 0.08 * struggle
+		-- holding: both arms straight up, slightly apart, elbows a little bent around the body
+		shL = lerp(shL, OVERHEAD + shake, hold)
+		shR = lerp(shR, OVERHEAD - shake, hold)
+		outL = lerp(outL, 0.2, hold)
+		outR = lerp(outR, 0.2, hold)
+		elbowL = lerp(elbowL, 0.35, hold)
+		elbowR = lerp(elbowR, 0.35, hold)
+		wristL = lerp(wristL, 0, hold)
+		wristR = lerp(wristR, 0, hold)
+		-- the rip: arms swing down and out to the sides, straight
+		shL = lerp(shL, 1.9, fling)
+		shR = lerp(shR, 1.9, fling)
+		outL = lerp(outL, FLING, fling)
+		outR = lerp(outR, FLING, fling)
+		elbowL = lerp(elbowL, 0.05, fling)
+		elbowR = lerp(elbowR, 0.05, fling)
+		-- looks up at its victim and leans back under the weight
+		lookUp = 0.6 * hold * (1 - fling * 0.6)
+		leanBack = 0.18 * hold * (1 - fling)
+	end
+
+	-- spread: rotating about Z moves the left arm out with a negative angle, the right with positive
+	if j.LeftShoulder then j.LeftShoulder.Transform = CFrame.Angles(shL, 0, -outL) end
+	if j.RightShoulder then j.RightShoulder.Transform = CFrame.Angles(shR, 0, outR) end
+	if j.LeftElbow then j.LeftElbow.Transform = rx(elbowL) end
+	if j.RightElbow then j.RightElbow.Transform = rx(elbowR) end
 	if j.LeftWrist then j.LeftWrist.Transform = rx(wristL) end
 	if j.RightWrist then j.RightWrist.Transform = rx(wristR) end
+	j.Waist.Transform = CFrame.Angles(lean + breathe - leanBack, -math.sin(p) * 0.15 * move, -roll * 0.5)
 
 	-- Head: stays level-ish against the bob, and every few seconds snaps to a new angle (a twitch),
 	-- which reads as unsettling
@@ -209,7 +248,7 @@ local function pose(s, dt)
 		s.twitchTarget = Vector2.new((math.random() - 0.5) * 0.9, (math.random() - 0.5) * 0.5)
 	end
 	s.twitch = s.twitch:Lerp(s.twitchTarget, math.min(1, dt * 25))  -- fast = jerky
-	j.Neck.Transform = CFrame.Angles(-lean * 0.7 + bob * 0.5 + s.twitch.Y, s.twitch.X, s.twitch.X * 0.4)
+	j.Neck.Transform = CFrame.Angles(-lean * 0.7 + bob * 0.5 + s.twitch.Y - lookUp, s.twitch.X, s.twitch.X * 0.4)
 end
 
 -- Every frame before drawing: slide each monster to its smoothed position, and measure how fast
@@ -237,6 +276,7 @@ RunService.PreSimulation:Connect(function(dt)
 	for model, s in monsters do
 		if s.joints and model.Parent then
 			s.mode = model:GetAttribute("Mode")
+			s.killStart = model:GetAttribute("KillStart")
 			pose(s, dt)
 		end
 	end

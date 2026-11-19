@@ -45,10 +45,19 @@ local BODY_RADIUS  = 4      -- how wide it is, for checking it can fit past wall
 local RIG_SCALE    = 1.8    -- the rig is scaled up by this much (bigger = longer, slower strides)
 local TURN_SPEED   = 8      -- how quickly it turns to face where it's going
 
+-- THE KILL: when it catches someone it stops, lifts them over its head, and tears them apart.
+-- Times in seconds from the catch. Match moves the victim; MonsterAnimate moves the arms.
+local KILL = {
+	LIFT = 0.7,   -- raising them overhead
+	RIP  = 1.7,   -- the moment they're torn apart
+	DONE = 2.6,   -- it starts moving again
+}
+
 local DIRS = { {0, -1, "N"}, {1, 0, "E"}, {0, 1, "S"}, {-1, 0, "W"} }
 
 local MonsterAI = {}
 MonsterAI.__index = MonsterAI
+MonsterAI.KILL = KILL
 
 ---------------------------------------------------------------- the body
 local function finishBody(model)
@@ -143,7 +152,8 @@ end
 
 ---------------------------------------------------------------- construction
 -- maze: the table MazeBuilder.build returns.
--- options.onCatch(player): called when it catches someone (default: knock them out).
+-- options.onCatch(player, monster): called when it catches someone (default: knock them out).
+--   The monster then stands still for KILL.DONE seconds while the kill plays out.
 -- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
 -- options.startCell = {x, z}: where it appears.
 function MonsterAI.new(maze, options)
@@ -166,6 +176,7 @@ function MonsterAI.new(maze, options)
 	self.isRig = model ~= nil
 	self.model = model or buildOrb()
 	self.groundOffset = groundOffset or 0
+	self.height = self.model:GetExtentsSize().Y
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])
@@ -274,6 +285,17 @@ function MonsterAI:publish(now)
 	end
 end
 
+-- Where a victim is held during a kill: above its head, a little in front, lying across its hands
+-- (their body runs left-right from the monster's point of view, face up)
+function MonsterAI:HoldPoint()
+	local at = Vector3.new(self.pos.X, self.maze.floorY + self.height + 2.2, self.pos.Z) + self.facing * 0.8
+	local right = self.facing:Cross(Vector3.yAxis)
+	-- the victim's up (head direction) points along the monster's right; their front faces the sky
+	-- (a part's front is its -Z, so +Z points down)
+	local up, back = right, -Vector3.yAxis
+	return CFrame.fromMatrix(at, up:Cross(back), up, back)
+end
+
 ---------------------------------------------------------------- every frame
 -- targets: the players it's allowed to hunt
 function MonsterAI:Step(dt, targets)
@@ -282,6 +304,17 @@ function MonsterAI:Step(dt, targets)
 	if not self.active then
 		self:publish(now)
 		return
+	end
+	-- In the middle of a kill: stand still until it's over
+	if self.killUntil then
+		if now < self.killUntil then
+			self:publish(now)
+			return
+		end
+		self.killUntil = nil
+		self.mode = "roam"
+		self.model:SetAttribute("KillVictim", nil)
+		self.model:SetAttribute("KillStart", nil)
 	end
 	local maze = self.maze
 
@@ -402,8 +435,17 @@ function MonsterAI:Step(dt, targets)
 			local flat = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z).Magnitude
 			if flat < CATCH_DIST then
 				self.graceUntil[player] = now + CATCH_GRACE
-				self.mode, self.chaseTarget, self.path = "roam", nil, {}
-				self.onCatch(player)
+				self.chaseTarget, self.path = nil, {}
+				-- turn to face them, and start the kill (players' computers animate it from these)
+				local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)
+				if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
+				self.mode = "kill"
+				self.killUntil = now + KILL.DONE
+				self.model:SetAttribute("KillVictim", player.UserId)
+				self.model:SetAttribute("KillStart", workspace:GetServerTimeNow())
+				self:publish(now)
+				self.onCatch(player, self)
+				break                                  -- one at a time
 			end
 		end
 	end
