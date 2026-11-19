@@ -6,7 +6,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 ## Working on this project
 
-**Status (2026-11-18):** Phases 0 and 1 are done, and Phase 2 (a maze that changes mid-match) is next. Don't start it until the user says to. The README has how to play and what every script does.
+**Status (2026-11-19):** Phases 0, 1 and 2 are done, and Phase 3 (human roles and the Maze Master) is next. Don't start it until the user says to. The README has how to play and what every script does.
 
 **Files and Studio**
 - The place is `CruelMaze.rbxl` (renamed from `Place2.rbxl`). Scripts are mirrored between Studio and the repo folders by Studio's **Script Sync**: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript. In Script Sync, each service (ServerScriptService, ServerStorage, ReplicatedStorage, StarterPlayerScripts, StarterGui › MazeHUD) is linked at the **repo root**. Linking a service to its own folder nests a duplicate folder inside it.
@@ -19,6 +19,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 - Test in playtests with `execute_luau` on the Server or Client, measuring with numbers. Screenshots show the 3D view only while the Studio window is visible, and never show BillboardGuis (floating labels). To check one visually, copy it onto a ScreenGui. Close-up visual checks work best in Edit mode with a camera position.
 - Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
 - The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.
+- Modules required from `execute_luau` are fresh copies, not the running game's. Reach live state through instances: attributes, or Studio-only hooks like `ServerStorage.DoorsTest` (a BindableFunction). On the client, door ghosts carry `Seen`/`RememberedShut` attributes, and the dev panel's `DevDoors` remote can be fired.
 - The isometric camera sits 210 studs away, so sounds are heard from the camera's focus (see `SoundEffects`), not the camera.
 - Player avatars here use AnimationConstraints and BallSocketConstraints rather than Motor6Ds. A Humanoid forces limbs to be non-colliding.
 
