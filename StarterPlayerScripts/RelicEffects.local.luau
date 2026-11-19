@@ -1,5 +1,5 @@
 -- The relic-collecting effect: whoever is collecting a relic reaches out a hand toward it, and a
--- beam of light runs from their hand to the relic. Also the "Click to collect" prompt (at the end).
+-- beam of light runs from their hand to the relic. Also the prompt to collect one (at the end).
 -- Runs on every player's computer, for every collector, so everyone sees it (the server says who
 -- is collecting each relic in its "Collector" attribute; see Objectives). Everything made here
 -- exists only on this computer.
@@ -107,36 +107,75 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ---------------------------------------------------------------- the collect prompt
--- Standing on a relic nobody is collecting shows a prompt above it. Left-click (or tap the
--- prompt) to start collecting; the server checks you're really on it (Objectives).
+-- Standing on a relic nobody is collecting shows a prompt above it: a mouse with its left button
+-- lit. Left-click (or tap the prompt) to start collecting; the server checks you're really on it (Objectives).
 local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local collectEvent = Net.event("CollectRelic")
 local player = Players.LocalPlayer
 
+-- The prompt is a little picture of a mouse with its left button lit up (built from UI shapes, no
+-- image needed). On touch screens, where there's no mouse, it says "Tap" instead. Either way the
+-- whole thing is a button you can tap.
+local ICON_W, ICON_H = 30, 44           -- the mouse's size on screen (pixels)
+local BODY_COLOR = Color3.fromRGB(28, 28, 38)
+local EDGE_COLOR = Color3.fromRGB(230, 230, 225)
+
 local prompt = Instance.new("BillboardGui")
 prompt.Name = "RelicPrompt"
-prompt.Size = UDim2.fromOffset(180, 38)
-prompt.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
+prompt.Size = UDim2.fromOffset(ICON_W + 8, ICON_H + 8)
+prompt.StudsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
 prompt.AlwaysOnTop = true
 prompt.Active = true                 -- so the button can be tapped
 prompt.Enabled = false
 prompt.ResetOnSpawn = false
+
 local button = Instance.new("TextButton")
 button.Size = UDim2.fromScale(1, 1)
-button.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-button.BackgroundTransparency = 0.2
-button.TextColor3 = BEAM_COLOR
-button.Font = Enum.Font.GothamBold
-button.TextSize = 17
+button.BackgroundTransparency = 1
+button.Text = ""
 button.Parent = prompt
-Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
-local outline = Instance.new("UIStroke")
-outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-outline.Color = BEAM_COLOR
-outline.Transparency = 0.4
-outline.Parent = button
+
+local function shape(parent, pos, size, color, corner)
+	local f = Instance.new("Frame")
+	f.Position, f.Size = pos, size
+	f.BackgroundColor3 = color
+	f.BorderSizePixel = 0
+	if corner then Instance.new("UICorner", f).CornerRadius = UDim.new(0, corner) end
+	f.Parent = parent
+	return f
+end
+
+-- the mouse: a rounded body with an outline
+local mouse = shape(button, UDim2.fromOffset(4, 4), UDim2.fromOffset(ICON_W, ICON_H), BODY_COLOR, 13)
+local edge = Instance.new("UIStroke")
+edge.Color = EDGE_COLOR
+edge.Thickness = 2
+edge.Parent = mouse
+-- the left button, lit up: rounded only at its outer top corner (a rounded box with two plain
+-- boxes laid over the corners that should be square)
+local BUTTON_H = math.floor(ICON_H * 0.42)
+local lit = {}
+table.insert(lit, shape(mouse, UDim2.fromOffset(0, 0), UDim2.fromOffset(ICON_W / 2, BUTTON_H), BEAM_COLOR, 13))
+table.insert(lit, shape(mouse, UDim2.fromOffset(ICON_W / 4, 0), UDim2.fromOffset(ICON_W / 4, BUTTON_H), BEAM_COLOR))
+table.insert(lit, shape(mouse, UDim2.fromOffset(0, BUTTON_H / 2), UDim2.fromOffset(ICON_W / 2, BUTTON_H / 2), BEAM_COLOR))
+-- the seams: down the middle between the buttons, and across under them
+shape(mouse, UDim2.fromOffset(ICON_W / 2 - 1, 0), UDim2.fromOffset(2, BUTTON_H), EDGE_COLOR)
+shape(mouse, UDim2.fromOffset(0, BUTTON_H - 1), UDim2.fromOffset(ICON_W, 2), EDGE_COLOR)
+
+local tapLabel = Instance.new("TextLabel")   -- shown instead of the mouse on touch screens
+tapLabel.Size = UDim2.fromScale(1, 1)
+tapLabel.BackgroundColor3 = BODY_COLOR
+tapLabel.BackgroundTransparency = 0.15
+tapLabel.TextColor3 = BEAM_COLOR
+tapLabel.Font = Enum.Font.GothamBold
+tapLabel.TextSize = 15
+tapLabel.Text = "Tap"
+tapLabel.Visible = false
+tapLabel.Parent = button
+Instance.new("UICorner", tapLabel).CornerRadius = UDim.new(0.5, 0)
+
 prompt.Parent = player:WaitForChild("PlayerGui")
 
 -- The relic you could start collecting right now, if any: you're a survivor in a match, standing
@@ -176,7 +215,12 @@ RunService.Heartbeat:Connect(function()
 	if gem then
 		prompt.Adornee = gem
 		local touchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
-		button.Text = touchOnly and "Tap to collect" or "Click to collect"
+		mouse.Visible = not touchOnly
+		tapLabel.Visible = touchOnly
+		-- the lit button gently pulses, to catch the eye
+		-- (brightness, not see-through: the button is built from overlapping pieces)
+		local glow = BEAM_COLOR:Lerp(Color3.fromRGB(150, 110, 40), 0.5 + 0.5 * math.sin(os.clock() * 5))
+		for _, f in lit do f.BackgroundColor3 = glow end
 	end
 end)
 
