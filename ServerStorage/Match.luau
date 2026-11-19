@@ -225,7 +225,7 @@ local function runCountdown()
 		onRelic = function(player, relic)
 			local stats = player:FindFirstChild("leaderstats")
 			if stats then stats.Relics.Value += 1 end
-			noticeEvent:FireAllClients(("%s found a relic! (%d/%d)"):format(
+			noticeEvent:FireAllClients(("%s collected a relic! (%d/%d)"):format(
 				player.DisplayName, objectives.collected, Config.RELICS_NEEDED))
 		end,
 		onCapture = function(player, room)

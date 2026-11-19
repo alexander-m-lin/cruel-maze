@@ -10,7 +10,7 @@
 --   you can lose the monster by circling.
 -- Every cell is still reachable from every other.
 -- Step 3 (MazeLayout): carve spawn rooms and pick relic rooms. build() then makes the parts:
---   walls, floors, room floors, the barriers monsters can't cross, and the relics.
+--   walls, floors, room floors, the barriers monsters can't cross (spawn rooms only), and the relics.
 
 local MazeLayout = require(game:GetService("ServerStorage").MazeLayout)
 
@@ -127,7 +127,6 @@ end
 local ROOM_FLOOR_COLOR     = Color3.fromRGB(96, 104, 110)    -- a spawn room nobody has found yet
 MazeBuilder.ROOM_CAPTURED_COLOR = Color3.fromRGB(70, 150, 160)  -- a spawn room your team has captured
 local ROOM_WARD_COLOR      = Color3.fromRGB(90, 220, 235)    -- barrier across spawn room exits
-local RELIC_WARD_COLOR     = Color3.fromRGB(255, 196, 70)    -- barrier across relic room openings
 local RELIC_COLOR          = Color3.fromRGB(255, 200, 80)
 
 -- Builds the maze in the workspace (replacing any previous one).
@@ -184,7 +183,7 @@ function MazeBuilder.build(options)
 		for k in room.cells do blocked[k] = true end
 	end
 	MazeLayout.connect(walls, n, blocked)
-	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans, blocked,
+	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans,
 		options.relics or 9, options.relicSpacing or 4)
 
 	for x = 1, n do
@@ -240,7 +239,7 @@ function MazeBuilder.build(options)
 			floor = floor, wards = wards })
 	end
 
-	-- RELIC ROOMS: a relic on a pedestal, and a barrier across each opening
+	-- RELICS: a relic on a pedestal, with a progress bar above it that fills while it's being collected
 	local relics = {}
 	for i, plan in relicPlans do
 		local x, z = plan[1], plan[2]
@@ -256,11 +255,26 @@ function MazeBuilder.build(options)
 		local light = Instance.new("PointLight")
 		light.Color, light.Range, light.Brightness = RELIC_COLOR, 14, 1.5
 		light.Parent = gem
-		local wards = {}
-		for _, d in MazeLayout.DIRS do
-			if not walls[x][z][d[3]] then table.insert(wards, ward(x, z, d, RELIC_WARD_COLOR, relicModel)) end
-		end
-		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem, wards = wards })
+		local bar = Instance.new("BillboardGui")
+		bar.Name = "Progress"
+		bar.Size = UDim2.fromOffset(70, 10)
+		bar.StudsOffsetWorldSpace = Vector3.new(0, 6, 0)
+		bar.Enabled = false                   -- shown only while someone is collecting
+		bar.Adornee = gem
+		local back = Instance.new("Frame")
+		back.Size = UDim2.fromScale(1, 1)
+		back.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+		back.BorderSizePixel = 0
+		back.Parent = bar
+		local fill = Instance.new("Frame")
+		fill.Name = "Fill"
+		fill.Size = UDim2.fromScale(0, 1)
+		fill.BackgroundColor3 = RELIC_COLOR
+		fill.BorderSizePixel = 0
+		fill.Parent = back
+		bar.Parent = relicModel
+		table.insert(relics, { id = i, x = x, z = z, center = center, model = relicModel, gem = gem,
+			bar = bar, fill = fill })
 	end
 
 	-- Move the spawn pad into the start room (players are moved to their own spots from there)
@@ -294,7 +308,7 @@ function MazeBuilder.build(options)
 		n = n, S = S, half = half, floorY = y0,
 		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
 		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
-		relics = relics,                        -- relics: { id, x, z, center, model, gem, wards }
+		relics = relics,                        -- relics: { id, x, z, center, model, gem, bar, fill }
 	}
 end
 

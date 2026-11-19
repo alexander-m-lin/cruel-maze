@@ -163,27 +163,25 @@ function MazeLayout.carveRooms(walls, n, count, spacing)
 end
 
 ---------------------------------------------------------------- relic rooms
--- Picks up to `count` relic cells: junctions with 2-3 openings, not in or right next to a spawn
--- room, at least `spacing` cells apart (straight-line distance in cells). Each pick is only kept
--- if monsters can still reach every other open cell without passing through it.
--- blocked: cells monsters already can't enter (the spawn rooms). Adds the picks to it.
+-- Picks up to `count` relic cells: cells with 2-3 openings (so there's more than one way out),
+-- not in or right next to a spawn room, at least `spacing` cells apart (straight-line distance).
+-- Monsters can walk through relic cells, so picks never affect how the maze connects.
 -- If it can't fit `count` relics that far apart, it tries again with the spacing reduced in
 -- half-cell steps (down to 2), so the match always gets its full set.
 -- Returns a list of { x, z }, and the spacing actually used.
 local tryPick
-function MazeLayout.pickRelics(walls, n, rooms, blocked, count, spacing)
+function MazeLayout.pickRelics(walls, n, rooms, count, spacing)
 	local picks
 	local s = spacing
 	while true do
-		picks = tryPick(walls, n, rooms, blocked, count, s)
+		picks = tryPick(walls, n, rooms, count, s)
 		if #picks >= count or s <= 2 then break end
-		for _, p in picks do blocked[key(p[1], p[2])] = nil end   -- undo and retry closer together
 		s -= 0.5
 	end
 	return picks, s
 end
 
-function tryPick(walls, n, rooms, blocked, count, spacing)
+function tryPick(walls, n, rooms, count, spacing)
 	local nearRoom = {}
 	for _, room in rooms do
 		for dx = -1, 2 do
@@ -208,15 +206,7 @@ function tryPick(walls, n, rooms, blocked, count, spacing)
 		for _, p in picks do
 			if (Vector2.new(p[1], p[2]) - Vector2.new(c[1], c[2])).Magnitude < spacing then ok = false break end
 		end
-		if ok then
-			blocked[key(c[1], c[2])] = true
-			local _, regions = components(walls, n, blocked)
-			if regions == 1 then
-				table.insert(picks, c)
-			else
-				blocked[key(c[1], c[2])] = nil    -- it would cut monsters off: skip it
-			end
-		end
+		if ok then table.insert(picks, c) end
 	end
 	return picks
 end

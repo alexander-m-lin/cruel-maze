@@ -24,13 +24,14 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
 
 local TILE         = 2      -- fog tile size in studs. Smaller = smoother but more parts/raycasts (2.5 = good balance, 2 = PC limit)
-local VIEW_RANGE   = 80     -- how far you can see (studs)
+local VIEW_RANGE   = Config.VIEW_RANGE   -- how far you can see (studs; set in Config)
 local SOFT_EDGE    = 0.35   -- outer 35% of the view range fades gradually instead of a hard edge
-local CONE_ANGLE   = 110    -- total width of the vision cone in degrees (360 = see all around)
+local CONE_ANGLE   = Config.VIEW_CONE    -- total width of the vision cone in degrees (360 = see all around)
 local CONE_SOFT    = 20     -- the outer this-many degrees of the cone fade gradually
-local NEAR_RADIUS  = 12     -- you always sense tiles this close, even behind you
+local NEAR_RADIUS  = Config.VIEW_NEAR    -- you always sense tiles this close, even behind you
 local SENSE_RANGE  = 45     -- tagged objects (the monster) this close with no wall between are shown even outside your view
 local SENSE_REVEAL = 10     -- ...by clearing the fog in a circle this many studs around them
 local UPDATE_EVERY = 0.05   -- seconds between line-of-sight checks
@@ -53,7 +54,7 @@ local RING_NOISE = 4        -- how far (studs) the fog's edge wobbles in and out
 local RING_FADE  = 10      -- ...then the fog fades in over this many studs (keep CLEAR + FADE <= the maze's BORDER, or the fade runs past the floor's edge)
 
 -- Where the camera sits relative to the player (shared with the IsometricCamera script)
-local CAMERA_DIRECTION = require(game:GetService("ReplicatedStorage"):WaitForChild("Config")).CAMERA_DIRECTION
+local CAMERA_DIRECTION = Config.CAMERA_DIRECTION
 
 local NEIGHBOURS4 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} }
 local NEIGHBOURS8 = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} }
@@ -436,25 +437,27 @@ end
 -- the eyes), with walls blocking the view. Returns { [tile] = how clear it should look }.
 -- Tiles seen for the first time become explored (part of your map) - this is what makes vision
 -- shared: whatever a teammate sees is added to your map too.
-local function sightFrom(eye, facing)
+-- range: how far (default VIEW_RANGE). facing = nil sees all the way around (relic watch rings).
+local function sightFrom(eye, facing, range)
 	local seen = {}
+	range = range or VIEW_RANGE
 	local halfAngle = CONE_ANGLE / 2
-	local edgeStart = VIEW_RANGE * (1 - SOFT_EDGE)
+	local edgeStart = range * (1 - SOFT_EDGE)
 
 	-- Only check tiles inside a square around the eyes (not the whole grid)
 	local cx, cz = tileIndex(eye)
-	local r = math.ceil(VIEW_RANGE / TILE)
+	local r = math.ceil(range / TILE)
 	for x = math.max(1, cx - r), math.min(count, cx + r) do
 		for z = math.max(1, cz - r), math.min(count, cz + r) do
 			local tile = tiles[x][z]
 			local target = tile.center + Vector3.new(0, EYE_HEIGHT, 0)
 			local offset = target - eye
 			local dist = offset.Magnitude
-			if dist > VIEW_RANGE then continue end
+			if dist > range then continue end
 
 			-- 1. Is it inside the vision cone? (cheap maths, done before the raycast)
 			local coneFade = 0
-			if dist > NEAR_RADIUS then
+			if facing and dist > NEAR_RADIUS then
 				local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(facing), -1, 1)))
 				if angle > halfAngle then continue end
 				coneFade = math.clamp((angle - (halfAngle - CONE_SOFT)) / CONE_SOFT, 0, 1)
@@ -465,7 +468,7 @@ local function sightFrom(eye, facing)
 			if dist < 0.6 or workspace:Raycast(eye, offset - offset.Unit * 0.5, rayParams) == nil then
 				if not tile.explored then reveal(tile) end
 				-- Fade toward "explored" near the edge of the range or the edge of the cone
-				local distFade = math.clamp((dist - edgeStart) / (VIEW_RANGE - edgeStart), 0, 1)
+				local distFade = math.clamp((dist - edgeStart) / (range - edgeStart), 0, 1)
 				local k = math.max(distFade, coneFade)
 				seen[tile] = T_VISIBLE + (T_EXPLORED - T_VISIBLE) * k
 			end
@@ -496,6 +499,33 @@ local function teammates()
 	if not myRole then return list end
 	for _, other in Players:GetPlayers() do
 		if other ~= player and other:GetAttribute("Role") == myRole then table.insert(list, other) end
+	end
+	return list
+end
+
+-- RELIC WATCH RINGS: once your team has spotted a relic (the server decides, see Objectives),
+-- you keep seeing all around it until it's collected. Walls don't move, so each ring's sight is
+-- worked out once and reused.
+local relicSight = {}  -- [relic info Configuration] = { seen = {...}, maze = maze }
+
+local function relicRings()
+	local list = {}
+	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	local folder = status and status:FindFirstChild("Relics")
+	if not folder or player:GetAttribute("Role") ~= Config.Roles.Survivor then return list end
+	for _, info in folder:GetChildren() do
+		if info:GetAttribute("Discovered") and not info:GetAttribute("Collected") then
+			local cached = relicSight[info]
+			if not cached or cached.maze ~= maze then
+				local c = info:GetAttribute("Center")
+				cached = { seen = sightFrom(Vector3.new(c.X, floorY + EYE_HEIGHT, c.Z), nil, Config.RELIC_VISION_RADIUS), maze = maze }
+				relicSight[info] = cached
+			end
+			table.insert(list, cached.seen)
+		end
+	end
+	for info in relicSight do
+		if not info.Parent then relicSight[info] = nil end   -- an old match's relic
 	end
 	return list
 end
@@ -532,6 +562,11 @@ local function updateVisibility()
 	end
 	for mate in teamSight do
 		if not current[mate] then teamSight[mate] = nil end   -- left the team / the game
+	end
+	for _, seen in relicRings() do
+		for tile, t in seen do
+			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
 	end
 
 	local visibleNow = {}

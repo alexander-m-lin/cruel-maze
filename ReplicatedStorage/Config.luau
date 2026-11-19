@@ -14,6 +14,11 @@ Config.FACING_SIDE_SPEED = 0.8    -- ...at this fraction of full speed
 Config.FACING_BACK_SPEED = 0.45   -- the rest (backwards, 90°–180°): this fraction of full speed
 Config.FACING_BLEND      = 6      -- degrees over which each change blends in, so speed doesn't snap
 
+-- What a survivor can see (the fog uses this; the server uses it to decide when a relic is spotted)
+Config.VIEW_RANGE = 80            -- studs
+Config.VIEW_CONE  = 110           -- total width of the vision cone, in degrees
+Config.VIEW_NEAR  = 12            -- you always see this close, even behind you
+
 -- Camera: direction from the player to the camera. (-1, 1, -1) = true isometric (45° around,
 -- ~35° down). The fog uses this too, to keep fog between the camera and you see-through.
 Config.CAMERA_DIRECTION = Vector3.new(-1, 1, -1).Unit
@@ -29,7 +34,8 @@ Config.MONSTER_COUNT = 1          -- AI monsters per match
 Config.RELIC_TOTAL = 9
 Config.RELICS_NEEDED = 6
 Config.RELIC_SPACING = 4          -- minimum distance between relics, in maze cells (shrinks a little if they can't fit)
-Config.RELIC_BARRIER_DELAY = 2    -- seconds after a relic is collected before monsters can enter its room
+Config.RELIC_COLLECT_TIME = 3     -- seconds a survivor must stay in a relic's cell to collect it (leaving or being caught resets it)
+Config.RELIC_VISION_RADIUS = 30   -- once a survivor has seen a relic, your team keeps seeing this many studs around it until it's collected
 
 -- Lives and respawning
 Config.LIVES = 3                  -- per survivor; caught with none left = out for the rest of the match
