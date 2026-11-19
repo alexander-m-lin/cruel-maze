@@ -8,12 +8,18 @@
 --    and set the joint's Transform (the extra rotation it applies on top of its rest pose). The
 --    stride advances with distance travelled, so the feet don't slide, and the gait gets bigger
 --    and more frantic as the monster speeds up during a chase.
+-- 3. THE KILL. When it catches someone (the server sets KillStart/KillVictim on the model) the
+--    arms lift overhead, and the victim's body is shown held between its hands. At the rip the
+--    body is swapped for a copy that tears at the waist: the top half is flung one way and the
+--    legs the other, along with the arms, and every limb comes loose and scatters. All of this exists only on this computer.
 --
 -- Joint axes (R15, facing -Z): rotating about X swings a limb forward/back, about Z swings it out
 -- to the side, about Y twists it.
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 
 ---------------------------------------------------------------- tuning
 local LIMP        = 0.35   -- 0 = even steps, higher = the right foot lifts less and drags its toes
@@ -30,6 +36,12 @@ local INTERP_DELAY = 0.08  -- show the monster this many seconds in the past, to
 local KILL_LIFT, KILL_RIP, KILL_DONE = 0.7, 1.7, 2.6
 local OVERHEAD    = 2.75   -- shoulder angle with the arms straight up (radians)
 local FLING       = 1.5    -- how far the arms fling out to the sides at the rip
+local GRIP_HALF   = 1.9    -- when holding someone, each hand is this far from the middle (studs)
+local THROW_SPEED = 18     -- how fast the torn halves are flung apart (studs per second)
+local REMAINS_TIME = 6     -- seconds the pieces lie about
+local UPPER_BODY = { Head = true, UpperTorso = true, LeftUpperArm = true, LeftLowerArm = true,
+	LeftHand = true, RightUpperArm = true, RightLowerArm = true, RightHand = true,
+	Torso = true, ["Left Arm"] = true, ["Right Arm"] = true }   -- (R6 names too)
 
 ---------------------------------------------------------------- helpers
 local JOINT_NAMES = { "Root", "Waist", "Neck", "LeftShoulder", "RightShoulder", "LeftElbow",
@@ -78,6 +90,23 @@ local function track(model)
 			return (joint.Part0.CFrame * joint.C0).Position
 		end
 		s.legLength = joints.LeftAnkle and (jointPos(joints.LeftHip) - jointPos(joints.LeftAnkle)).Magnitude or 3
+		-- How far to angle the arms when holding someone, so the hands end up GRIP_HALF from the
+		-- middle. Measured in the rest pose (before any animation): shoulders are w out from the
+		-- middle, a hand is armLength from its shoulder, and the arms already hang outward at an
+		-- angle (restOut) that has to be taken back off.
+		s.leftHand = model:FindFirstChild("LeftHand", true)
+		s.rightHand = model:FindFirstChild("RightHand", true)
+		if joints.LeftShoulder and joints.RightShoulder and s.leftHand then
+			local pivot = model:GetPivot()
+			local sL = pivot:PointToObjectSpace(jointPos(joints.LeftShoulder))
+			local sR = pivot:PointToObjectSpace(jointPos(joints.RightShoulder))
+			local hL = pivot:PointToObjectSpace(s.leftHand.Position)
+			local w = math.abs(sL.X - sR.X) / 2
+			local armLength = (sL - hL).Magnitude
+			local restOut = math.asin(math.clamp((math.abs(hL.X) - w) / armLength, -1, 1))
+			local wanted = math.asin(math.clamp((GRIP_HALF - w) / armLength, -1, 1))
+			s.holdOut = wanted - restOut
+		end
 	end
 	monsters[model] = s
 end
@@ -214,8 +243,8 @@ local function pose(s, dt)
 		-- holding: both arms straight up, slightly apart, elbows a little bent around the body
 		shL = lerp(shL, OVERHEAD + shake, hold)
 		shR = lerp(shR, OVERHEAD - shake, hold)
-		outL = lerp(outL, 0.2, hold)
-		outR = lerp(outR, 0.2, hold)
+		outL = lerp(outL, s.holdOut or 0.2, hold)
+		outR = lerp(outR, s.holdOut or 0.2, hold)
 		elbowL = lerp(elbowL, 0.35, hold)
 		elbowR = lerp(elbowR, 0.35, hold)
 		wristL = lerp(wristL, 0, hold)
@@ -251,6 +280,117 @@ local function pose(s, dt)
 	j.Neck.Transform = CFrame.Angles(-lean * 0.7 + bob * 0.5 + s.twitch.Y - lookUp, s.twitch.X, s.twitch.X * 0.4)
 end
 
+---------------------------------------------------------------- the victim
+local function smooth01(x) x = math.clamp(x, 0, 1) return x * x * (3 - 2 * x) end
+
+-- Lying across the hands: head toward the left hand, face up, resting on the palms
+local function gripFrame(s)
+	local l, r = s.leftHand.Position, s.rightHand.Position
+	local up = (l - r).Magnitude > 0.1 and (l - r).Unit or Vector3.xAxis
+	local back = -Vector3.yAxis - up * up:Dot(-Vector3.yAxis)
+	back = back.Magnitude > 0.01 and back.Unit or Vector3.zAxis
+	local at = (l + r) / 2 + Vector3.new(0, 0.8, 0) - up * 0.8   -- the root sits at the hips, below the middle
+	return CFrame.fromMatrix(at, up:Cross(back), up, back)
+end
+
+local function hide(character)
+	for _, d in character:GetDescendants() do
+		if d:IsA("BasePart") or d:IsA("Decal") then d.LocalTransparencyModifier = 1 end
+	end
+end
+
+-- The rip: swap the body for a copy posed exactly the same, split it at the waist, and throw the
+-- halves apart the way the arms fling (top half toward the left hand, legs toward the right).
+-- Every joint is undone, so the limbs drift apart from each other as they fly.
+local function rip(s, v)
+	local copy = v.copy
+	for _, d in copy:GetDescendants() do
+		-- Body joints come in two kinds: classic Motor6Ds, or (newer avatars) AnimationConstraints
+		-- with BallSocketConstraints for ragdolling. Undo them all; only the welds that hold
+		-- accessories on (hats, hair) stay.
+		local joint = d:IsA("Motor6D") or d:IsA("AnimationConstraint") or d:IsA("BallSocketConstraint")
+			or d:IsA("HingeConstraint")
+		if joint or d:IsA("Script") or d:IsA("LocalScript") or d:IsA("IKControl") or d:IsA("Sound") then
+			d:Destroy()
+		end
+	end
+	local humanoid = copy:FindFirstChildOfClass("Humanoid")   -- kept: it's what shows their clothes
+	if humanoid then
+		humanoid.EvaluateStateMachine = false
+		humanoid.RequiresNeck = false
+		humanoid.BreakJointsOnDeath = false
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	end
+	local copyRoot = copy:FindFirstChild("HumanoidRootPart")
+	if copyRoot then copyRoot:Destroy() end
+
+	local side = v.side or (s.leftHand.Position - s.rightHand.Position).Unit
+	local parts = {}
+	for _, part in copy:GetDescendants() do
+		if part:IsA("BasePart") then
+			local original = v.character:FindFirstChild(part.Name, true)
+			if original and original:IsA("BasePart") then part.CFrame = original.CFrame end
+			part.CanQuery, part.CanTouch = false, false
+			part.CanCollide = part:FindFirstAncestorOfClass("Accessory") == nil
+			table.insert(parts, part)
+		end
+	end
+	copy.Name = "Remains"
+	copy.Parent = workspace
+	hide(v.character)
+	for _, part in parts do
+		part.Anchored = false
+		if part:FindFirstAncestorOfClass("Accessory") then continue end   -- hats stay welded to the head
+		-- The Humanoid keeps arms and legs from colliding (even in a copy), so they'd fall through
+		-- the floor: give each piece an invisible solid box of its own size, welded on
+		local box = Instance.new("Part")
+		box.Name = "Collider"
+		box.Size, box.CFrame = part.Size, part.CFrame
+		box.Transparency = 1
+		box.CanQuery, box.CanTouch = false, false
+		box.CastShadow = false
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0, weld.Part1 = part, box
+		weld.Parent = box
+		box.Parent = part
+		local away = UPPER_BODY[part.Name] and side or -side
+		local scatter = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 14
+		part.AssemblyLinearVelocity = away * THROW_SPEED * (0.8 + math.random() * 0.5) + scatter
+			+ Vector3.new(0, 8 + math.random() * 10, 0)
+		part.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 25
+	end
+	Debris:AddItem(copy, REMAINS_TIME)
+end
+
+local function updateVictim(model, s)
+	local killStart = model:GetAttribute("KillStart")
+	if killStart and killStart ~= s.killSeen and s.leftHand and s.rightHand then
+		s.killSeen = killStart
+		local userId = model:GetAttribute("KillVictim")
+		local victim = userId and Players:GetPlayerByUserId(userId)
+		local character = victim and victim.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root then
+			character.Archivable = true
+			s.victim = { character = character, root = root, from = root.CFrame, copy = character:Clone(), start = killStart }
+		end
+	end
+	local v = s.victim
+	if not v then return end
+	local k = workspace:GetServerTimeNow() - v.start
+	if k < KILL_RIP then
+		-- held: from where they stood into the hands, then wherever the hands go
+		if v.root.Parent then
+			local grip = gripFrame(s)
+			v.root.CFrame = v.from:Lerp(grip, smooth01(k / 0.3))
+			v.side = grip.UpVector             -- head-ward: the way the top half gets thrown
+		end
+		return
+	end
+	if v.character.Parent then rip(s, v) end   -- (if the body is already gone, there's nothing to tear)
+	s.victim = nil
+end
+
 -- Every frame before drawing: slide each monster to its smoothed position, and measure how fast
 -- it's moving (for the gait)
 RunService.RenderStepped:Connect(function(dt)
@@ -268,6 +408,7 @@ RunService.RenderStepped:Connect(function(dt)
 			s.shown = cf
 			model:PivotTo(cf)
 		end
+		updateVictim(model, s)
 	end
 end)
 

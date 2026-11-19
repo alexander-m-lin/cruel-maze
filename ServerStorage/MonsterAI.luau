@@ -46,7 +46,8 @@ local RIG_SCALE    = 1.8    -- the rig is scaled up by this much (bigger = longe
 local TURN_SPEED   = 8      -- how quickly it turns to face where it's going
 
 -- THE KILL: when it catches someone it stops, lifts them over its head, and tears them apart.
--- Times in seconds from the catch. Match moves the victim; MonsterAnimate moves the arms.
+-- Times in seconds from the catch. MonsterAnimate draws it on players' computers (arms, victim
+-- and pieces); Match freezes the victim and decides what happens to them afterwards.
 local KILL = {
 	LIFT = 0.7,   -- raising them overhead
 	RIP  = 1.7,   -- the moment they're torn apart
@@ -176,7 +177,6 @@ function MonsterAI.new(maze, options)
 	self.isRig = model ~= nil
 	self.model = model or buildOrb()
 	self.groundOffset = groundOffset or 0
-	self.height = self.model:GetExtentsSize().Y
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])
@@ -283,17 +283,6 @@ function MonsterAI:publish(now)
 	if model:GetAttribute("Mode") ~= self.mode then
 		model:SetAttribute("Mode", self.mode)   -- "roam" / "chase" / "search", e.g. so it reaches for you while chasing
 	end
-end
-
--- Where a victim is held during a kill: above its head, a little in front, lying across its hands
--- (their body runs left-right from the monster's point of view, face up)
-function MonsterAI:HoldPoint()
-	local at = Vector3.new(self.pos.X, self.maze.floorY + self.height + 2.2, self.pos.Z) + self.facing * 0.8
-	local right = self.facing:Cross(Vector3.yAxis)
-	-- the victim's up (head direction) points along the monster's right; their front faces the sky
-	-- (a part's front is its -Z, so +Z points down)
-	local up, back = right, -Vector3.yAxis
-	return CFrame.fromMatrix(at, up:Cross(back), up, back)
 end
 
 ---------------------------------------------------------------- every frame

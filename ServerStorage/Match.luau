@@ -26,7 +26,6 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
@@ -39,8 +38,7 @@ local Objectives = require(ServerStorage.Objectives)
 local States, Roles = Config.States, Config.Roles
 
 local KILL = MonsterAI.KILL
-local MIN_RESPAWN_DELAY = KILL.RIP + 1.5   -- seconds after being caught before you can come back (lets the kill play out)
-local REMAINS_TIME = 6           -- seconds the scattered pieces of a caught player stay around
+local MIN_RESPAWN_DELAY = KILL.DONE + 0.5  -- seconds after being caught before you can come back
 
 local Match = {}
 
@@ -142,79 +140,24 @@ local function respawn(player)
 	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the room
 end
 
--- THE KILL (see MonsterAI.KILL for the timing): the victim is lifted over the monster's head,
--- held there struggling, then torn apart - their body pieces fly off and lie about for a while.
--- The monster's arms are animated on players' computers (MonsterAnimate); this moves the victim.
-local function tearApart(player, character)
+-- THE KILL (see MonsterAI.KILL for the timing): the monster lifts its victim overhead, holds them
+-- struggling, then tears them apart. It's drawn on each player's computer (MonsterAnimate), where
+-- the monster's hands are: the victim's body is shown in its grip, and at the rip a copy of it
+-- comes apart in pieces. Here the victim is only frozen in place, then removed after the rip.
+local function playKill(player, character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root) then return end
-	-- The pieces are a copy of the body, so they can lie about after the player has a new
-	-- character (Roblox removes a player's old character as soon as it's replaced or unhooked)
-	character.Archivable = true
-	local remains = character:Clone()
-	character:Destroy()                                -- the player now has no character until they respawn
-	remains.Name = "Remains"
-	local center = root.Position
-	for _, d in remains:GetDescendants() do
-		if d:IsA("Motor6D") or d:IsA("Script") or d:IsA("LocalScript") or d:IsA("IKControl") then d:Destroy() end
-	end
-	local copyHumanoid = remains:FindFirstChildOfClass("Humanoid")   -- kept: it's what shows their clothes
-	copyHumanoid.BreakJointsOnDeath = false
-	copyHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	copyHumanoid.Health = 0
-	remains.HumanoidRootPart:Destroy()                -- the invisible box the body hangs from
-	remains.Parent = workspace
-	character = remains
-	for _, part in character:GetDescendants() do
-		if part:IsA("BasePart") then
-			part.Anchored = false
-			part.CanCollide = true
-			part.CanQuery = false                      -- don't block line of sight or the monster's checks
-			local out = (part.Position - center) * Vector3.new(1, 0, 1)
-			out = out.Magnitude > 0.1 and out.Unit or Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
-			part.AssemblyLinearVelocity = out * (18 + math.random() * 14) + Vector3.new(0, 14 + math.random() * 12, 0)
-			part.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 30
-			if part:CanSetNetworkOwnership() then part:SetNetworkOwner(nil) end
-		end
-	end
-	Debris:AddItem(character, REMAINS_TIME)
-end
-
-local function playKill(player, monster)
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root) then return end
 	player:SetAttribute("Seized", true)
-	humanoid.BreakJointsOnDeath = false                -- we take it apart ourselves
 	humanoid.PlatformStand = true                      -- no walking or balancing while held
-	root.Anchored = true
+	root.Anchored = true                               -- players' computers move it, for show only
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") then part.CanCollide = false end
 	end
-
-	local from = root.CFrame
-	local start = os.clock()
-	while true do
-		local t = os.clock() - start
-		if t >= KILL.RIP or not character.Parent or not monster.model then break end
-		local hold = monster:HoldPoint()
-		if t < KILL.LIFT then
-			local a = t / KILL.LIFT
-			a = a * a * (3 - 2 * a)                     -- ease in and out
-			root.CFrame = from:Lerp(hold, a)
-		else
-			-- struggling: a shake that gets more violent just before the end
-			local k = (t - KILL.LIFT) / (KILL.RIP - KILL.LIFT)
-			local shake = 0.15 + k * 0.5
-			root.CFrame = hold * CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0)
-				* CFrame.Angles(0, (math.random() - 0.5) * shake * 0.4, 0)
-		end
-		RunService.Heartbeat:Wait()
-	end
-	player:SetAttribute("Seized", nil)
-	if character.Parent then tearApart(player, character) end
+	task.delay(KILL.RIP + 0.3, function()
+		player:SetAttribute("Seized", nil)
+		if character.Parent then character:Destroy() end   -- the pieces are players' own copies by now
+	end)
 end
 
 local function onCaught(player, monster)
@@ -223,22 +166,27 @@ local function onCaught(player, monster)
 	local lives = math.max(0, (player:GetAttribute("Lives") or 1) - 1)
 	player:SetAttribute("Lives", lives)
 	caughtEvent:FireClient(player, lives)
-	if monster then
-		task.spawn(playKill, player, monster)
+	local character = player.Character
+	if monster and character then
+		playKill(player, character)
 	else
-		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if humanoid then humanoid.Health = 0 end
 	end
 
-	if lives <= 0 then
-		player:SetAttribute("Out", true)        -- out for the rest of the match: watches teammates
-		return
-	end
-	-- choose where to come back; if they don't choose in time, use their last room
-	player:SetAttribute("Respawning", true)
-	player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
-	task.delay(Config.RESPAWN_CHOICE_TIME, function()
-		if state == States.Playing then respawn(player) end
+	-- Once the kill has played out: out of the match, or choose where to come back (if they
+	-- don't choose in time, their last room is used)
+	task.delay(monster and KILL.DONE or 0, function()
+		if state ~= States.Playing or not player.Parent then return end
+		if lives <= 0 then
+			player:SetAttribute("Out", true)    -- out for the rest of the match: watches teammates
+			return
+		end
+		player:SetAttribute("Respawning", true)
+		player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
+		task.delay(Config.RESPAWN_CHOICE_TIME, function()
+			if state == States.Playing then respawn(player) end
+		end)
 	end)
 end
 
