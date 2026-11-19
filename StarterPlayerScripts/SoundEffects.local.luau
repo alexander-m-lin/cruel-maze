@@ -6,7 +6,7 @@
 --   relic collected        - a chime (everyone)
 --   spawn room captured    - a chime (everyone)
 --   monster starts a chase - a roar from the monster
---   monster kill           - a roar as it lifts its victim, then ripping and cracking bones
+--   monster kill           - a roar as it lifts its victim, then a scream and cracking bones
 --   countdown              - a tick each second
 --   match over             - a win or lose sting, depending on your team
 --
@@ -140,7 +140,7 @@ local function updateMonsters()
 			task.delay(math.max(0, wait), function()
 				if not model.Parent then return end
 				local at = monsterHead(model) + Vector3.new(0, 3, 0)
-				playAt(Sounds.KillRip, at)
+				playAt(Sounds.KillScream, at)
 				playAt(Sounds.KillCrack, at)
 			end)
 		end
