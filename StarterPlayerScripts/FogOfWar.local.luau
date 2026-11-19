@@ -15,7 +15,9 @@
 -- overlap read as one smooth layer - so we use each where it looks right.
 --
 -- Vision is a CONE in the direction your avatar faces (plus a small circle around you).
--- Line of sight = one raycast from the player to the centre of each nearby tile in that cone.
+-- Line of sight = a FAN of rays from your eyes, spread across the cone. Each ray stops at the first
+-- wall, and every tile it passes over on the way is in view. (The old way, one ray per tile, is
+-- kept as SIGHT_MODE = "tiles" for comparison; it cast about ten times as many rays.)
 -- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
 -- or when it's close with no wall between (then the fog clears in a small circle around it).
 --
@@ -46,6 +48,9 @@ local TEAM_UPDATE_EVERY = 0.05  -- seconds between refreshes of each teammate's 
 local EYE_HEIGHT   = 3      -- rays are cast at this height above the floor
 local FADE_SPEED   = 10     -- how fast tiles fade in/out
 local POCKET_MAX   = 12     -- forgiveness: unseen pockets up to this many tiles, fully surrounded by seen tiles, get revealed too (0 = off)
+local SIGHT_MODE   = "fan"  -- "fan": rays spread across the view; "tiles": one ray per tile (old, ~10x the rays)
+local FAN_SPACING  = 2      -- fan: studs between neighbouring rays at the far end of their reach (smaller = more rays, fewer gaps; 3 starts to miss ~2% of tiles)
+local MARCH_STEP   = TILE / 2  -- fan: how far apart (studs) the points are where a ray's tiles get marked
 
 local FOG_COLOR  = Color3.fromRGB(8, 8, 14)
 local T_HIDDEN   = 0        -- transparency for each state (0 = black, 1 = clear)
@@ -76,6 +81,13 @@ local doorVersion = 0       -- bumps whenever a door starts or stops moving (rel
 
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Include  -- rays only hit the maze
+
+-- Cost counters (shown as attributes on the local player in Studio; see the end of this script)
+local stats = { rays = 0, sightTime = 0, pocketTime = 0, updateTime = 0, updates = 0 }
+local function raycast(from, offset)
+	stats.rays += 1
+	return workspace:Raycast(from, offset, rayParams)
+end
 
 local function setTarget(tile, t)
 	if tile.target ~= t then
@@ -334,12 +346,21 @@ end
 -- (e.g. a corner a ray just missed) and reveal them, so revealing looks smooth instead of speckled.
 -- Uses a "flood fill": start at an unseen tile, spread to unseen neighbours, and give up as soon
 -- as the group gets bigger than POCKET_MAX or touches a group we already know is big.
-local function fillPockets(cx, cz, r, visibleNow)
+-- A pocket can only become closed when a tile next to it is revealed, so the search starts only
+-- from the unseen neighbours of tiles revealed since the last update.
+local function fillPockets(visibleNow)
 	if POCKET_MAX <= 0 then return end
 	local big = {}    -- unseen tiles known to belong to a large (real) unexplored area
-	for x = math.max(1, cx - r), math.min(count, cx + r) do
-		for z = math.max(1, cz - r), math.min(count, cz + r) do
-			local start = tiles[x][z]
+	local starts = {}
+	for i = 1, #newlyRevealed do
+		local t = newlyRevealed[i]
+		for _, d in NEIGHBOURS4 do
+			local nt = tiles[t.x + d[1]] and tiles[t.x + d[1]][t.z + d[2]]
+			if nt and not nt.explored then table.insert(starts, nt) end
+		end
+	end
+	for _, start in starts do
+		do
 			if start.explored or big[start] then continue end
 
 			local group, inGroup = {}, { [start] = true }
@@ -427,23 +448,9 @@ end
 --   "hidden" - not drawn at all (its light is switched off too)
 -- Sets a local "VisibleToMe" attribute other scripts can read (e.g. the monster ping).
 
--- Clear the fog around a point, for this update only (tiles behind a wall from it stay fogged)
-local function revealAround(p, visibleNow)
-	local from = Vector3.new(p.X, floorY + EYE_HEIGHT, p.Z)
-	local x1, x2 = tileRange(p.X - SENSE_REVEAL, p.X + SENSE_REVEAL)
-	local z1, z2 = tileRange(p.Z - SENSE_REVEAL, p.Z + SENSE_REVEAL)
-	for x = x1, x2 do
-		for z = z1, z2 do
-			local tile = tiles[x][z]
-			local to = tile.center + Vector3.new(0, EYE_HEIGHT, 0)
-			local offset = to - from
-			if offset.Magnitude <= SENSE_REVEAL and (offset.Magnitude < 0.6 or workspace:Raycast(from, offset - offset.Unit * 0.5, rayParams) == nil) then
-				setTarget(tile, T_VISIBLE)
-				visibleNow[tile] = true   -- so it goes back to fog once the monster moves on
-			end
-		end
-	end
-end
+-- Clear the fog around a point, for this update only (tiles behind a wall from it stay fogged).
+-- Defined after sightFrom (it uses the same fan of rays).
+local revealAround
 
 -- eyes: the eye positions of you and your teammates (anyone of them can sense it)
 local function updateHiddenObjects(visibleNow, eyes)
@@ -460,7 +467,7 @@ local function updateHiddenObjects(visibleNow, eyes)
 		else
 			for _, eye in eyes do
 				local target = Vector3.new(p.X, eye.Y, p.Z)
-				if (target - eye).Magnitude <= SENSE_RANGE and workspace:Raycast(eye, target - eye, rayParams) == nil then
+				if (target - eye).Magnitude <= SENSE_RANGE and raycast(eye, target - eye) == nil then
 					state = "sensed"
 					break
 				end
@@ -488,43 +495,107 @@ end
 -- Tiles seen for the first time become explored (part of your map) - this is what makes vision
 -- shared: whatever a teammate sees is added to your map too.
 -- range: how far (default VIEW_RANGE). facing = nil sees all the way around (relic watch rings).
-local function sightFrom(eye, facing, range)
-	local seen = {}
-	range = range or VIEW_RANGE
-	local halfAngle = CONE_ANGLE / 2
-	local edgeStart = range * (1 - SOFT_EDGE)
 
-	-- Only check tiles inside a square around the eyes (not the whole grid)
+-- How clear a tile looks from these eyes: fading toward "explored" near the edge of the range
+-- or the edge of the cone. nil = outside the range or the cone.
+local function clearness(tile, eye, facing, range)
+	local offset = tile.center + Vector3.new(0, EYE_HEIGHT, 0) - eye
+	local dist = offset.Magnitude
+	if dist > range then return nil end
+	local coneFade = 0
+	if facing and dist > NEAR_RADIUS then
+		local halfAngle = CONE_ANGLE / 2
+		local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(facing), -1, 1)))
+		if angle > halfAngle then return nil end
+		coneFade = math.clamp((angle - (halfAngle - CONE_SOFT)) / CONE_SOFT, 0, 1)
+	end
+	local edgeStart = range * (1 - SOFT_EDGE)
+	local distFade = math.clamp((dist - edgeStart) / (range - edgeStart), 0, 1)
+	return T_VISIBLE + (T_EXPLORED - T_VISIBLE) * math.max(distFade, coneFade)
+end
+
+local function see(seen, tile, value)
+	if not tile.explored then reveal(tile) end
+	if not seen[tile] or value > seen[tile] then seen[tile] = value end
+end
+
+-- THE OLD WAY: one ray to the centre of every tile in range and in the cone. Each ray stops 0.5
+-- studs short, so tiles whose centre sits right on a wall's surface still count as visible.
+local function sightTiles(eye, facing, range)
+	local seen = {}
 	local cx, cz = tileIndex(eye)
 	local r = math.ceil(range / TILE)
 	for x = math.max(1, cx - r), math.min(count, cx + r) do
 		for z = math.max(1, cz - r), math.min(count, cz + r) do
 			local tile = tiles[x][z]
-			local target = tile.center + Vector3.new(0, EYE_HEIGHT, 0)
-			local offset = target - eye
-			local dist = offset.Magnitude
-			if dist > range then continue end
-
-			-- 1. Is it inside the vision cone? (cheap maths, done before the raycast)
-			local coneFade = 0
-			if facing and dist > NEAR_RADIUS then
-				local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(facing), -1, 1)))
-				if angle > halfAngle then continue end
-				coneFade = math.clamp((angle - (halfAngle - CONE_SOFT)) / CONE_SOFT, 0, 1)
-			end
-
-			-- 2. Is there a wall in the way? (stop the ray 0.5 studs short, so tiles whose
-			--    centre sits right on a wall's surface still count as visible)
-			if dist < 0.6 or workspace:Raycast(eye, offset - offset.Unit * 0.5, rayParams) == nil then
-				if not tile.explored then reveal(tile) end
-				-- Fade toward "explored" near the edge of the range or the edge of the cone
-				local distFade = math.clamp((dist - edgeStart) / (range - edgeStart), 0, 1)
-				local k = math.max(distFade, coneFade)
-				seen[tile] = T_VISIBLE + (T_EXPLORED - T_VISIBLE) * k
+			local value = clearness(tile, eye, facing, range)   -- (cheap maths before the raycast)
+			if value then
+				local offset = tile.center + Vector3.new(0, EYE_HEIGHT, 0) - eye
+				if offset.Magnitude < 0.6 or raycast(eye, offset - offset.Unit * 0.5) == nil then
+					see(seen, tile, value)
+				end
 			end
 		end
 	end
 	return seen
+end
+
+-- THE FAN: rays spread evenly from angle a1 to a2 (radians, around the Y axis), FAN_SPACING studs
+-- apart where they end. Each ray runs until it hits a wall (or reaches `reachMax`); every tile it
+-- passes over is in view, plus the tile just past where it hit (the wall's near face).
+-- sightRange: the range used for fading (the cone's, even for the short rays round the back).
+local function fan(seen, eye, facing, reachMax, a1, a2, sightRange)
+	local steps = math.max(1, math.ceil((a2 - a1) * reachMax / FAN_SPACING))
+	for i = 0, steps do
+		local a = a1 + (a2 - a1) * i / steps
+		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
+		local hit = raycast(eye, dir * reachMax)
+		local reach = math.min(reachMax, (hit and hit.Distance or reachMax) + 0.5)
+		local lastTile = nil
+		local d = 0
+		while true do
+			local tx, tz = tileIndex(eye + dir * d)
+			local tile = tiles[tx] and tiles[tx][tz]
+			if tile and tile ~= lastTile then
+				lastTile = tile
+				if not seen[tile] then              -- (rays near the eyes cross the same tiles: work each out once)
+					local value = clearness(tile, eye, facing, sightRange)
+					if value then see(seen, tile, value) end
+				end
+			end
+			if d >= reach then break end
+			d = math.min(reach, d + MARCH_STEP)
+		end
+	end
+end
+
+local function sightFan(eye, facing, range)
+	local seen = {}
+	if not facing then
+		fan(seen, eye, nil, range, 0, 2 * math.pi, range)
+		return seen
+	end
+	local heading = math.atan2(facing.Z, facing.X)
+	local half = math.rad(CONE_ANGLE / 2)
+	fan(seen, eye, facing, range, heading - half, heading + half, range)                          -- the cone
+	fan(seen, eye, facing, NEAR_RADIUS, heading + half, heading + 2 * math.pi - half, range)      -- the circle round you
+	return seen
+end
+
+local function sightFrom(eye, facing, range)
+	local started = os.clock()
+	range = range or VIEW_RANGE
+	local seen = SIGHT_MODE == "tiles" and sightTiles(eye, facing, range) or sightFan(eye, facing, range)
+	stats.sightTime += os.clock() - started
+	return seen
+end
+
+function revealAround(p, visibleNow)
+	local from = Vector3.new(p.X, floorY + EYE_HEIGHT, p.Z)
+	for tile in sightFan(from, nil, SENSE_REVEAL) do
+		setTarget(tile, T_VISIBLE)
+		visibleNow[tile] = true   -- so it goes back to fog once the monster moves on
+	end
 end
 
 -- Where a character's eyes are and which way they face (flattened onto the ground)
@@ -588,7 +659,6 @@ local function updateVisibility()
 	local eye, facing = eyesOf(player.Character)
 	local merged = eye and sightFrom(eye, facing) or {}
 	local eyes = { eye }
-	local pocketCentres = { eye }
 
 	-- Your teammates' sight, refreshed every TEAM_UPDATE_EVERY seconds
 	local now = os.clock()
@@ -606,7 +676,6 @@ local function updateVisibility()
 				if not merged[tile] or t > merged[tile] then merged[tile] = t end   -- the clearest view wins
 			end
 			table.insert(eyes, mateEye)
-			table.insert(pocketCentres, mateEye)
 		else
 			teamSight[mate] = nil
 		end
@@ -639,12 +708,10 @@ local function updateVisibility()
 		setTarget(tile, t)
 	end
 
-	-- Forgiveness: reveal small unseen pockets surrounded by seen tiles (around everyone's view)
-	local r = math.ceil(VIEW_RANGE / TILE)
-	for _, centre in pocketCentres do
-		local cx, cz = tileIndex(centre)
-		fillPockets(cx, cz, r + 2, visibleNow)
-	end
+	-- Forgiveness: reveal small unseen pockets surrounded by seen tiles (next to anything just revealed)
+	local pocketStarted = os.clock()
+	fillPockets(visibleNow)
+	stats.pocketTime += os.clock() - pocketStarted
 
 	-- Soft edge around everything seen
 	updateFringe(visibleNow)
@@ -687,7 +754,10 @@ task.spawn(buildFog, workspace:WaitForChild("Maze"))
 -- Line-of-sight checks many times a second
 task.spawn(function()
 	while true do
+		local started = os.clock()
 		updateVisibility()
+		stats.updateTime += os.clock() - started
+		stats.updates += 1
 		task.wait(UPDATE_EVERY)
 	end
 end)
@@ -704,3 +774,49 @@ RunService.RenderStepped:Connect(function(dt)
 		applyTransparency(tile)
 	end
 end)
+
+-- STUDIO ONLY: cost figures for tuning, refreshed every 2 seconds as attributes on the local player
+-- (FogRaysPerSec; FogSightMs / FogPocketMs / FogUpdateMs = average milliseconds per update), and a
+-- FogTest BindableFunction comparing the fan with the old one-ray-per-tile way from where you stand.
+if RunService:IsStudio() then
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			local n = math.max(1, stats.updates)
+			player:SetAttribute("FogRaysPerSec", math.floor(stats.rays / 2))
+			player:SetAttribute("FogSightMs", math.floor(stats.sightTime / n * 1e4) / 10)
+			player:SetAttribute("FogPocketMs", math.floor(stats.pocketTime / n * 1e4) / 10)
+			player:SetAttribute("FogUpdateMs", math.floor(stats.updateTime / n * 1e4) / 10)
+			stats.rays, stats.sightTime, stats.pocketTime, stats.updateTime, stats.updates = 0, 0, 0, 0, 0
+		end
+	end)
+	local test = Instance.new("BindableFunction")
+	test.Name = "FogTest"
+	-- FogTest:Invoke(spacing?, mode?) - mode "set" makes `spacing` the live FAN_SPACING, or pass
+	-- "tiles"/"fan" as spacing to switch SIGHT_MODE, or "pocket", n to set POCKET_MAX.
+	-- Otherwise: compares the fan (at that spacing) with one ray per tile, from where you stand.
+	test.OnInvoke = function(spacing, mode)
+		if spacing == "tiles" or spacing == "fan" then SIGHT_MODE = spacing return SIGHT_MODE end
+		if spacing == "pocket" then POCKET_MAX = mode return POCKET_MAX end
+		if mode == "set" then FAN_SPACING = spacing return FAN_SPACING end
+		local eye, facing = eyesOf(player.Character)
+		if not eye then return "no character" end
+		local saved = FAN_SPACING
+		FAN_SPACING = spacing or FAN_SPACING
+		local r0 = stats.rays
+		local t0 = os.clock()
+		local byTiles = sightTiles(eye, facing, VIEW_RANGE)
+		local t1 = os.clock()
+		local r1 = stats.rays
+		local byFan = sightFan(eye, facing, VIEW_RANGE)
+		local t2 = os.clock()
+		local r2 = stats.rays
+		FAN_SPACING = saved
+		local both, onlyTiles, onlyFan = 0, 0, 0
+		for tile in byTiles do if byFan[tile] then both += 1 else onlyTiles += 1 end end
+		for tile in byFan do if not byTiles[tile] then onlyFan += 1 end end
+		return { tilesRays = r1 - r0, tilesMs = (t1 - t0) * 1000, fanRays = r2 - r1, fanMs = (t2 - t1) * 1000,
+			both = both, onlyTiles = onlyTiles, onlyFan = onlyFan }
+	end
+	test.Parent = script
+end
