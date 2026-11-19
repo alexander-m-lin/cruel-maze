@@ -11,12 +11,13 @@ Not set yet for the later phases.
 
 Actual so far:
 - Phase 0: about 30 minutes of building (branch 12:53 → last commit 13:19 on 2026-11-18), plus two 2-player test sessions and design decisions. The 1-week guess was far too high: with Claude Code, writing code is fast, and the time goes into testing, feel and decisions. Phase 1 (more design decisions) will be a better benchmark before estimating the rest.
+- Phase 1: about 6.5 hours (13:54 → 20:16 on 2026-11-18, 29 commits). The core rules (relics, spawn rooms, lives, timer) took about 35 minutes. The rest went on reworking rules after playtesting (relic barriers → vision rings, click-to-collect) and on polish that wasn't in the plan: textures, sounds and music, the kill animation, the minimap, skull relics. Building the planned features is quick; iterating on feel and adding polish is where the time goes.
 
-## Where the prototype stands (2026-11-18, after Phase 0)
+## Where the prototype stands (2026-11-18, after Phase 1)
 
-Working: match loop (countdown, play, results); generated mazes with lots of junctions and loops; fixed isometric camera; mouse facing with direction-based speed; fog of war with line of sight, shared between teammates; AI monster with route planning, sight and hearing, ramping chase speed; rigged monster with code-driven animation; smooth monster movement on every screen.
+Working: a full match against AI monsters. Survivors collect 6 of 9 relics within 4 minutes with 3 lives each, capture spawn rooms and choose where to respawn; two AI monsters roam (spreading out), chase and kill. Also: generated mazes with junctions and loops; fixed isometric camera; mouse facing with direction-based speed; fog of war shared between teammates, with vision rings around spotted relics; a minimap; textured temple walls and floor; sound effects and music.
 
-Not started: monster and Maze Master roles, relics and match rules, a maze that changes mid-match, characters and abilities, bots for other roles, matchmaking, saved progress and purchases.
+Not started: monster and Maze Master roles, a maze that changes mid-match, characters and abilities, bots for other roles, matchmaking, saved progress and purchases.
 
 ## Phases
 
@@ -32,7 +33,7 @@ Today the game is one round loop with a single global monster and a maze that ne
 **Outcome:** `Match`, `MonsterAI`, `Config`, `Net`, `Controls` (see README). Added along the way from playtesting: slower movement away from your facing (100° full-speed cone, 80% sides, 45% backwards), separate spawn spots, and fog of war shared between teammates. Each round now opens with a 3-second frozen countdown.
 **Deferred:** server-side checks on movement speed (clients apply the facing slowdown; check it in Phase 3) and touch/gamepad aiming (Phase 6).
 
-### [ ] 1. Core loop: survivors against a bot monster
+### [x] 1. Core loop: survivors against a bot monster (done 2026-11-18)
 The first build that plays like Cruel Maze. It answers the biggest question cheaply: is collecting relics while being hunted fun?
 - 9 relics replace the beacon; survivors need 6
 - Match timer, lives, capture and respawn rules, win and loss screens
@@ -41,6 +42,14 @@ The first build that plays like Cruel Maze. It answers the biggest question chea
 
 **Reuses:** maze generator, fog, monster AI and body.
 **Done when:** a full match can be won or lost, and playtests say whether the loop is fun.
+
+**Outcome:** a match is won by collecting 6 of 9 relics within 4 minutes, and lost when time runs out or every survivor is out of lives (3 each). All three endings tested, plus a 2-player session ("gameplay feels good"). New modules: `MazeLayout`, `Objectives`, `SpawnPicker`, `Minimap`, `FogState`, `RelicEffects`, `SoundEffects`, `Sounds` (see README).
+- Relics sit in junction cells at least 4 cells apart, with at most 1 in the start room's quarter. The first plan had barriers keeping monsters out of relic rooms; playtesting replaced them: once spotted, a relic keeps the area around it visible to the team, so camping it is visible. Collecting is a left-click (with a prompt), then 3 seconds standing on it; leaving or being caught resets it, the monster turning up doesn't.
+- Spawn rooms: the start room plus 2 more, each in its own quarter of the maze; monsters can't enter; walking in captures one for the team; after being caught you pick a captured room on a map.
+- Two AI monsters that spread out while roaming. A caught survivor is lifted, struggles, and is torn apart; respawning waits for that to finish.
+- Polish beyond the plan: jungle-temple wall panels with matching texture variations, a toned-down flagstone floor, skull relics, sound effects and music, a minimap, backwards running, the relic-collecting beam.
+
+**Deferred:** a proper results screen (a message and a sting for now); floor texture variations; mobile controls (Phase 6).
 
 ### [ ] 2. A maze that changes mid-match
 The Maze Master depends on this, and several systems assume walls never move.
