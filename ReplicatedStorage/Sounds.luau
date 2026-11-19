@@ -9,7 +9,9 @@
 local Sounds = {
 	-- Relics
 	RelicHum       = { id = 9125674129,  volume = 0.6, range = 60, looped = true },   -- while someone collects (pitch rises as the bar fills)
-	RelicCollected = { id = 4612374036,  volume = 0.6 },                              -- everyone hears it
+	-- everyone hears it. A soft bell, slowed a touch to make it warmer. Alternatives to try:
+	-- 90773963263404 ("completedtask"), 96659579913194 ("PathComplete"); the old sharp one was 4612374036
+	RelicCollected = { id = 103516326607012, volume = 0.35, speed = 0.92 },
 	RoomCaptured   = { id = 132574644259001, volume = 0.5 },                          -- everyone hears it
 
 	-- The monster
