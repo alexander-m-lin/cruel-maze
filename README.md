@@ -7,7 +7,7 @@ and the plan in `docs/roadmap.md`.
 ## Play it
 
 1. Install [Roblox Studio](https://create.roblox.com/) and sign in (a free Roblox account is needed).
-2. Open `Place2.rbxl` from this repo in Studio.
+2. Open `CruelMaze.rbxl` from this repo in Studio.
 3. Press **Play** (F5). A match starts after a 3-second countdown.
 
 Playing from the file is single player. Playing together needs the place published to Roblox
@@ -30,7 +30,7 @@ choose where you come back. M hides the minimap.
 
 ## Layout
 
-- `Place2.rbxl`: the actual place. Open this in Studio. It's a binary file, so git can store
+- `CruelMaze.rbxl`: the actual place. Open this in Studio. It's a binary file, so git can store
   versions of it but can't show what changed. Commit it whenever you change parts, GUIs,
   lighting and so on.
 - Script files, kept in step with Studio automatically by **Script Sync**. Editing them in
