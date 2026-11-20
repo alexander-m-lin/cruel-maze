@@ -73,7 +73,7 @@ Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds
 	Ward       = { cost = 15, cooldown = 4 },    -- place a ward (a floating eye that watches around it)
 	Haunt      = { cost = 20, cooldown = 15 },   -- haunt a survivor the monster side can see
 	FalseRelic = { cost = 30, cooldown = 5 },    -- place a false relic
-	Crusher    = { cost = 50, cooldown = 30 },   -- set off a crushing wall
+	Crusher    = { cost = 50, cooldown = 10 },   -- set off a crushing wall
 }
 Config.MAZE_MASTER_DOOR_COOLDOWN = 20   -- a door the Maze Master changed can't be changed again for this long
 
@@ -115,6 +115,7 @@ Config.CRUSHER_WARNING = 2              -- seconds of rumbling
 Config.CRUSHER_SLAM_TIME = 0.3
 Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
 Config.CRUSHER_RETURN_TIME = 1
+Config.CRUSHED_LINGER = 1.5             -- seconds a crushed survivor's view stays on the shut walls before they choose where to respawn
 Config.CRUSHER_STUN = 1                 -- seconds a monster caught between them is stunned
 Config.CRUSHER_VISION = 6               -- the monster side always sees a crushing wall's cell and this many studs past it each way
 

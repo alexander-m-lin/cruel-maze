@@ -268,7 +268,9 @@ end
 
 -- CRUSHED (a crushing wall): held where they stand, then the body is gone. Not by setting their
 -- health to 0: that plays Roblox's default death sound (the "oof"). Players' computers draw it
--- (CrusherView: a burst of dust and a crack, and the body hidden at once).
+-- (CrusherView: a burst of dust and a crack, and the body hidden at once). The hidden body stays
+-- for Config.CRUSHED_LINGER seconds, so their camera stays on the shut walls before they're asked
+-- where to respawn (onCaught waits the same).
 local crushedEvent = Net.event("Crushed")            -- server -> everyone: (UserId, position)
 local function playCrushed(player, character)
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -277,7 +279,7 @@ local function playCrushed(player, character)
 		root.Anchored = true
 		crushedEvent:FireAllClients(player.UserId, root.Position)
 	end
-	task.delay(0.4, function()
+	task.delay(Config.CRUSHED_LINGER, function()
 		player:SetAttribute("Seized", nil)
 		if character.Parent then character:Destroy() end
 	end)
@@ -298,7 +300,7 @@ local function onCaught(player, monster)
 
 	-- Once the kill has played out: out of the match, or choose where to come back (if they
 	-- don't choose in time, their last room is used)
-	task.delay(monster and KILL.DONE or 0, function()
+	task.delay(monster and KILL.DONE or Config.CRUSHED_LINGER, function()
 		if state ~= States.Playing or not player.Parent then return end
 		if lives <= 0 then
 			player:SetAttribute("Out", true)    -- out for the rest of the match: watches teammates

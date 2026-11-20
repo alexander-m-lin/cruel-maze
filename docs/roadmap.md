@@ -150,6 +150,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 - STUN is a shared mechanic (can't move, lunge or catch); crushing walls stun monsters caught between them. PULL is shared too (players, bots and monsters).
 - Until there's a character select, every survivor plays Sara (`Config.DEFAULT_SURVIVOR_HERO`). Bots don't use abilities yet.
 
+**Tuning from testing (2026-11-20):** crushing walls' cooldown 30 s -> 10 s; a crushed survivor's view stays on the shut walls for 1.5 s (`Config.CRUSHED_LINGER`) before the spawn picker, and they no longer die the default Roblox way (no "oof"); monsters mid-kill can't be stunned or pulled.
+
 **Notes from testing, before heroes (2026-11-20):** haunt (AI) prefers survivors near a monster; destroying a ward takes 3 s with a progress bar like a relic's, and the AI won't put a ward back where one was just destroyed for 10 s; anything that reveals a survivor also gives the monster side a small ring of sight round them (`Config.REVEAL_VISION_RADIUS`), and AI monsters go for revealed survivors within sight range, walls or not. The match's per-frame systems now run separately, so an error in one can't stop the others.
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay
