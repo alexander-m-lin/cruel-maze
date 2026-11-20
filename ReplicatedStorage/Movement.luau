@@ -31,10 +31,12 @@ function Movement.facingSpeed(angle)
 	return side + (Config.FACING_BACK_SPEED - side) * toBack
 end
 
--- Is `who` stunned or being pulled right now? ("StunnedUntil"; "PullAt" + "PullTime", server times)
+-- Is `who` stunned, casting, or being pulled right now? ("StunnedUntil", "CastingUntil";
+-- "PullAt" + "PullTime": server times)
 function Movement.held(who)
 	local now = workspace:GetServerTimeNow()
 	if (who:GetAttribute("StunnedUntil") or 0) > now then return true end
+	if (who:GetAttribute("CastingUntil") or 0) > now then return true end      -- winding up an ability (Flourish)
 	local pullAt = who:GetAttribute("PullAt")
 	return pullAt ~= nil and now < pullAt + (who:GetAttribute("PullTime") or 0)
 end

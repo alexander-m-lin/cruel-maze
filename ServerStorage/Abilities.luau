@@ -154,15 +154,22 @@ function handlers.TreasureHunt(user, root, aim, def)
 	return true
 end
 
--- FLOURISH: every monster in range is stunned
+-- FLOURISH: a wind-up standing still ("CastingUntil": Movement.held), then every monster in range
+-- of where she stands is stunned. Caught (or out of the match) before it lands: nothing.
 function handlers.Flourish(user, root, aim, def)
-	local here = root.Position
-	for _, monster in match.monsters do
-		if monster.pos and ((monster.pos - here) * Vector3.new(1, 0, 1)).Magnitude <= def.range then
-			match.stun(monster, def.stun)
-		end
-	end
+	user:SetAttribute("CastingUntil", workspace:GetServerTimeNow() + def.castTime)
 	fxEvent:FireAllClients("Flourish", user.UserId)
+	local thisMatch = match
+	task.delay(def.castTime, function()
+		user:SetAttribute("CastingUntil", nil)
+		local now = rootOf(user)
+		if match ~= thisMatch or not now or user:GetAttribute("Seized") then return end
+		for _, monster in match.monsters do
+			if monster.pos and ((monster.pos - now.Position) * Vector3.new(1, 0, 1)).Magnitude <= def.range then
+				match.stun(monster, def.stun)
+			end
+		end
+	end)
 	return true
 end
 

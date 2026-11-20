@@ -4,8 +4,8 @@
 --   WHIP          - a lash (a curved Beam) from the hand to its tip, which flies out the way she
 --                   faces, cracks, then holds while she's pulled to it (a wall or relic) or drags
 --                   whoever it caught back as it comes in. The arm reaches along it (IKControl).
---   FLOURISH      - the arm goes up and the whip spins in a circle overhead, with a flash on the
---                   floor showing how far the stun reaches.
+--   FLOURISH      - the wind-up: the whip spins overhead, faster and faster, over a faint disc
+--                   showing its reach; then a bright flash out to the edge as the stun lands.
 --   TREASURE HUNT - a pillar of golden light over the relic it found (survivors only).
 --   STUNNED       - little stars circling over the head of anything stunned ("StunnedUntil").
 -- Effects of someone you can't see (hidden by the fog) aren't drawn, so they give nothing away.
@@ -147,34 +147,49 @@ end
 
 local function flourish(character)
 	if not visible(character) then return end
+	local who = Players:GetPlayerFromCharacter(character) or character   -- (a bot keeps its attributes on its body)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	local tip, beam, cleanup = makeWhip(character)
 	if not (tip and root) then return end
 	local def = SARA.Ultimate
 	sound("WhipSpin", root.Position)
-	-- the floor flash: how far the stun reaches
-	local ring = Instance.new("Part")
-	ring.Shape = Enum.PartType.Cylinder
-	ring.Anchored, ring.CanCollide, ring.CanQuery, ring.CanTouch = true, false, false, false
-	ring.Material = Enum.Material.Neon
-	ring.Color = GOLD
-	ring.Transparency = 0.4
-	ring.Size = Vector3.new(0.2, 2, 2)
-	ring.CFrame = CFrame.new(root.Position - Vector3.new(0, 2.8, 0)) * CFrame.Angles(0, 0, math.rad(90))
-	ring.Parent = folder
-	TweenService:Create(ring, TweenInfo.new(def.spinTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
-	Debris:AddItem(ring, def.spinTime + 0.1)
-	-- the spin: 1.5 turns in a circle above the head
-	local t0 = os.clock()
-	while os.clock() - t0 < def.spinTime and root.Parent do
-		local k = (os.clock() - t0) / def.spinTime
-		local a = k * math.pi * 3
-		tip.Position = root.Position + Vector3.new(math.cos(a) * 6, 4.5, math.sin(a) * 6)
-		beam.CurveSize0, beam.CurveSize1 = 1.2, -0.6
-		RunService.RenderStepped:Wait()
+	local function floorRing(size, transparency)
+		local ring = Instance.new("Part")
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Anchored, ring.CanCollide, ring.CanQuery, ring.CanTouch = true, false, false, false
+		ring.Material = Enum.Material.Neon
+		ring.Color = GOLD
+		ring.CastShadow = false
+		ring.Transparency = transparency
+		ring.Size = Vector3.new(0.2, size, size)
+		ring.CFrame = CFrame.new(root.Position - Vector3.new(0, 2.8, 0)) * CFrame.Angles(0, 0, math.rad(90))
+		ring.Parent = folder
+		return ring
 	end
+	-- the wind-up: a faint disc at the full reach (a warning to monsters), and the whip spinning
+	-- overhead, faster and faster
+	local warning = floorRing(def.range * 2, 0.82)
+	local t0 = os.clock()
+	local angle = 0
+	local spinning = true
+	while spinning and root.Parent do
+		local dt = RunService.RenderStepped:Wait()
+		local k = math.min(1, (os.clock() - t0) / def.castTime)
+		angle += dt * (6 + 14 * k)
+		tip.Position = root.Position + Vector3.new(math.cos(angle) * 6, 4.5, math.sin(angle) * 6)
+		beam.CurveSize0, beam.CurveSize1 = 1.2, -0.6
+		warning.Transparency = 0.82 - 0.12 * math.abs(math.sin(os.clock() * 10))
+		spinning = k < 1 and not (who:GetAttribute("Seized") or character:GetAttribute("FogState") == "hidden")
+	end
+	warning:Destroy()
 	cleanup()
+	if not root.Parent or who:GetAttribute("Seized") then return end
+	-- the stun lands: a bright flash out to the edge
+	local flash = floorRing(4, 0.3)
+	TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
+	Debris:AddItem(flash, 0.45)
+	sound("WhipCrack", root.Position + Vector3.new(0, 4, 0))
 end
 
 local function treasureFound(center)

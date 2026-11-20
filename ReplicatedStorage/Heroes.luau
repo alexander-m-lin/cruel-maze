@@ -39,12 +39,13 @@ Heroes.list = {
 				range = 110,           -- studs, straight line
 				missCooldown = 3,      -- nothing in range: try again sooner
 			},
-			-- Spin the whip overhead: every monster within range is stunned.
+			-- Spin the whip overhead: she stands still while it winds up (a ring on the floor shows
+			-- its reach), then every monster within range is stunned. Caught while winding up: no stun.
 			Ultimate = {
 				id = "Flourish", name = "Flourish", cooldown = 60,
-				range = 14,            -- studs
-				stun = 1,              -- seconds
-				spinTime = 0.6,        -- seconds the spin lasts (the stun lands at the start)
+				castTime = 1,          -- seconds of wind-up, standing still
+				range = 20,            -- studs
+				stun = 3,              -- seconds
 			},
 		},
 	},
