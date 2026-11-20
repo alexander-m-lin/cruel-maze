@@ -1,4 +1,4 @@
--- Developer buttons for testing roles. Only in Studio (the server ignores them anywhere else).
+-- Developer buttons for testing roles. Only for developers: in Studio, or the experience's owner (the server checks).
 --
 --   "Role: ..."  - click to cycle the role you want next match: Random, Survivor, Monster, Maze Master
 --   "New match"  - end this match now and start another (with your picked role)
@@ -7,7 +7,9 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-if not RunService:IsStudio() then return end
+-- Only for developers (in Studio, or the experience's owner; the server decides, see Dev)
+local localPlayer = Players.LocalPlayer
+while localPlayer:GetAttribute("Dev") ~= true do localPlayer:GetAttributeChangedSignal("Dev"):Wait() end
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))

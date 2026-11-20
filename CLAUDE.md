@@ -16,6 +16,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 - Tunable numbers are in `ReplicatedStorage/Config.luau` (match rules), `ReplicatedStorage/Sounds.luau` (sounds and music), and the settings at the top of each script.
 
 **Testing through the Studio MCP**
+- Playtests open in the lobby. Start a match by firing `ReplicatedStorage.Remotes.Lobby` with `"start"` from the Client (or `"prefer", role` first); the `DevMatch` remote's `"role"` forces a role and `"restart"` jumps straight to a new match.
 - Test in playtests with `execute_luau` on the Server or Client, measuring with numbers. Screenshots show the 3D view only while the Studio window is visible, and never show BillboardGuis (floating labels). To check one visually, copy it onto a ScreenGui. Close-up visual checks work best in Edit mode with a camera position.
 - Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
 - The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.

@@ -62,7 +62,7 @@ RunService.RenderStepped:Connect(function()
 	elseif state == States.Results then
 		timerLabel.Text = "Match over"
 	elseif state == States.Waiting then
-		timerLabel.Text = "Waiting"
+		timerLabel.Text = "Lobby"
 	end
 
 	-- Second line: relics and lives, during a match

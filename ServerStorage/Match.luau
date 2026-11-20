@@ -1,7 +1,8 @@
 -- Runs matches, one after another, as a "state machine": the match is always in exactly one
 -- state, and moves to the next when that state's job is done.
 --
---   Waiting   - fewer than Config.MIN_PLAYERS players; nothing happens until more arrive
+--   Waiting   - THE LOBBY: everyone waits between matches, picks a preferred role ("PreferredRole"
+--               on the player) and anyone presses Start (needs Config.MIN_PLAYERS players)
 --   Countdown - a new maze is built and everyone gets a role (3 survivors, 2 monsters, 1 Maze
 --               Master; see assignRoles). Survivors get lives and a character in the start room,
 --               monsters a character at their start spot, the Maze Master no character at all. All
@@ -52,6 +53,7 @@ local Doors = require(ServerStorage.Doors)
 local Crushers = require(ServerStorage.Crushers)
 local MazeMaster = require(ServerStorage.MazeMaster)
 local WardEyes = require(ServerStorage.WardEyes)
+local Dev = require(ServerStorage.Dev)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -69,7 +71,8 @@ local chooseSpawnEvent = Net.event("ChooseSpawn")    -- player -> server: respaw
 local noticeEvent = Net.event("Notice")              -- server -> everyone: a short message (relic found...)
 local collectEvent = Net.event("CollectRelic")       -- player -> server: I clicked to collect this relic
 local lungeEvent = Net.event("Lunge")                -- monster player -> server: I clicked to lunge
-local devEvent = Net.event("DevMatch")               -- Studio only: { "role", role | nil } or { "restart" }
+local devEvent = Net.event("DevMatch")               -- developers only (Dev): { "role", role | nil } or { "restart" }
+local lobbyEvent = Net.event("Lobby")                -- player -> server, in the lobby: { "prefer", role | nil } or { "start" }
 local toolEvent = Net.event("MazeMasterTool")        -- Maze Master -> server: use a tool (tool, target)
 local toolResultEvent = Net.event("MazeMasterResult") -- server -> Maze Master: (ok, message)
 local falseRelicEvent = Net.event("FalseRelicSprung") -- server -> survivor: you clicked a false relic
@@ -99,7 +102,8 @@ local objectives = nil   -- this match's relics and spawn rooms (see Objectives)
 local monsters = {}      -- this match's monsters: MonsterAI (bots) and PlayerMonster objects
 local playerMonsters = {} -- [player] = their PlayerMonster
 local bots = {}           -- this match's survivor bots (SurvivorBot: they pass for players)
-local restartRequested = false   -- Studio dev panel: end this match now
+local restartRequested = false   -- dev panel: end this match now (and start the next straight away)
+local startRequested = false     -- someone pressed Start in the lobby
 local doors = nil        -- this match's doors (see Doors)
 local crushers = nil     -- this match's crushing walls (see Crushers)
 local wards = nil        -- the Maze Master's wards, floating eyes (see WardEyes)
@@ -370,13 +374,23 @@ toolEvent.OnServerEvent:Connect(function(player, tool, target)
 	toolResultEvent:FireClient(player, ok, message)
 end)
 
--- Studio dev panel: pick your role for the next match, or end this match now
+-- Dev panel: force your role for the next match, or end this match now and start another
 devEvent.OnServerEvent:Connect(function(player, action, value)
-	if not RunService:IsStudio() then return end
+	if not Dev.isDev(player) then return end
 	if action == "role" and (value == nil or (typeof(value) == "string" and Config.ROLE_SLOTS[value])) then
 		player:SetAttribute("DevRole", value)
 	elseif action == "restart" then
 		restartRequested = true
+		startRequested = true          -- (straight into the next match, past the lobby)
+	end
+end)
+
+-- The lobby: a preferred role, and Start
+lobbyEvent.OnServerEvent:Connect(function(player, action, value)
+	if action == "prefer" and (value == nil or (typeof(value) == "string" and Config.ROLE_SLOTS[value])) then
+		player:SetAttribute("PreferredRole", value)
+	elseif action == "start" and state == States.Waiting then
+		startRequested = true
 	end
 end)
 
@@ -460,8 +474,27 @@ local function assignRoles()
 	local free = table.clone(Config.ROLE_SLOTS)
 	local roles = {}
 	local rest = {}
+	local function shuffle(list)
+		for i = #list, 2, -1 do
+			local j = math.random(i)
+			list[i], list[j] = list[j], list[i]
+		end
+	end
+	-- first a developer's forced role, then lobby preferences (in random order, so nobody always
+	-- wins a contested slot), then the rest at random
+	local preferring = {}
 	for _, player in Players:GetPlayers() do
-		local wanted = RunService:IsStudio() and player:GetAttribute("DevRole")
+		local forced = Dev.isDev(player) and player:GetAttribute("DevRole")
+		if forced and (free[forced] or 0) > 0 then
+			roles[player] = forced
+			free[forced] -= 1
+		else
+			table.insert(preferring, player)
+		end
+	end
+	shuffle(preferring)
+	for _, player in preferring do
+		local wanted = player:GetAttribute("PreferredRole")
 		if wanted and (free[wanted] or 0) > 0 then
 			roles[player] = wanted
 			free[wanted] -= 1
@@ -469,10 +502,7 @@ local function assignRoles()
 			table.insert(rest, player)
 		end
 	end
-	for i = #rest, 2, -1 do
-		local j = math.random(i)
-		rest[i], rest[j] = rest[j], rest[i]
-	end
+	shuffle(rest)
 	local hasSurvivor = Config.SURVIVOR_BOTS   -- (with bots there are always survivors)
 	for _, role in roles do if role == Roles.Survivor then hasSurvivor = true end end
 	for _, player in rest do
@@ -507,10 +537,11 @@ end
 
 ---------------------------------------------------------------- the states
 local function runWaiting()
-	setState(States.Waiting, nil, "Waiting for players...")
-	while #Players:GetPlayers() < Config.MIN_PLAYERS do
-		task.wait(0.5)
+	setState(States.Waiting, nil, "")
+	while not (startRequested and #Players:GetPlayers() >= Config.MIN_PLAYERS) do
+		task.wait(0.2)
 	end
+	startRequested = false
 end
 
 local function runCountdown()
@@ -701,6 +732,7 @@ end
 
 ---------------------------------------------------------------- players
 local function onPlayerAdded(player)
+	player:SetAttribute("Dev", Dev.isDev(player))   -- (players' computers show the dev panels from this)
 	local stats = Instance.new("Folder")
 	stats.Name = "leaderstats"
 	stats.Parent = player

@@ -125,6 +125,12 @@ Config.Roles = {
 	MazeMaster = "MazeMaster",
 }
 Config.ROLE_SLOTS = { Survivor = 3, Monster = 2, MazeMaster = 1 }
+
+-- The lobby: between matches everyone waits here, picks a preferred role (honoured where a slot is
+-- free; the rest are random) and anyone presses Start. Matches need MIN_PLAYERS people.
+-- Developer controls (role override, New match, the doors panel) show in Studio, and in the
+-- published game for the experience's owner plus these UserIds:
+Config.DEV_USER_IDS = {}
 Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (SurvivorBot)
 
 -- Monsters played by people

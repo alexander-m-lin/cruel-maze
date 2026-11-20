@@ -28,6 +28,7 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
+local Dev = require(game:GetService("ServerStorage").Dev)
 local MazeLayout = require(ServerStorage.MazeLayout)
 
 local CHARACTER_CLEARANCE = 2.2   -- studs from the door's face a nudged player ends up at
@@ -38,7 +39,7 @@ local AI_NEAR_CHANCE = 0.7        -- ...this often (otherwise any door)
 local Doors = {}
 Doors.__index = Doors
 
-local devEvent = Net.event("DevDoors")   -- Studio only: player -> server, { action, ... } (see below)
+local devEvent = Net.event("DevDoors")   -- developers only: player -> server, { action, ... } (see below)
 local active = nil                        -- the match's Doors, for the dev panel
 local aiEnabled = true                    -- the dev panel can switch the AI off (kept between matches)
 
@@ -221,10 +222,10 @@ function Doors:Step(dt)
 	self:stepAI(now)
 end
 
----------------------------------------------------------------- dev panel (Studio only)
+---------------------------------------------------------------- dev panel (developers only, see Dev)
 -- { "toggle", id } | { "ai", on } | { "all", open }
 devEvent.OnServerEvent:Connect(function(player, action, value)
-	if not RunService:IsStudio() or not active then return end
+	if not Dev.isDev(player) or not active then return end
 	if action == "toggle" and typeof(value) == "number" then
 		active:Toggle(value)
 	elseif action == "ai" and typeof(value) == "boolean" then

@@ -17,9 +17,13 @@ Playing from the file is single player. Playing together needs the place publish
 Moving away from where you face is slower. After being caught, click a spawn room on the map to
 choose where you come back. M hides the minimap.
 
-**Roles:** 3 survivors, 2 monsters and a Maze Master, handed out at random (empty slots get bots:
-survivor bots named "Bot 1"..., AI monsters, and an AI working the doors for the Maze Master). In Studio, the "Role" button at the
-bottom left picks yours for the next match, and "New match" starts one.
+**Lobby and roles:** between matches everyone waits in the lobby, which lists who's in. Pick a
+preferred role there (Any, Survivor, Monster or Maze Master; you get it if the slot is free) and
+anyone presses Start. Roles: 3 survivors, 2 monsters and a Maze Master; empty slots get bots
+(survivor bots named "Bot 1"..., AI monsters, and an AI working the doors for the Maze Master).
+Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
+at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
+starts another straight away, and "Doors" opens the doors panel.
 - **Monster:** move as usual; left-click to lunge. A survivor you hit is caught. You see what your
   team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
@@ -70,6 +74,7 @@ bottom left picks yours for the next match, and "New match" starts one.
 | `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, haunt, false relics, crushing walls |
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a spawn room from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
+| `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, spawn rooms |
@@ -94,8 +99,9 @@ bottom left picks yours for the next match, and "New match" starts one.
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/HauntAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The purple screen edge and whisper when you're haunted |
-| `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: pick your role for the next match, start a new match |
-| `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: a panel to work the doors (and G toggles the door under the mouse) |
+| `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
+| `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
+| `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |
 | `StarterPlayerScripts/SoundEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Plays the sound effects and music |
 
