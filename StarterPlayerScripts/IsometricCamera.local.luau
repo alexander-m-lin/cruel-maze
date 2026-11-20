@@ -82,11 +82,12 @@ local lastFocus = nil
 -- keys move it across the screen (up on the screen is +X+Z in the world, since the camera looks
 -- from the -X-Z corner). It starts over the middle and can't leave the maze.
 local PAN_SPEED = 90   -- studs per second (scaled with zoom)
-local ZOOM_MIN, ZOOM_MAX = 0.65, 3   -- the Maze Master zooms (mouse wheel, or pinch) between these times DISTANCE
+local ZOOM_MIN, ZOOM_MAX = 0.65, 3   -- the Maze Master zooms (mouse wheel, or pinch): this much less or more of the maze fits on screen
+-- Zooming widens or narrows the lens rather than moving the camera away. Moving it away (to 3x
+-- DISTANCE) took it past what lower graphics settings draw: far walls vanished, and the
+-- atmosphere's haze, which thickens with distance, washed everything out.
 local ZOOM_STEP = 1.15               -- per wheel notch
 local zoom = 1
-local atmosphere = game:GetService("Lighting"):FindFirstChildOfClass("Atmosphere")
-local baseDensity = atmosphere and atmosphere.Density or 0
 local panFocus = nil
 local panMaze = nil
 local PAN_KEYS = {
@@ -136,7 +137,9 @@ end
 -- BindToRenderStep runs right before each frame is drawn, after Roblox's default camera
 RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.FieldOfView = FOV
+	-- the lens: `zoom` times as much fits across the screen (the Maze Master's zoom)
+	local zoomed = isMazeMaster() and zoom or 1
+	camera.FieldOfView = 2 * math.deg(math.atan(math.tan(math.rad(FOV / 2)) * zoomed))
 
 	local character = player.Character
 	local root = aliveRoot(character)
@@ -153,13 +156,8 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 	if not focus then return end
 	lastFocus = focus
 
-	local zoomed = isMazeMaster() and zoom or 1
-	local camPos = focus + DIRECTION * DISTANCE * zoomed
+	local camPos = focus + DIRECTION * DISTANCE
 	camera.CFrame = CFrame.lookAt(camPos, focus)
-	-- The atmosphere's haze builds up with distance from the camera, so zooming out would wash the
-	-- maze out. Thin it (on this computer only) by as much as the camera moved away, so the maze
-	-- looks the same at any zoom.
-	if atmosphere then atmosphere.Density = baseDensity / zoomed end
 	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 
 	if character then fadeBlockingWalls(focus, camPos, character) end
