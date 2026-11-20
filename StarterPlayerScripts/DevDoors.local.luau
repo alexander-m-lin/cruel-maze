@@ -1,4 +1,4 @@
--- A developer panel for the maze's doors. Only in Studio (the server ignores it anywhere else).
+-- A developer panel for the maze's doors. Only for developers: in Studio, or the experience's owner (the server checks).
 --
 --   "Doors" button (bottom left) - show or hide the panel
 --   G                            - open or shut the door nearest the mouse
@@ -10,7 +10,9 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-if not RunService:IsStudio() then return end
+-- Only for developers (in Studio, or the experience's owner; the server decides, see Dev)
+local localPlayer = Players.LocalPlayer
+while localPlayer:GetAttribute("Dev") ~= true do localPlayer:GetAttributeChangedSignal("Dev"):Wait() end
 
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local devEvent = Net.event("DevDoors")

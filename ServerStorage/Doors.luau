@@ -1,7 +1,8 @@
 -- The maze's DOORS during a match: opening and closing them, safely, and (until the Maze Master is
 -- a person) a simple AI that works them.
 --
---   local doors = Doors.new(maze, { monsters = list, survivors = function() return players end })
+--   local doors = Doors.new(maze, { monsters = list, survivors = function() return players end,
+--                                   ai = false })   -- (ai = false: a person is the Maze Master)
 --   doors:Request(id, open)   -- start opening/closing a door; false if it can't right now
 --   doors:Step(dt)            -- every frame while the match plays (moves doors, runs the AI)
 --   doors:Destroy()
@@ -27,6 +28,8 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
+local Dev = require(game:GetService("ServerStorage").Dev)
+local SpeedCheck = require(game:GetService("ServerStorage").SpeedCheck)
 local MazeLayout = require(ServerStorage.MazeLayout)
 
 local CHARACTER_CLEARANCE = 2.2   -- studs from the door's face a nudged player ends up at
@@ -37,7 +40,7 @@ local AI_NEAR_CHANCE = 0.7        -- ...this often (otherwise any door)
 local Doors = {}
 Doors.__index = Doors
 
-local devEvent = Net.event("DevDoors")   -- Studio only: player -> server, { action, ... } (see below)
+local devEvent = Net.event("DevDoors")   -- developers only: player -> server, { action, ... } (see below)
 local active = nil                        -- the match's Doors, for the dev panel
 local aiEnabled = true                    -- the dev panel can switch the AI off (kept between matches)
 
@@ -46,6 +49,8 @@ function Doors.new(maze, options)
 	self.maze = maze
 	self.monsters = options.monsters or {}
 	self.survivors = options.survivors or function() return {} end
+	self.useAI = options.ai ~= false   -- false when a person is the Maze Master
+	self.bots = options.bots or function() return {} end   -- survivor bots (nudged like players)
 	self.list = {}
 	for _, door in maze.doors do
 		door.state = door.open and "open" or "closed"
@@ -122,13 +127,16 @@ local function nudge(self, door)
 		local delta = side * (thick / 2 + clearance) - across
 		return alongX and Vector3.new(0, 0, delta) or Vector3.new(delta, 0, 0)
 	end
-	for _, player in Players:GetPlayers() do
+	local everyone = Players:GetPlayers()
+	for _, bot in self.bots() do table.insert(everyone, bot) end
+	for _, player in everyone do
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and not root.Anchored then
 			local along, across = measure(root.Position)
 			if math.abs(along) < length / 2 + 1 and math.abs(across) < thick / 2 + CHARACTER_CLEARANCE - 0.2 then
 				character:PivotTo(character:GetPivot() + pushed(root.Position, across, CHARACTER_CLEARANCE))
+				SpeedCheck.moved(player)      -- (the server moved them, not their computer)
 			end
 		end
 	end
@@ -176,7 +184,7 @@ end
 -- that haven't changed for DOOR_COOLDOWN seconds, usually ones near a survivor (so people see the
 -- maze shift).
 function Doors:stepAI(now)
-	if not (aiEnabled and self.running) or now < self.nextAI then return end
+	if not (aiEnabled and self.useAI and self.running) or now < self.nextAI then return end
 	self.nextAI = now + self:aiInterval()
 	local maze = self.maze
 	local cells = {}
@@ -216,10 +224,10 @@ function Doors:Step(dt)
 	self:stepAI(now)
 end
 
----------------------------------------------------------------- dev panel (Studio only)
+---------------------------------------------------------------- dev panel (developers only, see Dev)
 -- { "toggle", id } | { "ai", on } | { "all", open }
 devEvent.OnServerEvent:Connect(function(player, action, value)
-	if not RunService:IsStudio() or not active then return end
+	if not Dev.isDev(player) or not active then return end
 	if action == "toggle" and typeof(value) == "number" then
 		active:Toggle(value)
 	elseif action == "ai" and typeof(value) == "boolean" then

@@ -27,9 +27,16 @@ heroes (through Phase 4).
 
 Actual so far:
 - Phase 0: about 30 minutes of building (branch 12:53 → last commit 13:19 on 2026-11-18), plus two 2-player test sessions and design decisions. The 1-week guess was far too high: with Claude Code, writing code is fast, and the time goes into testing, feel and decisions. Phase 1 (more design decisions) will be a better benchmark before estimating the rest.
+- Phase 3: 2026-11-19 15:20 → 2026-11-20 (12 commits on `phase-3`, over two days with breaks). As predicted, most of it went on playtest-driven additions rather than the planned build: survivor bots pulled forward, wards and haunt for the Maze Master's vision, a lobby, the speed check, and bugs found on the published server (streaming, draw distance, the minimap's EditableImage setting).
 - Phase 1: about 6.5 hours (13:54 → 20:16 on 2026-11-18, 29 commits). The core rules (relics, spawn rooms, lives, timer) took about 35 minutes. The rest went on reworking rules after playtesting (relic barriers → vision rings, click-to-collect) and on polish that wasn't in the plan: textures, sounds and music, the kill animation, the minimap, skull relics. Building the planned features is quick; iterating on feel and adding polish is where the time goes.
 
-## Where the prototype stands (2026-11-18, after Phase 1)
+## Where the prototype stands (2026-11-20, after Phase 3)
+
+Working: 3 survivors vs 2 monsters and a Maze Master, any slot filled by a bot (survivor bots, AI monsters, a door AI for the Maze Master). Human monsters lunge to catch; the monster side shares vision; the Maze Master pans the whole map and spends dark mana on doors, wards, haunt, false relics and crushing walls. Doors and crushing walls built into each generated maze. A lobby between matches, a server-side speed check, and a private published test build.
+
+Not started: characters and abilities, matchmaking beyond the one-server lobby, saved progress and purchases, mobile controls.
+
+### Earlier (2026-11-18, after Phase 1)
 
 Working: a full match against AI monsters. Survivors collect 6 of 9 relics within 4 minutes with 3 lives each, capture spawn rooms and choose where to respawn; two AI monsters roam (spreading out), chase and kill. Also: generated mazes with junctions and loops; fixed isometric camera; mouse facing with direction-based speed; fog of war shared between teammates, with vision rings around spotted relics; a minimap; textured temple walls and floor; sound effects and music.
 
@@ -47,7 +54,7 @@ Today the game is one round loop with a single global monster and a maze that ne
 **Done when:** the current game runs on the new structure and plays the same.
 
 **Outcome:** `Match`, `MonsterAI`, `Config`, `Net`, `Controls` (see README). Added along the way from playtesting: slower movement away from your facing (100° full-speed cone, 80% sides, 45% backwards), separate spawn spots, and fog of war shared between teammates. Each round now opens with a 3-second frozen countdown.
-**Deferred:** server-side checks on movement speed (clients apply the facing slowdown; check it in Phase 3) and touch/gamepad aiming (Phase 6).
+**Deferred:** server-side checks on movement speed (clients apply the facing slowdown; check it in Phase 3; done in Phase 3, `SpeedCheck`) and touch/gamepad aiming (Phase 6).
 
 ### [x] 1. Core loop: survivors against a bot monster (done 2026-11-18)
 The first build that plays like Cruel Maze. It answers the biggest question cheaply: is collecting relics while being hunted fun?
@@ -91,7 +98,7 @@ The Maze Master depends on this, and several systems assume walls never move.
 
 **Deferred:** swappable maze sections; a monster standing in a closing door is handled like a player but wasn't seen in testing.
 
-### [ ] 3. Human roles and the Maze Master
+### [x] 3. Human roles and the Maze Master (done 2026-11-20)
 The feature that makes Cruel Maze different, and the biggest design risk. Get a rough, playable Maze Master in front of people early. Can overlap with Phase 2: a Maze Master who can only work doors is enough to test the role.
 - Role assignment: 3 survivors, 2 monsters, 1 Maze Master
 - Player-controlled monsters, with the AI monster kept as the bot
@@ -104,6 +111,33 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 **Build for mobile from here on** (the plan is under Phase 6):
 - Facing comes from an *aim direction* that each device supplies (mouse, touch, gamepad), not straight from the mouse. Abilities aim along it too.
 - Every action has a button that can be tapped, not only a key. No hover-only interactions, including in the Maze Master's interface.
+
+**Decisions (2026-11-19):**
+- **Roles:** random for now; bots fill empty slots (AI monsters; the door AI stands in for a missing Maze Master). A Studio-only role picker for testing with 1–2 people. Preferences and priority come later (Phase 7).
+- **Human monsters catch by lunging:** left-click lunges a short way; a hit catches. Short wind-up, cooldown after a miss, so survivors can dodge. Base speed about equal to survivors (the facing rule applies). The AI keeps its chase speed-up as the bot. Monsters can't enter spawn rooms.
+- **Vision:** monsters have the same fog and cone as survivors, shared within the monster team. The Maze Master shares the monster team's vision. Apart from that, the Maze Master knows the whole layout, the live state of doors and traps, and every relic (location and whether collected). Monsters see a relic once their team has seen it. No sighting markers for now: see whether the overhead view gives enough information.
+- **The Maze Master's view:** the same isometric camera, free to pan, no character in the maze. The layout shows as explored everywhere; the monster team's sight shows bright; survivors appear only where the team sees them.
+- **Dark mana:** the Maze Master's energy, plus a cooldown per tool. Starting numbers: pool 100, +5/s; door 10 (1 s cooldown, plus the 20 s per-door cooldown), false relic 30 (5 s), crushing wall 50 (30 s).
+- **Tools** (a baseplate for later design work):
+  - *Doors:* the Phase 2 doors, worked by the Maze Master instead of the AI.
+  - *False relics:* placed on an empty junction cell (not next to a real relic or spawn room). Indistinguishable from a real relic except that its red eyes go out for a split second every ~5 s, so careful players can spot one. A survivor near one (~15 studs, in line of sight) is revealed to the monster team; one who clicks it is revealed for 5 s and slowed to ~40% for 3 s, sees a red screen border and "FALSE RELIC", and the false relic is used up. At most 2 per match in total.
+  - *Crushing walls:* built into the generated maze like doors (pairs of walls along straight corridor cells, looking like normal walls). The Maze Master triggers one: ~2 s rumble (like doors), a ~0.3 s slam, then ~1 s to slide back. Survivors caught between lose a life; monsters are unaffected. Letting the Maze Master place them can be explored later.
+
+**Added from testing (2026-11-19):** basic survivor bots pulled forward from Phase 5, so matches have survivors to hunt with few people (roam, collect relics in sight, flee to a spawn room on seeing a monster); Maze Master mouse-wheel zoom; a placement marker for false relics; false relics glow red for the monster side; the Maze Master has a vision ring round every relic from the start (as survivors do once they've spotted one).
+
+**Maze Master vision (2026-11-20):** testing found the Maze Master starved of information, so two more tools (still a baseplate, not a full kit) and fixed sight:
+- *Wards* (15 mana, 4 s): a floating eye placed in an open cell (not a spawn room or relic cell); the monster side sees all round it (22 studs, walls block). Up to 3 at a time, the oldest fading. Survivors see one like anything else and, once spotted, it stays shown to them. A survivor destroys one by standing within 8 studs and holding for 1.5 s (the relic beam); the monster side sees a pulsing ring where it is meanwhile.
+- *Haunt* (20 mana, 15 s): on a survivor the monster side can see right now (checked on the server against every sight source). For 3 s they're revealed and their vision cone counts as monster-side sight. They get a faint purple screen edge and a whisper.
+- *Crushing walls* give the monster side permanent sight of their cell plus 6 studs past it each way.
+- Fixed along the way: with streaming on, the Maze Master (no character) received no survivor bodies at all. The server now gives them a streaming focus in the middle of the maze.
+
+**Also added before merging (2026-11-20):** a bare-bones lobby between matches (who's in, a preferred role each, a Start button; matches return to it), developer controls for the experience's owner in the published game, and a server-side speed check (`SpeedCheck`: an allowance refilling at base speed +15%, banking 1.5 s for lag; overspenders are pulled back). The Maze Master's zoom-out is capped at 1.6x: further, low graphics settings stopped drawing far walls. The game is published privately as "Cruel Maze 0.1" for testing.
+
+**Outcome:** done when "a 3 v 2 + 1 match runs with humans and the Maze Master has useful things to do even when no survivor is visible". Tested with every role played by a person in Studio's multi-client test and in the published game, with bots filling the other slots; a full six-human match is still to come (no testers online yet) and should be the first thing played in Phase 4's testing. "Sensors" became wards, haunt and crushing-wall sight. Carried forward: the flying-bots note below, and Phase 5's lobby work now starts from the bare-bones lobby.
+
+**Open (2026-11-19):** once, as a survivor, the user saw both survivor bots fly up off-screen at the same moment (a monster was nearby; not the kill animation). Not reproduced. SurvivorBot now puts a bot back if it goes more than 20 studs above or 5 below the floor, warns in the output, and sets a `Rescued` attribute. Watch for that warning in tests.
+
+**Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.
 
 ### [ ] 4. Heroes and abilities
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
@@ -118,7 +152,7 @@ Lets a match start with one human player and fill up as people arrive.
 - AI survivors that explore, collect relics and evade
 - A simple AI Maze Master working doors and traps
 - Bots fill empty slots, are labelled as bots, and give way to humans between matches
-- Lobby, parties, and grouping players into existing servers
+- Lobby, parties, and grouping players into existing servers. A bare-bones lobby already exists (Phase 3). Likely shape (discussed 2026-11-20): a lobby place where players gather, party up and queue, and a match place started as a reserved server, with players teleported back afterwards; plus a separate private test experience so test builds never reach the public game.
 
 **Done when:** a solo player gets a full match, and friends can queue together.
 

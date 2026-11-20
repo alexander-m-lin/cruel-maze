@@ -62,17 +62,22 @@ RunService.RenderStepped:Connect(function()
 	elseif state == States.Results then
 		timerLabel.Text = "Match over"
 	elseif state == States.Waiting then
-		timerLabel.Text = "Waiting"
+		timerLabel.Text = "Lobby"
 	end
 
 	-- Second line: relics and lives, during a match
 	local inMatch = state == States.Countdown or state == States.Playing
 	statusLabel.Visible = inMatch
 	if inMatch then
-		local lives = player:GetAttribute("Lives") or 0
-		statusLabel.Text = ("Relics %d/%d   ·   Lives %s"):format(
-			match:GetAttribute("RelicsCollected") or 0, match:GetAttribute("RelicsNeeded") or Config.RELICS_NEEDED,
-			player:GetAttribute("Out") and "out" or string.rep("♥", lives))
+		local relics = ("Relics %d/%d"):format(
+			match:GetAttribute("RelicsCollected") or 0, match:GetAttribute("RelicsNeeded") or Config.RELICS_NEEDED)
+		local role = player:GetAttribute("Role")
+		if role == Config.Roles.Survivor then
+			local lives = player:GetAttribute("Lives") or 0
+			statusLabel.Text = ("%s   ·   Lives %s"):format(relics, player:GetAttribute("Out") and "out" or string.rep("♥", lives))
+		else
+			statusLabel.Text = ("%s   ·   %s"):format(relics, role == Config.Roles.MazeMaster and "Maze Master" or "Monster")
+		end
 	end
 
 	-- Messages: a recent local flash, else your own situation, else the server's message

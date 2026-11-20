@@ -6,7 +6,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 ## Working on this project
 
-**Status (2026-11-19):** Phases 0, 1 and 2 are done, and Phase 3 (human roles and the Maze Master) is next. Don't start it until the user says to. The README has how to play and what every script does.
+**Status (2026-11-20):** Phases 0-3 are done (Phase 3 merged with its full six-human match still to be played). Phase 4 (heroes and abilities) is next. Don't start it until the user says to. The game is published privately as "Cruel Maze 0.1"; once Studio has it open from Roblox, saves go there, so use File > Save to File over `CruelMaze.rbxl` before committing (the user works from the local file). The README has how to play and what every script does.
 
 **Files and Studio**
 - The place is `CruelMaze.rbxl` (renamed from `Place2.rbxl`). Scripts are mirrored between Studio and the repo folders by Studio's **Script Sync**: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript. In Script Sync, each service (ServerScriptService, ServerStorage, ReplicatedStorage, StarterPlayerScripts, StarterGui › MazeHUD) is linked at the **repo root**. Linking a service to its own folder nests a duplicate folder inside it.
@@ -16,6 +16,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 - Tunable numbers are in `ReplicatedStorage/Config.luau` (match rules), `ReplicatedStorage/Sounds.luau` (sounds and music), and the settings at the top of each script.
 
 **Testing through the Studio MCP**
+- Playtests open in the lobby. Start a match by firing `ReplicatedStorage.Remotes.Lobby` with `"start"` from the Client (or `"prefer", role` first); the `DevMatch` remote's `"role"` forces a role and `"restart"` jumps straight to a new match.
 - Test in playtests with `execute_luau` on the Server or Client, measuring with numbers. Screenshots show the 3D view only while the Studio window is visible, and never show BillboardGuis (floating labels). To check one visually, copy it onto a ScreenGui. Close-up visual checks work best in Edit mode with a camera position.
 - Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
 - The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.
@@ -25,7 +26,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 **Git**
 - The public repo is https://github.com/alexander-m-lin/cruel-maze, and `main` is the only branch. Work each phase on a `phase-N` branch and merge it with `--no-ff` when its "done when" is met.
-- Commits use the GitHub no-reply email set in the repo config. Keep it, so the user's personal email never goes public. Commit when asked; push only when asked.
+- Commits use the GitHub no-reply email set in the repo config. Keep it, so the user's personal email never goes public. Commit on your own after each meaningful change (on the current phase branch, place saved first); push only when asked.
 
 **Assets:** uploaded textures and their asset IDs are documented in `assets/textures/*/README.md`, with the scripts that made them in `tools/textures/`. New uploads need Roblox moderation before they show for other players.
 

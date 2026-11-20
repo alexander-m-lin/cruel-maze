@@ -21,6 +21,14 @@
 -- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
 -- or when it's close with no wall between (then the fog clears in a small circle around it).
 --
+-- TEAMS: survivors share sight with each other. Monsters and the Maze Master are one team: they
+-- share the sight of every monster, the AI ones too, plus the Maze Master's WARDS (all round each
+-- floating eye), every CRUSHING WALL (its cell and a little past it each way), and HAUNTED
+-- survivors' cones (see Haunt in MazeMaster). The Maze Master has no eyes of their own,
+-- but knows the whole layout (all of it shows as explored) and how every door stands. Enemies -
+-- monsters for survivors, survivors for the monster team - are hidden unless your team sees them;
+-- your own side is always shown.
+--
 -- DOORS: your map remembers each door the way your team last saw it. A door's tiles count as wall
 -- (for the minimap and the fog's wall-top sheets) while you remember it shut, and only change
 -- when the door is in view again. DoorView draws the door itself the same way.
@@ -448,13 +456,52 @@ end
 --   "hidden" - not drawn at all (its light is switched off too)
 -- Sets a local "VisibleToMe" attribute other scripts can read (e.g. the monster ping).
 
+-- Which side a role is on: "survivors", or "monsters" (monsters and the Maze Master)
+local function sideOf(role)
+	if role == Config.Roles.Monster or role == Config.Roles.MazeMaster then return "monsters" end
+	if role == Config.Roles.Survivor then return "survivors" end
+	return nil
+end
+
 -- Clear the fog around a point, for this update only (tiles behind a wall from it stay fogged).
 -- Defined after sightFrom (it uses the same fan of rays).
 local revealAround
 
 -- eyes: the eye positions of you and your teammates (anyone of them can sense it)
 local function updateHiddenObjects(visibleNow, eyes)
+	local mySide = sideOf(player:GetAttribute("Role"))
+	-- Things that can be hidden: anything tagged (the monsters' bodies), and - for the monster
+	-- side - the survivors' characters
+	local objects = {}
 	for _, obj in CollectionService:GetTagged("HiddenByFog") do
+		-- monster bodies are on the monster side: always shown to it
+		objects[obj] = mySide == "monsters" and CollectionService:HasTag(obj, "Monster")
+	end
+	if mySide == "monsters" then
+		local now = workspace:GetServerTimeNow()
+		for _, other in Players:GetPlayers() do
+			if other.Character and other:GetAttribute("Role") == Config.Roles.Survivor then
+				-- revealed (by a false relic): shown wherever they are, like a teammate
+				objects[other.Character] = (other:GetAttribute("RevealedUntil") or 0) > now
+			end
+		end
+		for _, bot in CollectionService:GetTagged("SurvivorBot") do   -- survivor bots (attributes on the model)
+			objects[bot] = (bot:GetAttribute("RevealedUntil") or 0) > now
+		end
+	end
+	-- wards: the monster side's own; survivors see one like anything else, and always once spotted
+	local wardInfo = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	wardInfo = wardInfo and wardInfo:FindFirstChild("WardEyes")
+	for _, ward in CollectionService:GetTagged("WardEye") do
+		local info = wardInfo and wardInfo:FindFirstChild(ward.Name)
+		objects[ward] = mySide == "monsters" or (info ~= nil and info:GetAttribute("Discovered") == true)
+	end
+	for _, other in Players:GetPlayers() do   -- characters that aren't enemies (any more): show them
+		local character = other.Character
+		if character and objects[character] == nil and character:GetAttribute("FogState") then objects[character] = true end
+	end
+
+	for obj, ally in objects do
 		local ok, pivot = pcall(obj.GetPivot, obj)
 		if not ok then continue end
 		local p = pivot.Position
@@ -462,7 +509,9 @@ local function updateHiddenObjects(visibleNow, eyes)
 		local tile = tiles[tx] and tiles[tx][tz]
 
 		local state = "hidden"
-		if tile and visibleNow[tile] and tile.explored and tile.target > T_EXPLORED + 0.1 then
+		if ally then
+			state = "seen"
+		elseif tile and visibleNow[tile] and tile.explored and tile.target > T_EXPLORED + 0.1 then
 			state = "seen"
 		else
 			for _, eye in eyes do
@@ -480,10 +529,14 @@ local function updateHiddenObjects(visibleNow, eyes)
 			obj:SetAttribute("FogState", state)                 -- set on this computer only; not shared
 			obj:SetAttribute("VisibleToMe", state ~= "hidden")
 			for _, d in obj:GetDescendants() do
-				if d:IsA("BasePart") then
+				if d:IsA("BasePart") or d:IsA("Decal") then
 					d.LocalTransparencyModifier = state == "hidden" and 1 or 0
 				elseif d:IsA("Light") then
 					d.Enabled = state ~= "hidden"
+				elseif d:IsA("Humanoid") then
+					-- a player's name tag would give them away
+					d.DisplayDistanceType = state == "hidden" and Enum.HumanoidDisplayDistanceType.None
+						or Enum.HumanoidDisplayDistanceType.Viewer
 				end
 			end
 		end
@@ -614,18 +667,39 @@ end
 -- than every update, to save work, and the last result is reused in between.
 local teamSight = {}   -- [teammate Player] = { seen = {...}, at = os.clock() }
 
+-- Teammates whose eyes count: everyone on your side who has a character
 local function teammates()
-	local myRole = player:GetAttribute("Role")
+	local mySide = sideOf(player:GetAttribute("Role"))
 	local list = {}
-	if not myRole then return list end
+	if not mySide then return list end
 	for _, other in Players:GetPlayers() do
-		if other ~= player and other:GetAttribute("Role") == myRole then table.insert(list, other) end
+		if other ~= player and sideOf(other:GetAttribute("Role")) == mySide then table.insert(list, other) end
+	end
+	return list
+end
+
+-- Bots whose eyes count for your side: the AI monsters (bodies with no player) for the monster
+-- side, the survivor bots for survivors
+local function botMonsters()
+	local list = {}
+	local side = sideOf(player:GetAttribute("Role"))
+	if side == "monsters" then
+		for _, model in CollectionService:GetTagged("Monster") do
+			if not model:GetAttribute("OwnerUserId") then table.insert(list, model) end
+		end
+	elseif side == "survivors" then
+		for _, model in CollectionService:GetTagged("SurvivorBot") do
+			local root = model:FindFirstChild("HumanoidRootPart")
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			if root and humanoid and humanoid.Health > 0 then table.insert(list, root) end
+		end
 	end
 	return list
 end
 
 -- RELIC WATCH RINGS: once your team has spotted a relic (the server decides, see Objectives),
--- you keep seeing all around it until it's collected. Each ring's sight is worked out once and
+-- you keep seeing all around it until it's collected. The Maze Master watches every relic from
+-- the start. Each ring's sight is worked out once and
 -- reused until a door starts or stops moving.
 local relicSight = {}  -- [relic info Configuration] = { seen = {...}, maze = maze }
 
@@ -633,9 +707,13 @@ local function relicRings()
 	local list = {}
 	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
 	local folder = status and status:FindFirstChild("Relics")
-	if not folder or player:GetAttribute("Role") ~= Config.Roles.Survivor then return list end
+	local role = player:GetAttribute("Role")
+	local mazeMaster = role == Config.Roles.MazeMaster
+	if not folder or (role ~= Config.Roles.Survivor and not mazeMaster) then return list end
 	for _, info in folder:GetChildren() do
-		if info:GetAttribute("Discovered") and not info:GetAttribute("Collected") then
+		-- survivors: once their team has spotted it; the Maze Master: every relic, from the start
+		-- (false relics included)
+		if (mazeMaster or info:GetAttribute("Discovered")) and not info:GetAttribute("Collected") then
 			local cached = relicSight[info]
 			if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
 				local c = info:GetAttribute("Center")
@@ -648,6 +726,66 @@ local function relicRings()
 	end
 	for info in relicSight do
 		if not info.Parent then relicSight[info] = nil end   -- an old match's relic
+	end
+	return list
+end
+
+-- THE MONSTER SIDE'S FIXED EYES: all round every ward, and every crushing wall's cell plus
+-- Config.CRUSHER_VISION studs past it each way (a full circle from its middle: the corridor's
+-- walls cut it down to the corridor). Worked out once each, and again when a door moves.
+local fixedSight = {}  -- [ward model or crusher key] = { seen = {...}, maze, doors }
+
+local function fixedEye(keyObj, center, radius, list)
+	local cached = fixedSight[keyObj]
+	if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
+		cached = { seen = sightFrom(Vector3.new(center.X, floorY + EYE_HEIGHT, center.Z), nil, radius),
+			maze = maze, doors = doorVersion }
+		fixedSight[keyObj] = cached
+	end
+	cached.used = true
+	table.insert(list, cached.seen)
+end
+
+local function monsterSideEyes()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
+	for _, c in fixedSight do c.used = false end
+	for _, ward in CollectionService:GetTagged("WardEye") do
+		local center = ward:GetAttribute("Center")
+		if center and ward:IsDescendantOf(maze) then fixedEye(ward, center, Config.WARD_VISION_RADIUS, list) end
+	end
+	-- crushing walls: their slabs carry their resting spot ("Home"); the pair's middle is the cell
+	local S = maze:GetAttribute("CellSize")
+	local sums = {}
+	for _, c in maze:GetChildren() do
+		local id, home = c:GetAttribute("Id"), c:GetAttribute("Home")
+		if c.Name == "Crusher" and id and home then
+			sums[id] = sums[id] or { p = Vector3.zero, n = 0 }
+			sums[id].p += home.Position
+			sums[id].n += 1
+		end
+	end
+	for id, sum in sums do
+		fixedEye("crusher" .. id, sum.p / sum.n, S / 2 + Config.CRUSHER_VISION, list)
+	end
+	for k, c in fixedSight do
+		if not c.used then fixedSight[k] = nil end   -- a ward that's gone, or an old maze's
+	end
+	return list
+end
+
+-- Haunted survivors (players and bots): for the monster side, their cones count as sight
+local function hauntedSurvivors()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
+	local now = workspace:GetServerTimeNow()
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor and (other:GetAttribute("HauntedUntil") or 0) > now and other.Character then
+			table.insert(list, other.Character)
+		end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do
+		if (bot:GetAttribute("HauntedUntil") or 0) > now then table.insert(list, bot) end
 	end
 	return list
 end
@@ -684,9 +822,27 @@ local function showCapturedRooms()
 	end
 end
 
+-- THE MAZE MASTER knows the whole layout: every tile is on their map
+local mapShownFor = nil
+local function showWholeMap()
+	if player:GetAttribute("Role") ~= Config.Roles.MazeMaster or mapShownFor == maze then return end
+	mapShownFor = maze
+	for x = 1, count do
+		for z = 1, count do
+			local tile = tiles[x][z]
+			if not tile.explored then
+				reveal(tile)
+				setTarget(tile, T_EXPLORED)
+			end
+		end
+	end
+	table.clear(newlyRevealed)   -- nothing left to fringe or fill
+end
+
 local function updateVisibility()
 	if not ready or not (maze and maze.Parent) then return end
 	showCapturedRooms()
+	showWholeMap()
 	-- Your own sight, every update (if you have a character: while respawning or out of lives you
 	-- see only through your teammates)
 	local eye, facing = eyesOf(player.Character)
@@ -713,8 +869,44 @@ local function updateVisibility()
 			teamSight[mate] = nil
 		end
 	end
+	-- The AI monsters' sight (for the monster side), refreshed the same way
+	for _, model in botMonsters() do
+		current[model] = true
+		local pivot = model:GetPivot()
+		local botEye = Vector3.new(pivot.Position.X, floorY + EYE_HEIGHT, pivot.Position.Z)
+		local look = pivot.LookVector * Vector3.new(1, 0, 1)
+		local cached = teamSight[model]
+		if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
+			cached = { seen = sightFrom(botEye, look.Magnitude > 0.01 and look.Unit or Vector3.zAxis), at = now, maze = maze }
+			teamSight[model] = cached
+		end
+		for tile, t in cached.seen do
+			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
+		table.insert(eyes, botEye)
+	end
+	-- Haunted survivors' sight (for the monster side), refreshed the same way
+	for _, character in hauntedSurvivors() do
+		local hauntedEye, hauntedFacing = eyesOf(character)
+		if hauntedEye then
+			current[character] = true
+			local cached = teamSight[character]
+			if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
+				cached = { seen = sightFrom(hauntedEye, hauntedFacing), at = now, maze = maze }
+				teamSight[character] = cached
+			end
+			for tile, t in cached.seen do
+				if not merged[tile] or t > merged[tile] then merged[tile] = t end
+			end
+		end
+	end
 	for mate in teamSight do
 		if not current[mate] then teamSight[mate] = nil end   -- left the team / the game
+	end
+	for _, seen in monsterSideEyes() do
+		for tile, t in seen do
+			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
 	end
 	for _, seen in relicRings() do
 		for tile, t in seen do
@@ -722,9 +914,10 @@ local function updateVisibility()
 		end
 	end
 
-	-- Doors your team can see right now: remember how they are
+	-- Doors your team can see right now: remember how they are (the Maze Master always knows)
+	local knowsDoors = player:GetAttribute("Role") == Config.Roles.MazeMaster
 	for part, entry in FogState.doors do
-		local seen = false
+		local seen = knowsDoors
 		for _, tile in entry.tiles do
 			if merged[tile] then seen = true break end
 		end
