@@ -6,7 +6,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 ## Working on this project
 
-**Status (2026-11-19):** Phases 0, 1 and 2 are done. Phase 3 (human roles and the Maze Master) is built on the `phase-3` branch and waits on a real 3 v 2 + 1 test with people before it's ticked off and merged. Don't start Phase 4 until the user says to. The README has how to play and what every script does.
+**Status (2026-11-20):** Phases 0-3 are done (Phase 3 merged with its full six-human match still to be played). Phase 4 (heroes and abilities) is next. Don't start it until the user says to. The game is published privately as "Cruel Maze 0.1"; once Studio has it open from Roblox, saves go there, so use File > Save to File over `CruelMaze.rbxl` before committing (the user works from the local file). The README has how to play and what every script does.
 
 **Files and Studio**
 - The place is `CruelMaze.rbxl` (renamed from `Place2.rbxl`). Scripts are mirrored between Studio and the repo folders by Studio's **Script Sync**: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript. In Script Sync, each service (ServerScriptService, ServerStorage, ReplicatedStorage, StarterPlayerScripts, StarterGui › MazeHUD) is linked at the **repo root**. Linking a service to its own folder nests a duplicate folder inside it.
