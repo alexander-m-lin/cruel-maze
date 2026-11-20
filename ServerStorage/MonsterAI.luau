@@ -4,6 +4,7 @@
 --   monster:Step(dt, targets)   -- every frame; targets = the players it may hunt
 --   monster:Stun(seconds)       -- can't move or catch for a while ("StunnedUntil" on the body)
 --   monster:Pull(to, speed)     -- dragged in a straight line to `to` (Sara's whip); -> seconds
+--   (neither while it's in the middle of a kill: monster:Killing())
 --   monster:Destroy()           -- at the end of the match
 --
 -- A match can create as many as it likes; each keeps its own state.
@@ -259,7 +260,14 @@ function MonsterAI:MazeChanged()
 end
 
 ---------------------------------------------------------------- stun and pull
+-- Mid-kill, a monster can't be stunned or pulled: the kill plays out (the survivor has already
+-- lost the life), and it's only after that that it's free to be pushed around.
+function MonsterAI:Killing()
+	return self.killUntil ~= nil and os.clock() < self.killUntil
+end
+
 function MonsterAI:Stun(seconds)
+	if self:Killing() then return end
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	if self.model then
 		self.model:SetAttribute("StunnedUntil", workspace:GetServerTimeNow() + (self.stunUntil - os.clock()))
@@ -267,6 +275,7 @@ function MonsterAI:Stun(seconds)
 end
 
 function MonsterAI:Pull(to, speed)
+	if self:Killing() then return 0 end
 	local target = Vector3.new(to.X, self.pos.Y, to.Z)
 	local distance = (target - self.pos).Magnitude
 	if distance < 0.5 then return 0 end

@@ -47,7 +47,7 @@ select are coming). Abilities aim the way you face:
   floor shows its reach); half a second in, every monster within 20 studs is stunned for 3.5
   seconds. Caught before then: no stun.
 A stunned monster can't move, lunge or catch (stars circle its head). Crushing walls stun
-monsters caught between them too.
+monsters caught between them too. A monster in the middle of a kill can't be stunned or pulled.
 
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):

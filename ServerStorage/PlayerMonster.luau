@@ -98,7 +98,13 @@ end
 
 -- Stunned: the player's character can't move (Movement reads "StunnedUntil"), and they can't
 -- lunge or catch. A lunge under way is called off.
+-- Mid-kill: can't be stunned or pulled (as for AI monsters, see MonsterAI:Killing)
+function PlayerMonster:Killing()
+	return self.killUntil ~= nil and os.clock() < self.killUntil
+end
+
 function PlayerMonster:Stun(seconds)
+	if self:Killing() then return end
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	local untilServer = workspace:GetServerTimeNow() + (self.stunUntil - os.clock())
 	self.player:SetAttribute("StunnedUntil", untilServer)
@@ -107,6 +113,7 @@ function PlayerMonster:Stun(seconds)
 end
 
 function PlayerMonster:Pull(to, speed)
+	if self:Killing() then return 0 end
 	return Pull.character(self.player, to, speed)
 end
 
