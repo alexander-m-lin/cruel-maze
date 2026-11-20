@@ -334,6 +334,7 @@ chooseSpawnEvent.OnServerEvent:Connect(function(player, roomId)
 end)
 
 local function cleanUp()
+	restartRequested = false    -- (a "New match" click during the countdown still ends that match, once it's playing)
 	for _, monster in monsters do monster:Destroy() end
 	table.clear(monsters)
 	table.clear(playerMonsters)
@@ -572,7 +573,6 @@ local function runPlaying()
 	if mazeMasterTools then mazeMasterTools.active = true end
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
-	restartRequested = false
 	local hadSurvivors = #survivorsInMatch() > 0
 	while true do
 		if #Players:GetPlayers() < Config.MIN_PLAYERS or restartRequested then return nil end
@@ -630,7 +630,14 @@ local function onPlayerAdded(player)
 		character:WaitForChild("HumanoidRootPart")
 		applySpeed(player)
 		if state == States.Countdown or state == States.Playing then
-			if player:GetAttribute("Role") == Roles.Monster then
+			if player:GetAttribute("Role") == Roles.MazeMaster then
+				-- the Maze Master has no body in the maze. (One can still turn up: a character
+				-- that was loading when they joined, finishing after the match gave them the role.)
+				task.defer(function()
+					if player.Character == character then player.Character = nil end
+					character:Destroy()
+				end)
+			elseif player:GetAttribute("Role") == Roles.Monster then
 				task.defer(setUpMonsterCharacter, player, character)
 			else
 				setUpSurvivorCharacter(character)

@@ -131,6 +131,12 @@ function SurvivorBot:animate(character)
 	animate.Parent = character      -- (scripts don't run in ServerStorage; this copy does)
 end
 
+function SurvivorBot:Destroy()
+	if self.Character then self.Character:Destroy() end
+	self.Character = nil
+	self.Parent = nil
+end
+
 ---------------------------------------------------------------- the grid
 function SurvivorBot:cellOf(p)
 	local maze = self.maze
