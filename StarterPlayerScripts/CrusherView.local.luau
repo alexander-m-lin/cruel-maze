@@ -120,3 +120,55 @@ RunService.RenderStepped:Connect(function()
 		end
 	end
 end)
+
+---------------------------------------------------------------- crushed
+-- A survivor caught between the walls (the server's "Crushed": their UserId and where they
+-- were): the body vanishes at once in a burst of dust, with a crack of bones. (The server removes
+-- the body a moment later; it doesn't use Roblox's default death, which would play its "oof".)
+-- Seen only if that spot is in view.
+local Debris = game:GetService("Debris")
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Sounds = require(ReplicatedStorage:WaitForChild("Sounds"))
+local Characters = require(ReplicatedStorage:WaitForChild("Characters"))
+
+Net.event("Crushed").OnClientEvent:Connect(function(userId, position)
+	local character = Characters.of(userId)
+	if character then
+		for _, d in character:GetDescendants() do
+			if d:IsA("BasePart") or d:IsA("Decal") then
+				d.LocalTransparencyModifier = 1
+			elseif d:IsA("Humanoid") then
+				d.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			end
+		end
+	end
+	if not inView(position) then return end
+	local part = Instance.new("Part")
+	part.Anchored, part.CanCollide, part.CanQuery, part.CanTouch = true, false, false, false
+	part.Transparency = 1
+	part.Size = Vector3.one
+	part.Position = position
+	part.Parent = workspace
+	local dust = Instance.new("ParticleEmitter")
+	dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	dust.Color = ColorSequence.new(DUST_COLOR)
+	dust.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.5), NumberSequenceKeypoint.new(1, 4.5) })
+	dust.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+	dust.Lifetime = NumberRange.new(0.6, 1.1)
+	dust.Speed = NumberRange.new(6, 14)
+	dust.SpreadAngle = Vector2.new(180, 180)
+	dust.Drag = 3
+	dust.Rate = 0
+	dust.Parent = part
+	dust:Emit(30)
+	local def = Sounds.KillCrack
+	if def then
+		local s = Instance.new("Sound")
+		s.SoundId = "rbxassetid://" .. def.id
+		s.Volume = def.volume or 1
+		if def.range then s.RollOffMaxDistance = def.range end
+		s.Parent = part
+		s:Play()
+	end
+	Debris:AddItem(part, 2)
+end)

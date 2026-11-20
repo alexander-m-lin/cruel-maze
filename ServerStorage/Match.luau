@@ -266,6 +266,23 @@ local function playKill(player, character)
 	end)
 end
 
+-- CRUSHED (a crushing wall): held where they stand, then the body is gone. Not by setting their
+-- health to 0: that plays Roblox's default death sound (the "oof"). Players' computers draw it
+-- (CrusherView: a burst of dust and a crack, and the body hidden at once).
+local crushedEvent = Net.event("Crushed")            -- server -> everyone: (UserId, position)
+local function playCrushed(player, character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	player:SetAttribute("Seized", true)
+	if root then
+		root.Anchored = true
+		crushedEvent:FireAllClients(player.UserId, root.Position)
+	end
+	task.delay(0.4, function()
+		player:SetAttribute("Seized", nil)
+		if character.Parent then character:Destroy() end
+	end)
+end
+
 local function onCaught(player, monster)
 	if state ~= States.Playing then return end
 	caughtAt[player] = os.clock()
@@ -275,9 +292,8 @@ local function onCaught(player, monster)
 	local character = player.Character
 	if monster and character then
 		playKill(player, character)
-	else
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid then humanoid.Health = 0 end
+	elseif character then
+		playCrushed(player, character)
 	end
 
 	-- Once the kill has played out: out of the match, or choose where to come back (if they
