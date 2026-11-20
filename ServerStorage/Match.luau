@@ -27,6 +27,8 @@
 --   monster that's killing them: their controls stop), Killing (a monster player mid-kill: can't
 --   move), DevRole (Studio only: the role they asked for in the dev panel)
 --
+-- Survivor bots fill empty survivor slots (Config.SURVIVOR_BOTS); they pass for players (SurvivorBot).
+--
 -- Monsters played by people: an invisible character dressed in the monster body (PlayerMonster).
 -- Empty monster slots get AI monsters (MonsterAI). Monster characters are in the "MonsterPlayers"
 -- collision group, which collides with the spawn rooms' barriers ("Wards"); nothing else does.
@@ -42,6 +44,7 @@ local Net = require(ReplicatedStorage.Net)
 local MazeBuilder = require(ServerStorage.MazeBuilder)
 local MonsterAI = require(ServerStorage.MonsterAI)
 local PlayerMonster = require(ServerStorage.PlayerMonster)
+local SurvivorBot = require(ServerStorage.SurvivorBot)
 local Objectives = require(ServerStorage.Objectives)
 local Doors = require(ServerStorage.Doors)
 local Crushers = require(ServerStorage.Crushers)
@@ -67,12 +70,17 @@ local devEvent = Net.event("DevMatch")               -- Studio only: { "role", r
 local toolEvent = Net.event("MazeMasterTool")        -- Maze Master -> server: use a tool (tool, target)
 local toolResultEvent = Net.event("MazeMasterResult") -- server -> Maze Master: (ok, message)
 local falseRelicEvent = Net.event("FalseRelicSprung") -- server -> survivor: you clicked a false relic
+local falseRelicsEvent = Net.event("FalseRelics")     -- server -> monster side only: the ids of the false relics
 
--- Spawn-room barriers stop monster players and nothing else; crushing walls stop everyone but them
+-- Spawn-room barriers stop monster players and nothing else; crushing walls stop everyone but them.
+-- Monster players pass through survivors (players and bots): they catch with the lunge, and a
+-- solid monster shoving into a survivor - a bot especially - could fling it into the air.
+PhysicsService:RegisterCollisionGroup("Survivors")
 PhysicsService:RegisterCollisionGroup("MonsterPlayers")
 PhysicsService:RegisterCollisionGroup("Wards")
 PhysicsService:RegisterCollisionGroup("Crushers")
 PhysicsService:CollisionGroupSetCollidable("Crushers", "MonsterPlayers", false)
+PhysicsService:CollisionGroupSetCollidable("Survivors", "MonsterPlayers", false)
 for _, group in PhysicsService:GetRegisteredCollisionGroups() do
 	if group.name ~= "MonsterPlayers" and group.name ~= "Wards" then
 		PhysicsService:CollisionGroupSetCollidable("Wards", group.name, false)
@@ -86,6 +94,7 @@ local maze = nil         -- this match's maze (see MazeBuilder.build)
 local objectives = nil   -- this match's relics and spawn rooms (see Objectives)
 local monsters = {}      -- this match's monsters: MonsterAI (bots) and PlayerMonster objects
 local playerMonsters = {} -- [player] = their PlayerMonster
+local bots = {}           -- this match's survivor bots (SurvivorBot: they pass for players)
 local restartRequested = false   -- Studio dev panel: end this match now
 local doors = nil        -- this match's doors (see Doors)
 local crushers = nil     -- this match's crushing walls (see Crushers)
@@ -119,6 +128,9 @@ local function survivorsInMatch()
 		if player:GetAttribute("Role") == Roles.Survivor and not player:GetAttribute("Out") then
 			table.insert(list, player)
 		end
+	end
+	for _, bot in bots do
+		if not bot:GetAttribute("Out") then table.insert(list, bot) end
 	end
 	return list
 end
@@ -154,6 +166,7 @@ local SPAWN_RADIUS = 5
 local SPAWN_SLOTS = 6
 local function spawnSpot(player, room)
 	local list = Players:GetPlayers()
+	for _, bot in bots do table.insert(list, bot) end
 	table.sort(list, function(a, b) return a.UserId < b.UserId end)   -- same order on every call
 	local index = (table.find(list, player) or 1) - 1
 	local angle = (index % SPAWN_SLOTS) / SPAWN_SLOTS * math.pi * 2
@@ -168,6 +181,16 @@ local function placeInSpawnRoom(player)
 	if not (character and maze) then return end
 	local room = objectives and objectives:CapturedRoom(player:GetAttribute("SpawnRoom") or 1) or maze.rooms[1]
 	character:PivotTo(spawnSpot(player, room))
+end
+
+-- A survivor's character (a player's or a bot's): in the "Survivors" collision group, which monster
+-- players pass through. Parts added later (accessories loading) join it too.
+local function setUpSurvivorCharacter(character)
+	local function join(d)
+		if d:IsA("BasePart") then d.CollisionGroup = "Survivors" end
+	end
+	for _, d in character:GetDescendants() do join(d) end
+	character.DescendantAdded:Connect(join)
 end
 
 -- A monster player's character: invisible (the monster body is drawn in its place), no name tag,
@@ -195,6 +218,10 @@ local function respawn(player)
 	player:SetAttribute("Respawning", nil)
 	player:SetAttribute("RespawnBy", nil)
 	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the room
+	if player.isBot then                                  -- (bots have no CharacterAdded)
+		setUpSurvivorCharacter(player.Character)
+		placeInSpawnRoom(player)
+	end
 end
 
 -- THE KILL (see MonsterAI.KILL for the timing): the monster lifts its victim overhead, holds them
@@ -222,7 +249,7 @@ local function onCaught(player, monster)
 	caughtAt[player] = os.clock()
 	local lives = math.max(0, (player:GetAttribute("Lives") or 1) - 1)
 	player:SetAttribute("Lives", lives)
-	caughtEvent:FireClient(player, lives)
+	if not player.isBot then caughtEvent:FireClient(player, lives) end
 	local character = player.Character
 	if monster and character then
 		playKill(player, character)
@@ -241,6 +268,18 @@ local function onCaught(player, monster)
 		end
 		player:SetAttribute("Respawning", true)
 		player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
+		if player.isBot then
+			-- bots pick a captured room at random, straight away
+			local rooms = {}
+			for _, room in maze.rooms do
+				if room.captured then table.insert(rooms, room.id) end
+			end
+			player:SetAttribute("SpawnRoom", rooms[math.random(#rooms)] or 1)
+			task.delay(0.5, function()
+				if state == States.Playing then respawn(player) end
+			end)
+			return
+		end
 		task.delay(Config.RESPAWN_CHOICE_TIME, function()
 			if state == States.Playing then respawn(player) end
 		end)
@@ -298,6 +337,8 @@ local function cleanUp()
 	for _, monster in monsters do monster:Destroy() end
 	table.clear(monsters)
 	table.clear(playerMonsters)
+	for _, bot in bots do bot:Destroy() end
+	table.clear(bots)
 	if objectives then objectives:Destroy() end
 	objectives = nil
 	if doors then doors:Destroy() end
@@ -339,8 +380,8 @@ local function monsterStartCell(taken)
 end
 
 -- ROLES: 3 survivors, 2 monsters, 1 Maze Master (Config.ROLE_SLOTS), handed out at random. In
--- Studio, a role picked in the dev panel (DevRole) comes first. There's always at least one
--- survivor, since survivors have no bots yet; anyone beyond six players is a survivor too.
+-- Studio, a role picked in the dev panel (DevRole) comes first. Without survivor bots, there's
+-- always at least one survivor; anyone beyond six players is a survivor too.
 -- Returns { [player] = role }
 local function assignRoles()
 	local free = table.clone(Config.ROLE_SLOTS)
@@ -359,7 +400,7 @@ local function assignRoles()
 		local j = math.random(i)
 		rest[i], rest[j] = rest[j], rest[i]
 	end
-	local hasSurvivor = false
+	local hasSurvivor = Config.SURVIVOR_BOTS   -- (with bots there are always survivors)
 	for _, role in roles do if role == Roles.Survivor then hasSurvivor = true end end
 	for _, player in rest do
 		local role
@@ -423,12 +464,21 @@ local function runCountdown()
 		onCapture = function(player, room)
 			noticeEvent:FireAllClients(("%s captured a spawn room!"):format(player.DisplayName))
 		end,
+		-- a false relic was placed: tell the monster side (only them) which relics are false
+		onFalseRelicPlaced = function()
+			local ids = {}
+			for _, relic in objectives.fakes do table.insert(ids, relic.id) end
+			for _, player in Players:GetPlayers() do
+				local role = player:GetAttribute("Role")
+				if role == Roles.Monster or role == Roles.MazeMaster then falseRelicsEvent:FireClient(player, ids) end
+			end
+		end,
 		-- a survivor clicked a false relic: revealed to the monster side, and slowed
 		onFalseRelic = function(player, relic)
 			local now = workspace:GetServerTimeNow()
 			player:SetAttribute("RevealedUntil", now + Config.FALSE_RELIC_REVEAL_TIME)
 			player:SetAttribute("SlowUntil", now + Config.FALSE_RELIC_SLOW_TIME)
-			falseRelicEvent:FireClient(player)
+			if not player.isBot then falseRelicEvent:FireClient(player) end
 		end,
 	})
 
@@ -468,13 +518,33 @@ local function runCountdown()
 		table.insert(monsters, monster)
 	end
 	-- with no Maze Master player, an AI works the doors
-	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch, ai = mazeMaster == nil })
-	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end })
+	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch, ai = mazeMaster == nil,
+		bots = function() return bots end })
+	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end, survivors = survivorsInMatch })
 	if mazeMaster then
 		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives })
 	end
 
+	-- survivor bots for the empty survivor slots
+	if Config.SURVIVOR_BOTS then
+		local humans = 0
+		for _, role in roles do if role == Roles.Survivor then humans += 1 end end
+		for i = 1, math.max(0, Config.ROLE_SLOTS.Survivor - humans) do
+			local bot = SurvivorBot.new(maze, objectives, i)
+			table.insert(bots, bot)
+		end
+	end
+
 	setState(States.Countdown, Config.COUNTDOWN)
+	for _, bot in bots do
+		bot:SetAttribute("Role", Roles.Survivor)
+		bot:SetAttribute("Lives", Config.LIVES)
+		bot:SetAttribute("SpawnRoom", 1)
+		bot:SetAttribute("BaseSpeed", 0)
+		bot:LoadCharacter()
+		setUpSurvivorCharacter(bot.Character)
+		placeInSpawnRoom(bot)
+	end
 	for player, role in roles do
 		player:SetAttribute("Role", role)
 		player:SetAttribute("Lives", role == Roles.Survivor and Config.LIVES or nil)
@@ -497,6 +567,7 @@ local function runPlaying()
 	setState(States.Playing, Config.MATCH_TIME)
 	local endsAt = os.clock() + Config.MATCH_TIME
 	for _, monster in monsters do monster.active = true end
+	for _, bot in bots do bot:SetAttribute("BaseSpeed", Config.PLAYER_SPEED) end
 	doors.running = true
 	if mazeMasterTools then mazeMasterTools.active = true end
 	for _, player in Players:GetPlayers() do applySpeed(player) end
@@ -562,6 +633,7 @@ local function onPlayerAdded(player)
 			if player:GetAttribute("Role") == Roles.Monster then
 				task.defer(setUpMonsterCharacter, player, character)
 			else
+				setUpSurvivorCharacter(character)
 				task.defer(placeInSpawnRoom, player)
 			end
 		end
@@ -619,6 +691,7 @@ function Match.run()
 		if doors then doors:Step(dt) end
 		if crushers then crushers:Step() end
 		if mazeMasterTools then mazeMasterTools:Step(dt) end
+		for _, bot in bots do bot:Step(dt, monsters) end
 		if #monsters == 0 then return end
 		local targets = huntable()
 		for _, monster in monsters do monster:Step(dt, targets) end

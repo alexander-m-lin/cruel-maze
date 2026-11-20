@@ -8,6 +8,8 @@
 --   Each button shows its cost and, while it recharges, how long is left.
 --   Outlines in the world: with Door picked, every door (purple = ready, grey = resting or moving);
 --   with Crushing wall picked, every crushing wall's cell. The one nearest the mouse is brighter.
+--   With False relic picked, the cell under the mouse lights up: green = a false relic can go
+--   there, red = it can't (amber = it could, but you can't afford one or have none left).
 --
 -- Clicks and taps both work (no hover needed). The server checks everything (MazeMaster) and
 -- answers with a short message, shown above the bar.
@@ -272,10 +274,75 @@ local function crusherMarker(id, center)
 	return m
 end
 
+-- FALSE RELIC PLACEMENT: the same rule the server uses (Objectives:CanPlaceFalseRelic): 2-3 ways
+-- out of the cell, not in or next to a spawn room, not next to another relic. Ways out are found
+-- with short rays from the cell's middle, so a shut door counts as a wall, as on the server.
+local GREEN, RED, AMBER = Color3.fromRGB(80, 230, 120), Color3.fromRGB(235, 60, 50), Color3.fromRGB(240, 180, 60)
+local wallRays = RaycastParams.new()
+wallRays.FilterType = Enum.RaycastFilterType.Include
+local placeMarker = nil
+
+local function cellAt(point, maze)
+	local S, n = maze:GetAttribute("CellSize"), maze:GetAttribute("Cells")
+	local half = n * S / 2
+	local x, z = math.floor((point.X + half) / S) + 1, math.floor((point.Z + half) / S) + 1
+	if x < 1 or z < 1 or x > n or z > n then return nil end
+	return x, z, Vector3.new((x - 0.5) * S - half, maze:GetAttribute("FloorY"), (z - 0.5) * S - half), S
+end
+
+local function canPlaceAt(center, S, maze)
+	wallRays.FilterDescendantsInstances = { maze }
+	local eye = center + Vector3.new(0, 3, 0)
+	local open = 0
+	for _, d in { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis } do
+		if not workspace:Raycast(eye, d * (S / 2 + 1), wallRays) then open += 1 end
+	end
+	if open < 2 or open > 3 then return false end
+	local function near(p, reach)
+		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
+	end
+	local rooms = match:FindFirstChild("SpawnRooms")
+	for _, info in rooms and rooms:GetChildren() or {} do
+		if near(info:GetAttribute("Center"), 1.5 * S + 0.1) then return false end
+	end
+	local relics = match:FindFirstChild("Relics")
+	for _, info in relics and relics:GetChildren() or {} do
+		if not info:GetAttribute("Collected") and near(info:GetAttribute("Center"), S + 0.1) then return false end
+	end
+	return true
+end
+
+local function showPlacement(point)
+	local maze = workspace:FindFirstChild("Maze")
+	local x, z, center, S
+	if maze and point then x, z, center, S = cellAt(point, maze) end
+	if not x then
+		if placeMarker then placeMarker.Transparency = 1 end
+		return
+	end
+	if not placeMarker or not placeMarker.Parent then
+		placeMarker = Instance.new("Part")
+		placeMarker.Name = "FalseRelicPlacement"
+		placeMarker.Anchored = true
+		placeMarker.CanCollide, placeMarker.CanQuery, placeMarker.CanTouch = false, false, false
+		placeMarker.Material = Enum.Material.Neon
+		placeMarker.CastShadow = false
+		placeMarker.Parent = workspace
+	end
+	local affordable = (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS.FalseRelic.cost
+		and (player:GetAttribute("FalseRelicsLeft") or 0) > 0
+	local ok = canPlaceAt(center, S, maze)
+	placeMarker.Color = not ok and RED or (affordable and GREEN or AMBER)
+	placeMarker.Size = Vector3.new(S - 3, 0.2, S - 3)
+	placeMarker.CFrame = CFrame.new(center + Vector3.new(0, 0.2, 0))
+	placeMarker.Transparency = 0.55
+end
+
 RunService.RenderStepped:Connect(function()
 	local active = isMazeMaster()
 	gui.Enabled = active
 	for _, box in outlines do box.Visible = false end
+	if placeMarker then placeMarker.Transparency = 1 end
 	if not active then
 		if markerFolder then markerFolder:Destroy() markerFolder = nil end
 		return
@@ -314,6 +381,8 @@ RunService.RenderStepped:Connect(function()
 				outline(ghost, (resting or moving) and GREY or (part == hover and PURPLE_BRIGHT or PURPLE), part == hover)
 			end
 		end
+	elseif selected == "FalseRelic" then
+		showPlacement(point)
 	elseif selected == "Crusher" then
 		local hover = point and nearestCrusher(point)
 		for id, c in crushersList() do

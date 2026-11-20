@@ -191,6 +191,9 @@ local function canSeeFrom(self, position, look, relic)
 	end
 	return dist < 0.6 or workspace:Raycast(eye, offset - offset.Unit * 0.5, self.rayParams) == nil
 end
+function Objectives:CanSee(position, look, relic)   -- (for survivor bots)
+	return canSeeFrom(self, position, look, relic)
+end
 local function canSee(self, root, relic)
 	return canSeeFrom(self, root.Position, root.CFrame.LookVector, relic)
 end
@@ -316,6 +319,7 @@ function Objectives:AddFalseRelic(x, z)
 	relic.info = info
 	self.relicAt[key(x, z)] = relic
 	table.insert(self.fakes, relic)
+	if self.callbacks.onFalseRelicPlaced then self.callbacks.onFalseRelicPlaced(relic) end
 	return relic
 end
 

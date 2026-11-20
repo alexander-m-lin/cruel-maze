@@ -264,6 +264,13 @@ local function drawDots(half)
 			dot(monster:GetPivot().Position, DOT_MONSTER, 10, half)
 		end
 	end
+	-- survivor bots: teammates for survivors; for the monster side, enemies while seen
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do
+		local root = aliveRoot(bot)
+		if root and (not monsterSide or bot:GetAttribute("VisibleToMe")) then
+			dot(root.Position, monsterSide and DOT_MONSTER or DOT_ALLY, 8, half)
+		end
+	end
 	-- survivors: teammates for survivors; for the monster side, enemies while seen
 	for _, other in Players:GetPlayers() do
 		if other == player or other:GetAttribute("Role") ~= Roles.Survivor then continue end

@@ -9,7 +9,7 @@
 -- (Proper touch/gamepad aiming comes later, with mobile controls.)
 --
 -- SPEED: moving a different way from where you face slows you down (cone sizes and speeds are in
--- Config). The server sets your base speed (the player's "BaseSpeed" attribute, e.g. 0 during the
+-- Config; the rules themselves are in the Movement module, shared with survivor bots). The server sets your base speed (the player's "BaseSpeed" attribute, e.g. 0 during the
 -- countdown); this script scales it each frame. Your character's movement is simulated on your
 -- own computer, so setting WalkSpeed here is what takes effect.
 --
@@ -29,13 +29,12 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"))
+local Movement = require(game:GetService("ReplicatedStorage"):WaitForChild("Movement"))   -- the speed rules (shared with bots)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local match = game:GetService("ReplicatedStorage"):WaitForChild("Match")
 
-local BACKWARDS_FROM = 100   -- moving more than this many degrees from your facing plays the run backwards
 local GEM_HEIGHT = 3.4       -- how high a relic's gem sits above the floor (see MazeBuilder)
 
 -- The relic you're collecting right now, if any: its gem's position
@@ -48,34 +47,6 @@ local function collectingAt()
 		end
 	end
 	return nil
-end
-
--- Play the walk/run animation forwards or backwards. Roblox's Animate script keeps setting its
--- speed (always positive) as you speed up and slow down, so this flips the sign every frame.
-local RUN_TRACKS = { RunAnim = true, WalkAnim = true }
-local function setRunBackwards(humanoid, backwards)
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then return end
-	for _, track in animator:GetPlayingAnimationTracks() do
-		if RUN_TRACKS[track.Name] or (track.Animation and RUN_TRACKS[track.Animation.Name]) then
-			local speed = track.Speed
-			if (backwards and speed > 0) or (not backwards and speed < 0) then track:AdjustSpeed(-speed) end
-		end
-	end
-end
-
--- Speed multiplier for moving at `angle` degrees away from where you face:
--- full inside the front cone, slightly slower on the sides, much slower backwards.
--- Each change blends in over Config.FACING_BLEND degrees just past the zone's edge, so each zone
--- keeps its full speed right up to its edge (a sideways strafe at 90° gets the side speed).
-local function facingSpeed(angle)
-	local frontEdge = Config.FACING_FULL_CONE / 2                 -- 50°
-	local sideEdge = frontEdge + Config.FACING_SIDE_CONE          -- 90°
-	local blend = Config.FACING_BLEND
-	local toSide = math.clamp((angle - frontEdge) / blend, 0, 1)
-	local toBack = math.clamp((angle - sideEdge) / blend, 0, 1)
-	local side = 1 + (Config.FACING_SIDE_SPEED - 1) * toSide
-	return side + (Config.FACING_BACK_SPEED - side) * toBack
 end
 
 local MOUSE_INPUTS = {
@@ -112,9 +83,8 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root) or humanoid.Health <= 0 then return end
-	-- held by a monster, killing someone (monster players), or crouched to lunge: can't move
 	if player:GetAttribute("Seized") or player:GetAttribute("Killing") or player:GetAttribute("Lunging") then
-		humanoid.WalkSpeed = 0
+		humanoid.WalkSpeed = 0              -- (Movement says the same; no turning to face either)
 		return
 	end
 
@@ -134,24 +104,8 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 		end
 	end
 
-	-- Speed: scale the server's base speed by how far your movement is from your facing
-	local base = player:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED
-	local move = humanoid.MoveDirection * Vector3.new(1, 0, 1)
-	local multiplier = 1
-	local angle = 0
-	if move.Magnitude > 0.1 then
-		local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
-		angle = math.deg(math.acos(math.clamp(move.Unit:Dot(look.Unit), -1, 1)))
-	end
-	if relic then
-		multiplier = Config.FACING_BACK_SPEED
-	elseif aimWithMouse and move.Magnitude > 0.1 then
-		multiplier = facingSpeed(angle)
-	end
-	-- tricked by a false relic: slowed for a while
-	if (player:GetAttribute("SlowUntil") or 0) > workspace:GetServerTimeNow() then
-		multiplier *= Config.FALSE_RELIC_SLOW
-	end
-	humanoid.WalkSpeed = base * multiplier
-	setRunBackwards(humanoid, angle > BACKWARDS_FROM)
+	-- Speed: the shared rules (Movement), with your facing coming from the mouse
+	local speed, angle = Movement.walkSpeed(player, humanoid, root, { aiming = aimWithMouse, collecting = relic ~= nil })
+	humanoid.WalkSpeed = speed
+	Movement.setRunBackwards(humanoid, angle > Movement.BACKWARDS_FROM)
 end)

@@ -9,6 +9,7 @@
 -- wrist so the hand points at the target, on top of whatever animation is playing.
 
 local Players = game:GetService("Players")
+local Characters = require(game:GetService("ReplicatedStorage"):WaitForChild("Characters"))
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -86,9 +87,7 @@ RunService.Heartbeat:Connect(function()
 	local wanted = {}
 	if relics and maze then
 		for _, info in relics:GetChildren() do
-			local userId = info:GetAttribute("Collector")
-			local collector = userId and Players:GetPlayerByUserId(userId)
-			local character = collector and collector.Character
+			local character = Characters.of(info:GetAttribute("Collector"))   -- a player or a survivor bot
 			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
 			local gem = relicModel and relicModel:FindFirstChild("Gem")
 			if character and gem and not info:GetAttribute("Collected") then

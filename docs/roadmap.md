@@ -116,6 +116,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
   - *False relics:* placed on an empty junction cell (not next to a real relic or spawn room). Indistinguishable from a real relic except that its red eyes go out for a split second every ~5 s, so careful players can spot one. A survivor near one (~15 studs, in line of sight) is revealed to the monster team; one who clicks it is revealed for 5 s and slowed to ~40% for 3 s, sees a red screen border and "FALSE RELIC", and the false relic is used up. At most 2 per match in total.
   - *Crushing walls:* built into the generated maze like doors (pairs of walls along straight corridor cells, looking like normal walls). The Maze Master triggers one: ~2 s rumble (like doors), a ~0.3 s slam, then ~1 s to slide back. Survivors caught between lose a life; monsters are unaffected. Letting the Maze Master place them can be explored later.
 
+**Added from testing (2026-11-19):** basic survivor bots pulled forward from Phase 5, so matches have survivors to hunt with few people (roam, collect relics in sight, flee to a spawn room on seeing a monster); Maze Master mouse-wheel zoom; a placement marker for false relics; false relics glow red for the monster side; the Maze Master has a vision ring round every relic from the start (as survivors do once they've spotted one).
+
 **Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.
 
 ### [ ] 4. Heroes and abilities

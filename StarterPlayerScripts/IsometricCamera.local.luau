@@ -81,7 +81,10 @@ local lastFocus = nil
 -- THE MAZE MASTER has no character: their camera pans freely over the maze. WASD or the arrow
 -- keys move it across the screen (up on the screen is +X+Z in the world, since the camera looks
 -- from the -X-Z corner). It starts over the middle and can't leave the maze.
-local PAN_SPEED = 90   -- studs per second
+local PAN_SPEED = 90   -- studs per second (scaled with zoom)
+local ZOOM_MIN, ZOOM_MAX = 0.65, 3   -- the Maze Master zooms (mouse wheel, or pinch) between these times DISTANCE
+local ZOOM_STEP = 1.15               -- per wheel notch
+local zoom = 1
 local panFocus = nil
 local panMaze = nil
 local PAN_KEYS = {
@@ -90,6 +93,18 @@ local PAN_KEYS = {
 	[Enum.KeyCode.A] = Vector2.new(-1, 0), [Enum.KeyCode.Left] = Vector2.new(-1, 0),
 	[Enum.KeyCode.D] = Vector2.new(1, 0), [Enum.KeyCode.Right] = Vector2.new(1, 0),
 }
+local function isMazeMaster() return player:GetAttribute("Role") == Config.Roles.MazeMaster end
+UserInputService.InputChanged:Connect(function(input, processed)
+	if processed or not isMazeMaster() then return end
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		zoom = math.clamp(zoom * (input.Position.Z > 0 and 1 / ZOOM_STEP or ZOOM_STEP), ZOOM_MIN, ZOOM_MAX)
+	end
+end)
+UserInputService.TouchPinch:Connect(function(_, scale, _, _, processed)
+	if processed or not isMazeMaster() then return end
+	if scale and scale > 0 then zoom = math.clamp(zoom / scale ^ 0.05, ZOOM_MIN, ZOOM_MAX) end
+end)
+
 local function mazeMasterFocus(dt)
 	local maze = workspace:FindFirstChild("Maze")
 	if not maze then return panFocus end
@@ -110,7 +125,7 @@ local function mazeMasterFocus(dt)
 		local right = camera.CFrame.RightVector * Vector3.new(1, 0, 1)
 		local up = camera.CFrame.UpVector * Vector3.new(1, 0, 1)
 		local move = (right.Unit * input.X + up.Unit * input.Y)
-		panFocus += move.Unit * PAN_SPEED * dt
+		panFocus += move.Unit * PAN_SPEED * zoom * dt
 		panFocus = Vector3.new(math.clamp(panFocus.X, -half, half), floorY, math.clamp(panFocus.Z, -half, half))
 	end
 	return panFocus
@@ -136,7 +151,7 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 	if not focus then return end
 	lastFocus = focus
 
-	local camPos = focus + DIRECTION * DISTANCE
+	local camPos = focus + DIRECTION * DISTANCE * (isMazeMaster() and zoom or 1)
 	camera.CFrame = CFrame.lookAt(camPos, focus)
 	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 

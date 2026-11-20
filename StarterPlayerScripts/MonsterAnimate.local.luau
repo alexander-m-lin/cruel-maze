@@ -23,6 +23,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
+local Characters = require(game:GetService("ReplicatedStorage"):WaitForChild("Characters"))
 
 ---------------------------------------------------------------- tuning
 local LIMP        = 0.35   -- 0 = even steps, higher = the right foot lifts less and drags its toes
@@ -296,9 +297,10 @@ local function gripFrame(s)
 	return CFrame.fromMatrix(at, up:Cross(back), up, back)
 end
 
-local function hide(character)
+local function hide(character, hidden)
+	if hidden == nil then hidden = true end
 	for _, d in character:GetDescendants() do
-		if d:IsA("BasePart") or d:IsA("Decal") then d.LocalTransparencyModifier = 1 end
+		if d:IsA("BasePart") or d:IsA("Decal") then d.LocalTransparencyModifier = hidden and 1 or 0 end
 	end
 end
 
@@ -404,8 +406,7 @@ local function updateVictim(model, s)
 	if killStart and killStart ~= s.killSeen and s.leftHand and s.rightHand then
 		s.killSeen = killStart
 		local userId = model:GetAttribute("KillVictim")
-		local victim = userId and Players:GetPlayerByUserId(userId)
-		local character = victim and victim.Character
+		local character = Characters.of(userId)   -- a player or a survivor bot
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root then
 			character.Archivable = true
@@ -416,7 +417,14 @@ local function updateVictim(model, s)
 	local v = s.victim
 	if not v then return end
 	local k = workspace:GetServerTimeNow() - v.start
+	-- The victim is only seen if the monster holding them is: otherwise (the monster hidden in the
+	-- fog) a teammate would float up into the air on their own
+	local monsterHidden = model:GetAttribute("FogState") == "hidden"
 	if k < KILL_RIP then
+		if v.root.Parent and v.hidden ~= monsterHidden then
+			v.hidden = monsterHidden
+			hide(v.character, monsterHidden)
+		end
 		-- held: from where they stood into the hands, then wherever the hands go
 		if v.root.Parent then
 			local grip = gripFrame(s)
@@ -425,7 +433,13 @@ local function updateVictim(model, s)
 		end
 		return
 	end
-	if v.character.Parent then rip(s, v) end   -- (if the body is already gone, there's nothing to tear)
+	if v.character.Parent then
+		if monsterHidden then
+			hide(v.character)                      -- torn apart out of sight: no pieces to see
+		else
+			rip(s, v)                              -- (if the body is already gone, there's nothing to tear)
+		end
+	end
 	s.victim = nil
 end
 

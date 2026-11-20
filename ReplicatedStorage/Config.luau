@@ -107,6 +107,7 @@ Config.Roles = {
 	MazeMaster = "MazeMaster",
 }
 Config.ROLE_SLOTS = { Survivor = 3, Monster = 2, MazeMaster = 1 }
+Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (SurvivorBot)
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)

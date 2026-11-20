@@ -25,6 +25,7 @@ function Crushers.new(maze, options)
 	local self = setmetatable({}, Crushers)
 	self.maze = maze
 	self.onCrush = options.onCrush or function() end
+	self.survivors = options.survivors or function() return {} end   -- players and survivor bots
 	self.list = {}
 	for _, crusher in maze.crushers do
 		crusher.state = "idle"
@@ -66,8 +67,8 @@ end
 -- Survivors standing between the slabs once they're nearly shut
 local function crush(self, crusher)
 	local S = self.maze.S
-	for _, player in Players:GetPlayers() do
-		if player:GetAttribute("Role") ~= Config.Roles.Survivor or player:GetAttribute("Seized") then continue end
+	for _, player in self.survivors() do
+		if player:GetAttribute("Seized") then continue end
 		if crusher.crushed[player] then continue end
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")

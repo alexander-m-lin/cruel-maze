@@ -483,6 +483,9 @@ local function updateHiddenObjects(visibleNow, eyes)
 				objects[other.Character] = (other:GetAttribute("RevealedUntil") or 0) > now
 			end
 		end
+		for _, bot in CollectionService:GetTagged("SurvivorBot") do   -- survivor bots (attributes on the model)
+			objects[bot] = (bot:GetAttribute("RevealedUntil") or 0) > now
+		end
 	end
 	for _, other in Players:GetPlayers() do   -- characters that aren't enemies (any more): show them
 		local character = other.Character
@@ -666,18 +669,28 @@ local function teammates()
 	return list
 end
 
--- The AI monsters (bodies with no player), whose eyes count for the monster side
+-- Bots whose eyes count for your side: the AI monsters (bodies with no player) for the monster
+-- side, the survivor bots for survivors
 local function botMonsters()
 	local list = {}
-	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
-	for _, model in CollectionService:GetTagged("Monster") do
-		if not model:GetAttribute("OwnerUserId") then table.insert(list, model) end
+	local side = sideOf(player:GetAttribute("Role"))
+	if side == "monsters" then
+		for _, model in CollectionService:GetTagged("Monster") do
+			if not model:GetAttribute("OwnerUserId") then table.insert(list, model) end
+		end
+	elseif side == "survivors" then
+		for _, model in CollectionService:GetTagged("SurvivorBot") do
+			local root = model:FindFirstChild("HumanoidRootPart")
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			if root and humanoid and humanoid.Health > 0 then table.insert(list, root) end
+		end
 	end
 	return list
 end
 
 -- RELIC WATCH RINGS: once your team has spotted a relic (the server decides, see Objectives),
--- you keep seeing all around it until it's collected. Each ring's sight is worked out once and
+-- you keep seeing all around it until it's collected. The Maze Master watches every relic from
+-- the start. Each ring's sight is worked out once and
 -- reused until a door starts or stops moving.
 local relicSight = {}  -- [relic info Configuration] = { seen = {...}, maze = maze }
 
@@ -685,9 +698,13 @@ local function relicRings()
 	local list = {}
 	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
 	local folder = status and status:FindFirstChild("Relics")
-	if not folder or player:GetAttribute("Role") ~= Config.Roles.Survivor then return list end
+	local role = player:GetAttribute("Role")
+	local mazeMaster = role == Config.Roles.MazeMaster
+	if not folder or (role ~= Config.Roles.Survivor and not mazeMaster) then return list end
 	for _, info in folder:GetChildren() do
-		if info:GetAttribute("Discovered") and not info:GetAttribute("Collected") then
+		-- survivors: once their team has spotted it; the Maze Master: every relic, from the start
+		-- (false relics included)
+		if (mazeMaster or info:GetAttribute("Discovered")) and not info:GetAttribute("Collected") then
 			local cached = relicSight[info]
 			if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
 				local c = info:GetAttribute("Center")

@@ -48,6 +48,7 @@ function Doors.new(maze, options)
 	self.monsters = options.monsters or {}
 	self.survivors = options.survivors or function() return {} end
 	self.useAI = options.ai ~= false   -- false when a person is the Maze Master
+	self.bots = options.bots or function() return {} end   -- survivor bots (nudged like players)
 	self.list = {}
 	for _, door in maze.doors do
 		door.state = door.open and "open" or "closed"
@@ -124,7 +125,9 @@ local function nudge(self, door)
 		local delta = side * (thick / 2 + clearance) - across
 		return alongX and Vector3.new(0, 0, delta) or Vector3.new(delta, 0, 0)
 	end
-	for _, player in Players:GetPlayers() do
+	local everyone = Players:GetPlayers()
+	for _, bot in self.bots() do table.insert(everyone, bot) end
+	for _, player in everyone do
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and not root.Anchored then
