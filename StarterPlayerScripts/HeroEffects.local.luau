@@ -10,7 +10,7 @@
 --                   where it lands (dust off a wall, sparks off a monster, a glint off a relic),
 --                   then holds while she's pulled along it, or drags whoever it caught back in.
 --   FLOURISH      - the hand circles over her head and the whip swings wide from it like a
---                   lasso, faster and faster, over a faint disc showing its reach; a bright flash
+--                   lasso, out to the stun's full range, faster and faster, over a faint disc showing its reach; a bright flash
 --                   out to the edge as the stun goes out.
 --   TREASURE HUNT - a hand to the brow, a gold pulse sweeping out from her, and a pillar of light
 --                   over the relic it found (survivors only).
@@ -323,7 +323,9 @@ local function flourish(character)
 		local overhead = root.Position + Vector3.new(0, 3.2, 0)
 		w.armTarget.Position = overhead + Vector3.new(math.cos(angle) * 1.1, 0.4, math.sin(angle) * 1.1)
 		local lag = angle - 0.7
-		local reach = 4 + 3 * math.min(1, elapsed / 0.25)        -- it pays out as the spin starts
+		-- it pays out to the ability's full range as the spin starts, so the tip traces the edge of
+		-- the stun
+		local reach = 4 + (def.range - 4) * math.min(1, elapsed / 0.3)
 		w.tip.Position = overhead + Vector3.new(math.cos(lag) * reach, 1.2 + math.sin(angle * 2) * 0.3, math.sin(lag) * reach)
 		w.setCurve(1.6, -0.8)
 		warning.Position = Vector3.new(root.Position.X, warning.Position.Y, root.Position.Z)
