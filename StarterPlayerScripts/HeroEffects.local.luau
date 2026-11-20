@@ -137,7 +137,7 @@ end
 -- A whip from her hand: a lash (two beams, dark body under a lighter top, tapering) to a small
 -- tip part the caller moves, which leaves a short streak behind it. Her right arm reaches for
 -- `armTarget` (by default the tip) and her head turns to the tip.
--- Returns whip = { tip, armTarget, setCurve(a, b), cleanup() }.
+-- Returns whip = { tip, armTarget, setCurve(sag, ripple), cleanup() }.
 local function makeWhip(character)
 	local hand = handOf(character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -204,11 +204,34 @@ local function makeWhip(character)
 		look.Parent = humanoid
 		table.insert(controls, look)
 	end
-	local whip = { tip = tip, armTarget = armTarget, hand = hand, followTip = true }
-	function whip.setCurve(a, b)
-		for _, beam in beams do beam.CurveSize0, beam.CurveSize1 = a, b end
+	local whip = { tip = tip, armTarget = armTarget, hand = hand, followTip = true, sag = 0, ripple = 0 }
+	-- The lash's shape. A Beam bends toward the way each end's attachment points, and the hand
+	-- end turns with the hand, so left alone the lash would leave the hand sideways or even
+	-- backwards. Instead, every frame both ends are pointed along the line from hand to tip, then
+	-- bent on purpose: `sag` studs downward (gravity) and `ripple` studs sideways (a wave).
+	function whip.setCurve(sag, ripple)
+		whip.sag, whip.ripple = sag, ripple
 	end
+	local shaping = RunService.RenderStepped:Connect(function()
+		local from, to = a0.WorldPosition, a1.WorldPosition
+		local span = to - from
+		local length = span.Magnitude
+		if length < 0.2 then return end
+		local forward = span / length
+		local down = -Vector3.yAxis
+		down = down - forward * down:Dot(forward)
+		down = down.Magnitude > 0.01 and down.Unit or Vector3.zero
+		local side = forward:Cross(Vector3.yAxis)
+		side = side.Magnitude > 0.01 and side.Unit or Vector3.zero
+		local out = forward * length / 3                    -- the handles a third of the way along...
+		local bend = down * whip.sag + side * whip.ripple   -- ...pushed down and sideways
+		local handle0, handle1 = out + bend, out - bend * 0.5
+		a0.WorldAxis = handle0.Unit
+		a1.WorldAxis = handle1.Unit
+		for _, beam in beams do beam.CurveSize0, beam.CurveSize1 = handle0.Magnitude, handle1.Magnitude end
+	end)
 	function whip.cleanup()
+		shaping:Disconnect()
 		tip:Destroy()
 		armTarget:Destroy()
 		a0:Destroy()
@@ -228,7 +251,7 @@ local function fly(whip, to, seconds, sag, ripples)
 		local eased = 1 - (1 - k) ^ 2                 -- fast out, slowing as it arrives
 		whip.tip.Position = from:Lerp(to, eased)
 		local wave = math.sin(k * math.pi)
-		whip.setCurve(sag * wave + math.sin(k * math.pi * (ripples or 3)) * 0.8 * wave, -sag * 0.5 * wave)
+		whip.setCurve(sag * wave, math.sin(k * math.pi * (ripples or 3)) * 0.8 * wave)
 		if whip.followTip then whip.armTarget.Position = whip.tip.Position end
 		if k >= 1 then break end
 		RunService.RenderStepped:Wait()
@@ -327,7 +350,7 @@ local function flourish(character)
 		-- the stun
 		local reach = 4 + (def.range - 4) * math.min(1, elapsed / 0.3)
 		w.tip.Position = overhead + Vector3.new(math.cos(lag) * reach, 1.2 + math.sin(angle * 2) * 0.3, math.sin(lag) * reach)
-		w.setCurve(1.6, -0.8)
+		w.setCurve(2.5, math.sin(angle * 3) * 0.8)        -- drooping, with a little wave
 		warning.Position = Vector3.new(root.Position.X, warning.Position.Y, root.Position.Z)
 		if not flashed and elapsed >= def.stunAt then
 			flashed = true
