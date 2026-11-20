@@ -38,7 +38,8 @@ starts another straight away, and "Doors" opens the doors panel.
 
 **Heroes:** every survivor plays **Sara, the Cryptraider** for now (more heroes and a character
 select are coming). Abilities aim the way you face:
-- **Right mouse: Whip** (5 s). Lashes out 30 studs. A wall or relic pulls you to it; a teammate is
+- **Right mouse: Whip** (5 s). Lashes out 39 studs, catching monsters within 5 studs of it and
+  teammates within 4. A wall or relic pulls you to it; a teammate is
   pulled to you; a monster is pulled to you and stunned for 1 second.
 - **Q: Treasure hunt** (15 s). The nearest relic your team hasn't spotted (real or false) within
   110 studs is spotted, with a pillar of light over it.

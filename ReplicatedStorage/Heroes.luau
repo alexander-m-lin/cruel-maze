@@ -26,11 +26,13 @@ Heroes.list = {
 			-- you to it; a teammate is pulled to you; a monster is pulled to you and stunned.
 			Primary = {
 				id = "Whip", name = "Whip", cooldown = 5,
-				range = 30,            -- studs
+				range = 39,            -- studs
 				speed = 140,           -- studs per second the lash travels (out; it comes back faster)
 				pullSpeed = 70,        -- studs per second whoever's pulled travels
 				stun = 1,              -- seconds a monster is stunned (after the pull)
-				hitRadius = 2.5,       -- how close to the lash a character or relic must be to be hit
+				monsterHitRadius = 5,  -- how close to the lash (studs, either side) a monster must be to be hit...
+				allyHitRadius = 4,     -- ...a teammate...
+				relicHitRadius = 2.5,  -- ...or a relic (and nothing counts behind a wall)
 			},
 			-- Find the nearest relic your team hasn't spotted yet (real or false) within range:
 			-- it's spotted, as if you'd seen it.

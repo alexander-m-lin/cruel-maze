@@ -85,12 +85,15 @@ function handlers.Whip(user, root, aim, def)
 	local origin = Vector3.new(root.Position.X, maze.floorY + EYE_HEIGHT, root.Position.Z)
 	local wall = workspace:Raycast(origin, aim * def.range, match.rayParams)
 	local reach = wall and wall.Distance or def.range
-	-- where along the lash something flat at `p` sits (nil = not on it)
-	local function along(p)
+	-- where along the lash something at `p` sits, if it's within `radius` of it with no wall
+	-- between (nil = not hit)
+	local function along(p, radius)
 		local offset = Vector3.new(p.X - origin.X, 0, p.Z - origin.Z)
 		local t = offset:Dot(aim)
 		if t <= 0.5 or t > reach then return nil end
-		if (offset - aim * t).Magnitude > def.hitRadius then return nil end
+		local side = offset - aim * t
+		if side.Magnitude > radius then return nil end
+		if side.Magnitude > 0.5 and workspace:Raycast(origin + aim * t, side, match.rayParams) then return nil end
 		return t
 	end
 	local hit = { kind = wall and "wall" or "miss", t = reach }
@@ -98,17 +101,17 @@ function handlers.Whip(user, root, aim, def)
 		if t and t < hit.t then hit = { kind = kind, t = t, thing = thing } end
 	end
 	for _, monster in match.monsters do
-		if monster.pos then consider("monster", along(monster.pos), monster) end
+		if monster.pos then consider("monster", along(monster.pos, def.monsterHitRadius), monster) end
 	end
 	for _, other in match.survivors() do
 		local otherRoot = other ~= user and not other:GetAttribute("Seized") and rootOf(other)
-		if otherRoot then consider("ally", along(otherRoot.Position), other) end
+		if otherRoot then consider("ally", along(otherRoot.Position, def.allyHitRadius), other) end
 	end
 	for _, relic in match.maze.relics do
-		if not relic.collected then consider("relic", along(relic.center), relic) end
+		if not relic.collected then consider("relic", along(relic.center, def.relicHitRadius), relic) end
 	end
 	for _, relic in match.objectives.fakes do
-		consider("relic", along(relic.center), relic)
+		consider("relic", along(relic.center, def.relicHitRadius), relic)
 	end
 
 	local tip = origin + aim * hit.t
