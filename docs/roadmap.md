@@ -118,6 +118,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 
 **Added from testing (2026-11-19):** basic survivor bots pulled forward from Phase 5, so matches have survivors to hunt with few people (roam, collect relics in sight, flee to a spawn room on seeing a monster); Maze Master mouse-wheel zoom; a placement marker for false relics; false relics glow red for the monster side; the Maze Master has a vision ring round every relic from the start (as survivors do once they've spotted one).
 
+**Open (2026-11-19):** once, as a survivor, the user saw both survivor bots fly up off-screen at the same moment (a monster was nearby; not the kill animation). Not reproduced. SurvivorBot now puts a bot back if it goes more than 20 studs above or 5 below the floor, warns in the output, and sets a `Rescued` attribute. Watch for that warning in tests.
+
 **Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.
 
 ### [ ] 4. Heroes and abilities
