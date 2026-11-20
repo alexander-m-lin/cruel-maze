@@ -175,6 +175,12 @@ local function spawnSpot(player, room)
 	return CFrame.lookAt(at, at + offset)
 end
 
+-- A survivor bot (a SurvivorBot table) rather than a real Player. (Reading `player.isBot` on a
+-- real Player is an error, not nil: Instances throw on unknown members.)
+local function isBot(player)
+	return typeof(player) ~= "Instance"
+end
+
 -- Put a (new) character in the player's chosen spawn room (the start room if it isn't available)
 local function placeInSpawnRoom(player)
 	local character = player.Character
@@ -218,7 +224,7 @@ local function respawn(player)
 	player:SetAttribute("Respawning", nil)
 	player:SetAttribute("RespawnBy", nil)
 	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the room
-	if player.isBot then                                  -- (bots have no CharacterAdded)
+	if isBot(player) then                                  -- (bots have no CharacterAdded)
 		setUpSurvivorCharacter(player.Character)
 		placeInSpawnRoom(player)
 	end
@@ -249,7 +255,7 @@ local function onCaught(player, monster)
 	caughtAt[player] = os.clock()
 	local lives = math.max(0, (player:GetAttribute("Lives") or 1) - 1)
 	player:SetAttribute("Lives", lives)
-	if not player.isBot then caughtEvent:FireClient(player, lives) end
+	if not isBot(player) then caughtEvent:FireClient(player, lives) end
 	local character = player.Character
 	if monster and character then
 		playKill(player, character)
@@ -268,7 +274,7 @@ local function onCaught(player, monster)
 		end
 		player:SetAttribute("Respawning", true)
 		player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
-		if player.isBot then
+		if isBot(player) then
 			-- bots pick a captured room at random, straight away
 			local rooms = {}
 			for _, room in maze.rooms do
@@ -479,7 +485,7 @@ local function runCountdown()
 			local now = workspace:GetServerTimeNow()
 			player:SetAttribute("RevealedUntil", now + Config.FALSE_RELIC_REVEAL_TIME)
 			player:SetAttribute("SlowUntil", now + Config.FALSE_RELIC_SLOW_TIME)
-			if not player.isBot then falseRelicEvent:FireClient(player) end
+			if not isBot(player) then falseRelicEvent:FireClient(player) end
 		end,
 	})
 

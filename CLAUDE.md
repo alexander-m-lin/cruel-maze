@@ -25,7 +25,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 **Git**
 - The public repo is https://github.com/alexander-m-lin/cruel-maze, and `main` is the only branch. Work each phase on a `phase-N` branch and merge it with `--no-ff` when its "done when" is met.
-- Commits use the GitHub no-reply email set in the repo config. Keep it, so the user's personal email never goes public. Commit when asked; push only when asked.
+- Commits use the GitHub no-reply email set in the repo config. Keep it, so the user's personal email never goes public. Commit on your own after each meaningful change (on the current phase branch, place saved first); push only when asked.
 
 **Assets:** uploaded textures and their asset IDs are documented in `assets/textures/*/README.md`, with the scripts that made them in `tools/textures/`. New uploads need Roblox moderation before they show for other players.
 
