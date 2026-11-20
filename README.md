@@ -43,8 +43,8 @@ select are coming). Abilities aim the way you face:
 - **Q: Treasure hunt** (15 s). The nearest relic your team hasn't spotted (real or false) within
   110 studs is spotted, with a pillar of light over it.
 - **E: Flourish** (60 s). Spin the whip overhead for 1 second, standing still (a ring on the
-  floor shows its reach), then every monster within 20 studs is stunned for 3 seconds. Caught
-  while winding up: no stun.
+  floor shows its reach); half a second in, every monster within 20 studs is stunned for 3.5
+  seconds. Caught before then: no stun.
 A stunned monster can't move, lunge or catch (stars circle its head). Crushing walls stun
 monsters caught between them too.
 

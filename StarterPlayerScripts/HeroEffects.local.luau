@@ -4,8 +4,8 @@
 --   WHIP          - a lash (a curved Beam) from the hand to its tip, which flies out the way she
 --                   faces, cracks, then holds while she's pulled to it (a wall or relic) or drags
 --                   whoever it caught back as it comes in. The arm reaches along it (IKControl).
---   FLOURISH      - the wind-up: the whip spins overhead, faster and faster, over a faint disc
---                   showing its reach; then a bright flash out to the edge as the stun lands.
+--   FLOURISH      - the whip spins overhead, faster and faster, over a faint disc showing its
+--                   reach; a bright flash out to the edge as the stun goes out, partway through.
 --   TREASURE HUNT - a pillar of golden light over the relic it found (survivors only).
 --   STUNNED       - little stars circling over the head of anything stunned ("StunnedUntil").
 -- Effects of someone you can't see (hidden by the fog) aren't drawn, so they give nothing away.
@@ -166,30 +166,33 @@ local function flourish(character)
 		ring.Parent = folder
 		return ring
 	end
-	-- the wind-up: a faint disc at the full reach (a warning to monsters), and the whip spinning
-	-- overhead, faster and faster
+	-- the whip spinning overhead, faster and faster: a faint disc at the full reach until the stun
+	-- goes out (a warning to monsters), then a bright flash out to the edge as it does
 	local warning = floorRing(def.range * 2, 0.82)
 	local t0 = os.clock()
 	local angle = 0
-	local spinning = true
-	while spinning and root.Parent do
+	local flashed = false
+	while root.Parent do
 		local dt = RunService.RenderStepped:Wait()
-		local k = math.min(1, (os.clock() - t0) / def.castTime)
-		angle += dt * (6 + 14 * k)
+		local elapsed = os.clock() - t0
+		if elapsed >= def.castTime or who:GetAttribute("Seized") or character:GetAttribute("FogState") == "hidden" then break end
+		angle += dt * (6 + 14 * math.min(1, elapsed / def.castTime))
 		tip.Position = root.Position + Vector3.new(math.cos(angle) * 6, 4.5, math.sin(angle) * 6)
 		beam.CurveSize0, beam.CurveSize1 = 1.2, -0.6
-		warning.Transparency = 0.82 - 0.12 * math.abs(math.sin(os.clock() * 10))
-		spinning = k < 1 and not (who:GetAttribute("Seized") or character:GetAttribute("FogState") == "hidden")
+		if not flashed and elapsed >= def.stunAt then
+			flashed = true
+			warning:Destroy()
+			local flash = floorRing(4, 0.3)
+			TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
+			Debris:AddItem(flash, 0.45)
+			sound("WhipCrack", root.Position + Vector3.new(0, 4, 0))
+		elseif not flashed then
+			warning.Transparency = 0.82 - 0.12 * math.abs(math.sin(os.clock() * 10))
+		end
 	end
-	warning:Destroy()
+	if warning.Parent then warning:Destroy() end
 	cleanup()
-	if not root.Parent or who:GetAttribute("Seized") then return end
-	-- the stun lands: a bright flash out to the edge
-	local flash = floorRing(4, 0.3)
-	TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
-	Debris:AddItem(flash, 0.45)
-	sound("WhipCrack", root.Position + Vector3.new(0, 4, 0))
 end
 
 local function treasureFound(center)
