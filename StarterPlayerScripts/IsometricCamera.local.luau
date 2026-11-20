@@ -85,6 +85,8 @@ local PAN_SPEED = 90   -- studs per second (scaled with zoom)
 local ZOOM_MIN, ZOOM_MAX = 0.65, 3   -- the Maze Master zooms (mouse wheel, or pinch) between these times DISTANCE
 local ZOOM_STEP = 1.15               -- per wheel notch
 local zoom = 1
+local atmosphere = game:GetService("Lighting"):FindFirstChildOfClass("Atmosphere")
+local baseDensity = atmosphere and atmosphere.Density or 0
 local panFocus = nil
 local panMaze = nil
 local PAN_KEYS = {
@@ -151,8 +153,13 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 	if not focus then return end
 	lastFocus = focus
 
-	local camPos = focus + DIRECTION * DISTANCE * (isMazeMaster() and zoom or 1)
+	local zoomed = isMazeMaster() and zoom or 1
+	local camPos = focus + DIRECTION * DISTANCE * zoomed
 	camera.CFrame = CFrame.lookAt(camPos, focus)
+	-- The atmosphere's haze builds up with distance from the camera, so zooming out would wash the
+	-- maze out. Thin it (on this computer only) by as much as the camera moved away, so the maze
+	-- looks the same at any zoom.
+	if atmosphere then atmosphere.Density = baseDensity / zoomed end
 	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 
 	if character then fadeBlockingWalls(focus, camPos, character) end

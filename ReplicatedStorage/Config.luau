@@ -96,7 +96,7 @@ Config.WARD_DESTROY_TIME = 1.5          -- ...by staying close this long
 -- Haunt: on a survivor the monster side can see right now. For a few seconds they're revealed to
 -- the monster side wherever they go, and their vision cone counts as the monster side's sight too.
 -- The haunted survivor feels it (a faint purple screen edge and a whisper).
-Config.HAUNT_TIME = 3
+Config.HAUNT_TIME = 5
 
 -- Crushing walls: pairs of walls along straight corridor cells, built into the maze, that the Maze
 -- Master sets off. They rumble, slam together (killing survivors between), then slide back.
