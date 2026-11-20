@@ -1,7 +1,8 @@
 -- The MAZE MASTER's interface (only while you're the Maze Master). The camera pans over the maze
 -- (IsometricCamera); this script adds:
 --
---   a DARK MANA bar and five TOOL buttons along the bottom (or keys 1-5):
+--   a DARK MANA bar (only while Config.DARK_MANA_ENABLED) and five TOOL buttons along the bottom
+--   (or keys 1-5):
 --     Door           - click near a door to open or shut it
 --     Ward           - click a cell to place a ward (a floating eye) there
 --     Haunt          - click a survivor you can see to haunt them
@@ -382,7 +383,7 @@ local function showPlacement(point)
 		placeMarker.CastShadow = false
 		placeMarker.Parent = workspace
 	end
-	local affordable = (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS[selected].cost
+	local affordable = (not Config.DARK_MANA_ENABLED or (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS[selected].cost)
 		and (selected ~= "FalseRelic" or (player:GetAttribute("FalseRelicsLeft") or 0) > 0)
 	local ok
 	if selected == "Ward" then ok = canPlaceWardAt(center, S) else ok = canPlaceAt(center, S, maze) end
@@ -403,10 +404,12 @@ RunService.RenderStepped:Connect(function()
 	end
 	local now = workspace:GetServerTimeNow()
 
-	-- the bar
-	local mana = player:GetAttribute("DarkMana") or 0
-	barFill.Size = UDim2.fromScale(math.clamp(mana / Config.DARK_MANA_MAX, 0, 1), 1)
-	barText.Text = ("Dark mana  %d / %d"):format(mana, Config.DARK_MANA_MAX)
+	-- the bar (dark mana switched off: no bar, and nothing costs anything)
+	local manaOn = Config.DARK_MANA_ENABLED
+	barBack.Visible = manaOn
+	local mana = manaOn and (player:GetAttribute("DarkMana") or 0) or math.huge
+	barFill.Size = UDim2.fromScale(manaOn and math.clamp(mana / Config.DARK_MANA_MAX, 0, 1) or 1, 1)
+	barText.Text = manaOn and ("Dark mana  %d / %d"):format(mana, Config.DARK_MANA_MAX) or ""
 	if os.clock() > messageUntil then message.Text = "" end
 
 	-- the buttons
@@ -416,7 +419,8 @@ RunService.RenderStepped:Connect(function()
 		local left = math.max(0, readyAt - now)
 		local extra = ""
 		if id == "FalseRelic" then extra = ("\n%d left"):format(player:GetAttribute("FalseRelicsLeft") or 0) end
-		b.button.Text = ("[%d] %s\n%d mana%s%s"):format(table.find(TOOLS, b.tool), b.tool.name, def.cost, extra,
+		b.button.Text = ("[%d] %s%s%s%s"):format(table.find(TOOLS, b.tool), b.tool.name,
+			manaOn and ("\n%d mana"):format(def.cost) or "", extra,
 			left > 0 and ("  ·  %ds"):format(math.ceil(left)) or "")
 		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))
 		b.stroke.Transparency = selected == id and 0 or 1

@@ -1,12 +1,13 @@
 -- THE MAZE MASTER's tools, checked and carried out on the server.
 --
 --   local mm = MazeMaster.new(player, { maze, doors, crushers, objectives, wards, haunt })
+--     (player = nil for the AI Maze Master, MazeMasterAI, which uses these same tools)
 --   mm:Step(dt)                 -- every frame: dark mana refills
 --   mm:Use(tool, target)        -- -> ok, message
 --   mm:Destroy()
 --
--- Each tool costs DARK MANA (Config.DARK_MANA_MAX, refilling Config.DARK_MANA_REGEN a second) and
--- has its own cooldown (Config.MAZE_MASTER_TOOLS):
+-- Each tool has its own cooldown (Config.MAZE_MASTER_TOOLS) and, while Config.DARK_MANA_ENABLED is
+-- on, costs DARK MANA (Config.DARK_MANA_MAX, refilling Config.DARK_MANA_REGEN a second):
 --   Door       target = door id      open or shut it (that door then rests MAZE_MASTER_DOOR_COOLDOWN s)
 --   Ward       target = a position   place a ward (a floating eye, see WardEyes) in that cell
 --   Haunt      target = a UserId     haunt that survivor (parts.haunt checks the monster side sees them)
@@ -36,20 +37,24 @@ function MazeMaster.new(player, parts)
 	self.readyAt = {}            -- [tool] = os.clock() when it can be used again
 	self.falseRelicsLeft = Config.FALSE_RELICS_PER_MATCH
 	self.active = false          -- the countdown: no tools yet
-	player:SetAttribute("FalseRelicsLeft", self.falseRelicsLeft)
+	self:set("FalseRelicsLeft", self.falseRelicsLeft)
 	self:publish()
 	return self
 end
 
+-- An attribute on the player, for their computer (no player: the AI)
+function MazeMaster:set(name, value)
+	if self.player and self.player:GetAttribute(name) ~= value then self.player:SetAttribute(name, value) end
+end
+
 function MazeMaster:Destroy()
-	if self.player.Parent then
+	if self.player and self.player.Parent then
 		for _, name in ATTRIBUTES do self.player:SetAttribute(name, nil) end
 	end
 end
 
 function MazeMaster:publish()
-	local shown = math.floor(self.mana)
-	if self.player:GetAttribute("DarkMana") ~= shown then self.player:SetAttribute("DarkMana", shown) end
+	self:set("DarkMana", Config.DARK_MANA_ENABLED and math.floor(self.mana) or nil)
 end
 
 function MazeMaster:Step(dt)
@@ -64,7 +69,7 @@ function MazeMaster:Use(tool, target)
 	if not self.active then return false, "Not yet" end
 	local now = os.clock()
 	if now < (self.readyAt[tool] or 0) then return false, "Not ready yet" end
-	if self.mana < def.cost then return false, "Not enough dark mana" end
+	if Config.DARK_MANA_ENABLED and self.mana < def.cost then return false, "Not enough dark mana" end
 
 	local ok, message = false, ""
 	if tool == "Door" then
@@ -94,7 +99,7 @@ function MazeMaster:Use(tool, target)
 		ok = x ~= nil and self.objectives:AddFalseRelic(x, z) ~= nil
 		if ok then
 			self.falseRelicsLeft -= 1
-			self.player:SetAttribute("FalseRelicsLeft", self.falseRelicsLeft)
+			self:set("FalseRelicsLeft", self.falseRelicsLeft)
 		else
 			message = "Can't place one there"
 		end
@@ -104,9 +109,9 @@ function MazeMaster:Use(tool, target)
 	end
 
 	if ok then
-		self.mana -= def.cost
+		if Config.DARK_MANA_ENABLED then self.mana -= def.cost end
 		self.readyAt[tool] = now + def.cooldown
-		self.player:SetAttribute("ToolReady" .. tool, workspace:GetServerTimeNow() + def.cooldown)
+		self:set("ToolReady" .. tool, workspace:GetServerTimeNow() + def.cooldown)
 		self:publish()
 	end
 	return ok, message

@@ -133,6 +133,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 
 **Also added before merging (2026-11-20):** a bare-bones lobby between matches (who's in, a preferred role each, a Start button; matches return to it), developer controls for the experience's owner in the published game, and a server-side speed check (`SpeedCheck`: an allowance refilling at base speed +15%, banking 1.5 s for lag; overspenders are pulled back). The Maze Master's zoom-out is capped at 1.6x: further, low graphics settings stopped drawing far walls. The game is published privately as "Cruel Maze 0.1" for testing.
 
+**After merging (2026-11-20, before Phase 4):** dark mana switched off for now (`Config.DARK_MANA_ENABLED`; tools have cooldowns only, the code stays). Wards' cap raised to 4. An AI Maze Master (`MazeMasterAI`, pulled forward from Phase 5) replaces the random door AI when nobody plays the role: it uses the same tools object as a person and only knows what the monster side sees. It shuts open doors 2-5 cells ahead of chased survivors (otherwise shifts doors near sightings), sets off crushing walls when a seen survivor will be between them as they slam, haunts on cooldown (preferring a survivor no monster is near), keeps wards out at unwatched junctions near sightings or on the way to relics (moving one at most every 8 s once all 4 are out), and places both false relics at the start, at least 6 cells from any spawn room.
+
 **Outcome:** done when "a 3 v 2 + 1 match runs with humans and the Maze Master has useful things to do even when no survivor is visible". Tested with every role played by a person in Studio's multi-client test and in the published game, with bots filling the other slots; a full six-human match is still to come (no testers online yet) and should be the first thing played in Phase 4's testing. "Sensors" became wards, haunt and crushing-wall sight. Carried forward: the flying-bots note below, and Phase 5's lobby work now starts from the bare-bones lobby.
 
 **Open (2026-11-19):** once, as a survivor, the user saw both survivor bots fly up off-screen at the same moment (a monster was nearby; not the kill animation). Not reproduced. SurvivorBot now puts a bot back if it goes more than 20 studs above or 5 below the floor, warns in the output, and sets a `Rescued` attribute. Watch for that warning in tests.
@@ -150,7 +152,7 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 ### [ ] 5. Bots and matchmaking
 Lets a match start with one human player and fill up as people arrive.
 - AI survivors that explore, collect relics and evade
-- A simple AI Maze Master working doors and traps
+- A simple AI Maze Master working doors and traps (done early: `MazeMasterAI`, 2026-11-20)
 - Bots fill empty slots, are labelled as bots, and give way to humans between matches
 - Lobby, parties, and grouping players into existing servers. A bare-bones lobby already exists (Phase 3). Likely shape (discussed 2026-11-20): a lobby place where players gather, party up and queue, and a match place started as a reserved server, with players teleported back afterwards; plus a separate private test experience so test builds never reach the public game.
 
