@@ -61,7 +61,11 @@ Config.DOOR_AI_COUNT = 3          -- until the Maze Master is a person, an AI ch
 Config.DOOR_AI_MIN = 5            -- ...every DOOR_AI_MIN..MAX seconds
 Config.DOOR_AI_MAX = 10
 
--- THE MAZE MASTER: spends DARK MANA (refills over time) on tools, each with its own cooldown.
+-- THE MAZE MASTER: tools, each with its own cooldown, and (when DARK_MANA_ENABLED) a cost in DARK
+-- MANA, which refills over time. With nobody playing the Maze Master, an AI uses the same tools
+-- (MazeMasterAI); with MAZE_MASTER_AI off, the old random door AI (DOOR_AI_*) runs instead.
+Config.DARK_MANA_ENABLED = false  -- off for now: cooldowns only (the mana code stays, switch it back on here)
+Config.MAZE_MASTER_AI = true
 Config.DARK_MANA_MAX = 100
 Config.DARK_MANA_REGEN = 5        -- per second
 Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds
@@ -87,7 +91,7 @@ Config.FALSE_RELIC_BLINK_TIME = 0.15    -- ...for this long
 -- (walls block it). Survivors see one like anything else, and once one of them has spotted it, it
 -- stays shown to them. A survivor can destroy one by standing next to it and holding, like
 -- collecting a relic (the monster side is told where).
-Config.WARDS_MAX = 3                    -- at a time: placing another fades the oldest
+Config.WARDS_MAX = 4                    -- at a time: placing another fades the oldest
 Config.WARD_VISION_RADIUS = 22          -- studs (a survivor sees 80 in a cone, 12 all round)
 Config.WARD_HEIGHT = 4.5                -- studs above the floor the eye floats
 Config.WARD_REACH = 8                   -- a survivor this close (studs, flat) can destroy it...

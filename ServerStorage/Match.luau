@@ -52,6 +52,7 @@ local Objectives = require(ServerStorage.Objectives)
 local Doors = require(ServerStorage.Doors)
 local Crushers = require(ServerStorage.Crushers)
 local MazeMaster = require(ServerStorage.MazeMaster)
+local MazeMasterAI = require(ServerStorage.MazeMasterAI)
 local WardEyes = require(ServerStorage.WardEyes)
 local Dev = require(ServerStorage.Dev)
 local SpeedCheck = require(ServerStorage.SpeedCheck)
@@ -108,7 +109,8 @@ local startRequested = false     -- someone pressed Start in the lobby
 local doors = nil        -- this match's doors (see Doors)
 local crushers = nil     -- this match's crushing walls (see Crushers)
 local wards = nil        -- the Maze Master's wards, floating eyes (see WardEyes)
-local mazeMasterTools = nil  -- the Maze Master player's tools (see MazeMaster), if a person is the Maze Master
+local mazeMasterTools = nil  -- the Maze Master's tools (see MazeMaster): a person's, or the AI's
+local mazeMasterAI = nil     -- the AI working them when nobody is the Maze Master (see MazeMasterAI)
 local caughtAt = {}      -- [player] = os.clock() when they were last caught
 
 -- Characters only appear when this script says so (so caught players can choose where to respawn)
@@ -437,6 +439,7 @@ local function cleanUp()
 	wards = nil
 	if mazeMasterTools then mazeMasterTools:Destroy() end
 	mazeMasterTools = nil
+	mazeMasterAI = nil
 	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
@@ -626,14 +629,19 @@ local function runCountdown()
 		monster.active = false
 		table.insert(monsters, monster)
 	end
-	-- with no Maze Master player, an AI works the doors
-	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch, ai = mazeMaster == nil,
-		bots = function() return bots end })
+	-- with no Maze Master player, an AI Maze Master uses the tools (or, with that off, the old
+	-- random door AI works the doors)
+	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch,
+		ai = mazeMaster == nil and not Config.MAZE_MASTER_AI, bots = function() return bots end })
 	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end, survivors = survivorsInMatch })
 	wards = WardEyes.new(maze, objectives)
-	if mazeMaster then
+	if mazeMaster or Config.MAZE_MASTER_AI then
 		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives,
 			wards = wards, haunt = haunt })
+	end
+	if not mazeMaster and Config.MAZE_MASTER_AI then
+		mazeMasterAI = MazeMasterAI.new(mazeMasterTools, { maze = maze, doors = doors, crushers = crushers, wards = wards,
+			objectives = objectives, monsters = monsters, survivors = survivorsInMatch, sees = monsterSideSees })
 	end
 
 	-- survivor bots for the empty survivor slots
@@ -694,6 +702,7 @@ local function runPlaying()
 	for _, bot in bots do bot:SetAttribute("BaseSpeed", Config.PLAYER_SPEED) end
 	doors.running = true
 	if mazeMasterTools then mazeMasterTools.active = true end
+	if mazeMasterAI then mazeMasterAI:Start() end
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
 	local hadSurvivors = #survivorsInMatch() > 0
@@ -840,6 +849,7 @@ function Match.run()
 		if doors then doors:Step(dt) end
 		if crushers then crushers:Step() end
 		if mazeMasterTools then mazeMasterTools:Step(dt) end
+		if mazeMasterAI then mazeMasterAI:Step(dt) end
 		for _, bot in bots do bot:Step(dt, monsters) end
 		if #monsters == 0 then return end
 		local targets = huntable()

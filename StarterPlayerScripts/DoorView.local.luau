@@ -90,7 +90,7 @@ workspace.ChildAdded:Connect(function(child)
 	end
 end)
 task.spawn(function()
-	watchMaze(workspace:WaitForChild("Maze"))
+	watchMaze(workspace:WaitForChild("Maze", math.huge))
 end)
 
 RunService.RenderStepped:Connect(function()

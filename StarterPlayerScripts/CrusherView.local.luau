@@ -80,7 +80,7 @@ workspace.ChildAdded:Connect(function(child)
 		watchMaze(child)
 	end
 end)
-task.spawn(function() watchMaze(workspace:WaitForChild("Maze")) end)
+task.spawn(function() watchMaze(workspace:WaitForChild("Maze", math.huge)) end)
 
 -- Can this player see the spot? (in view right now, or the Maze Master)
 local function inView(position)

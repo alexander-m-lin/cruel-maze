@@ -975,7 +975,7 @@ workspace.ChildAdded:Connect(function(child)
 		buildFog(child)
 	end
 end)
-task.spawn(buildFog, workspace:WaitForChild("Maze"))
+task.spawn(buildFog, workspace:WaitForChild("Maze", math.huge))
 
 -- Line-of-sight checks many times a second
 task.spawn(function()

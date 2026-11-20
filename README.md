@@ -20,7 +20,9 @@ choose where you come back. M hides the minimap.
 **Lobby and roles:** between matches everyone waits in the lobby, which lists who's in. Pick a
 preferred role there (Any, Survivor, Monster or Maze Master; you get it if the slot is free) and
 anyone presses Start. Roles: 3 survivors, 2 monsters and a Maze Master; empty slots get bots
-(survivor bots named "Bot 1"..., AI monsters, and an AI working the doors for the Maze Master).
+(survivor bots named "Bot 1"..., AI monsters, and an AI Maze Master that uses the same tools as a
+person: it shuts doors ahead of chased survivors, sets off crushing walls as they walk in, keeps
+wards out and haunts whoever the monster side can see).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
 starts another straight away, and "Doors" opens the doors panel.
@@ -75,6 +77,7 @@ starts another straight away, and "Doors" opens the doors panel.
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a spawn room from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
+| `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
