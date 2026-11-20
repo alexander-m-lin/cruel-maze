@@ -74,6 +74,7 @@ starts another straight away, and "Doors" opens the doors panel.
 | `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, haunt, false relics, crushing walls |
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a spawn room from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
+| `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |

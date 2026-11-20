@@ -29,6 +29,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
 local Dev = require(game:GetService("ServerStorage").Dev)
+local SpeedCheck = require(game:GetService("ServerStorage").SpeedCheck)
 local MazeLayout = require(ServerStorage.MazeLayout)
 
 local CHARACTER_CLEARANCE = 2.2   -- studs from the door's face a nudged player ends up at
@@ -135,6 +136,7 @@ local function nudge(self, door)
 			local along, across = measure(root.Position)
 			if math.abs(along) < length / 2 + 1 and math.abs(across) < thick / 2 + CHARACTER_CLEARANCE - 0.2 then
 				character:PivotTo(character:GetPivot() + pushed(root.Position, across, CHARACTER_CLEARANCE))
+				SpeedCheck.moved(player)      -- (the server moved them, not their computer)
 			end
 		end
 	end

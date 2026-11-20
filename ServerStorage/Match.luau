@@ -54,6 +54,7 @@ local Crushers = require(ServerStorage.Crushers)
 local MazeMaster = require(ServerStorage.MazeMaster)
 local WardEyes = require(ServerStorage.WardEyes)
 local Dev = require(ServerStorage.Dev)
+local SpeedCheck = require(ServerStorage.SpeedCheck)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -196,6 +197,7 @@ local function placeInSpawnRoom(player)
 	if not (character and maze) then return end
 	local room = objectives and objectives:CapturedRoom(player:GetAttribute("SpawnRoom") or 1) or maze.rooms[1]
 	character:PivotTo(spawnSpot(player, room))
+	SpeedCheck.moved(player)
 end
 
 -- A survivor's character (a player's or a bot's): in the "Survivors" collision group, which monster
@@ -226,6 +228,7 @@ local function setUpMonsterCharacter(player, character)
 	end
 	local monster = playerMonsters[player]
 	if monster then monster:PlaceCharacter(character) end
+	SpeedCheck.moved(player)
 end
 
 local function respawn(player)
@@ -363,7 +366,9 @@ end)
 lungeEvent.OnServerEvent:Connect(function(player)
 	if state ~= States.Playing then return end
 	local monster = playerMonsters[player]
-	if monster then monster:Lunge() end
+	if monster and monster:Lunge() then
+		SpeedCheck.grant(player, Config.LUNGE_DISTANCE + 2)   -- (their computer carries them the lunge's distance)
+	end
 end)
 
 -- The Maze Master used a tool (MazeMaster checks everything)
@@ -831,6 +836,7 @@ function Match.run()
 
 	-- Doors move and the monsters think every frame while a match is on
 	RunService.Heartbeat:Connect(function(dt)
+		SpeedCheck.step(dt)
 		if doors then doors:Step(dt) end
 		if crushers then crushers:Step() end
 		if mazeMasterTools then mazeMasterTools:Step(dt) end
