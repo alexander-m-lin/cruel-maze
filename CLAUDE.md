@@ -19,6 +19,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 - Playtests open in the lobby. Start a match by firing `ReplicatedStorage.Remotes.Lobby` with `"start"` from the Client (or `"prefer", role` first); the `DevMatch` remote's `"role"` forces a role and `"restart"` jumps straight to a new match.
 - Test in playtests with `execute_luau` on the Server or Client, measuring with numbers. Screenshots show the 3D view only while the Studio window is visible, and never show BillboardGuis (floating labels). To check one visually, copy it onto a ScreenGui. Close-up visual checks work best in Edit mode with a camera position.
 - The server doesn't move monster bodies: a monster's position is its model's `Pivot` attribute, and players' computers move the body (MonsterAnimate). Read `model:GetAttribute("Pivot")` in server tests, not `GetPivot()`.
+- Hero effects are too quick to screenshot: set the Workspace attribute `HeroFxSlow` (e.g. 8) on the Client to slow them down in Studio (the server's pulls don't slow, so positions drift).
 - The server's speed check (`SpeedCheck`) pulls back characters moved from the client. Teleport a player in tests with `ServerStorage.MatchTest:Invoke("teleport", player, cframe)` from the Server.
 - Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
 - The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.

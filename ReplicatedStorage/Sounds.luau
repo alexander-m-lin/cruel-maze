@@ -36,6 +36,7 @@ local Sounds = {
 	-- Heroes
 	WhipCrack      = { id = 9113612888, volume = 0.9, range = 90 },                    -- Sara's whip (Pro Sound Effects)
 	WhipSpin       = { id = 9120972321, volume = 0.9, range = 90 },                    -- Sara's Flourish
+	DragScrape     = { id = 9120934304, volume = 0.8, range = 80, looped = true },     -- anyone being dragged by a whip (Pro Sound Effects: a paddle scraping through icy snow)
 	TreasureHunt   = { id = 90618709727045, volume = 0.7 },                            -- a relic found by Treasure hunt (only Sara's team hears it)
 
 	-- Background music: plays all the time, on a loop

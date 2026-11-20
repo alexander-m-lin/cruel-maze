@@ -271,6 +271,10 @@ function MonsterAI:Pull(to, speed)
 	local distance = (target - self.pos).Magnitude
 	if distance < 0.5 then return 0 end
 	self.pull = { from = self.pos, to = target, startedAt = os.clock(), time = distance / speed }
+	if self.model then   -- (players' computers draw the drag: dust and a scrape)
+		self.model:SetAttribute("PullAt", workspace:GetServerTimeNow())
+		self.model:SetAttribute("PullTime", self.pull.time)
+	end
 	return self.pull.time
 end
 

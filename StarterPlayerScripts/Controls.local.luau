@@ -52,6 +52,11 @@ local function collectingAt()
 	return nil
 end
 
+local pullHeardAt = nil      -- os.clock() when we heard about the latest pull (see PULLED below)
+player:GetAttributeChangedSignal("PullAt"):Connect(function()
+	pullHeardAt = player:GetAttribute("PullAt") and os.clock() or nil
+end)
+
 local MOUSE_INPUTS = {
 	[Enum.UserInputType.MouseMovement] = true,
 	[Enum.UserInputType.MouseButton1] = true,
@@ -91,11 +96,11 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 		return
 	end
 
-	-- PULLED (a whip; see Pull on the server): the server says from where to where and when; your
-	-- character is yours to move, so it's carried along here
-	local pullAt = player:GetAttribute("PullAt")
-	if pullAt then
-		local k = (workspace:GetServerTimeNow() - pullAt) / math.max(0.01, player:GetAttribute("PullTime") or 0)
+	-- PULLED (a whip; see Pull on the server): the server says from where to where and for how
+	-- long; your character is yours to move, so it's carried along here. Timed from when the news
+	-- arrives (pulls are short: by the server's clock, a late one would already be over).
+	if pullHeardAt then
+		local k = (os.clock() - pullHeardAt) / math.max(0.01, player:GetAttribute("PullTime") or 0)
 		local from, to = player:GetAttribute("PullFrom"), player:GetAttribute("PullTo")
 		if k >= 0 and k < 1.05 and from and to then
 			local at = from:Lerp(to, math.min(k, 1))
