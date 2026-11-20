@@ -25,7 +25,9 @@
 --   Role, Lives, Out (no lives left), Respawning (choosing a spawn room), RespawnBy (deadline),
 --   SpawnRoom (the room they'll come back in), BaseSpeed (see Controls), Seized (held by a
 --   monster that's killing them: their controls stop), Killing (a monster player mid-kill: can't
---   move), DevRole (Studio only: the role they asked for in the dev panel)
+--   move), DevRole (Studio only: the role they asked for in the dev panel), RevealedUntil (server
+--   time: shown to the monster side wherever they are), HauntedUntil (the Maze Master's Haunt: also
+--   their vision cone counts as the monster side's), SlowUntil (a false relic)
 --
 -- Survivor bots fill empty survivor slots (Config.SURVIVOR_BOTS); they pass for players (SurvivorBot).
 --
@@ -49,6 +51,7 @@ local Objectives = require(ServerStorage.Objectives)
 local Doors = require(ServerStorage.Doors)
 local Crushers = require(ServerStorage.Crushers)
 local MazeMaster = require(ServerStorage.MazeMaster)
+local WardEyes = require(ServerStorage.WardEyes)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -71,6 +74,7 @@ local toolEvent = Net.event("MazeMasterTool")        -- Maze Master -> server: u
 local toolResultEvent = Net.event("MazeMasterResult") -- server -> Maze Master: (ok, message)
 local falseRelicEvent = Net.event("FalseRelicSprung") -- server -> survivor: you clicked a false relic
 local falseRelicsEvent = Net.event("FalseRelics")     -- server -> monster side only: the ids of the false relics
+local destroyWardEvent = Net.event("DestroyWard")     -- survivor -> server: I clicked to destroy this ward
 
 -- Spawn-room barriers stop monster players and nothing else; crushing walls stop everyone but them.
 -- Monster players pass through survivors (players and bots): they catch with the lunge, and a
@@ -98,6 +102,7 @@ local bots = {}           -- this match's survivor bots (SurvivorBot: they pass 
 local restartRequested = false   -- Studio dev panel: end this match now
 local doors = nil        -- this match's doors (see Doors)
 local crushers = nil     -- this match's crushing walls (see Crushers)
+local wards = nil        -- the Maze Master's wards, floating eyes (see WardEyes)
 local mazeMasterTools = nil  -- the Maze Master player's tools (see MazeMaster), if a person is the Maze Master
 local caughtAt = {}      -- [player] = os.clock() when they were last caught
 
@@ -292,6 +297,64 @@ local function onCaught(player, monster)
 	end)
 end
 
+-- Can the monster side see this spot right now? The same sources as their fog (FogOfWar), checked
+-- more simply (straight sight lines, a little extra range for the difference): every monster's
+-- cone, wards, crushing walls, the Maze Master's rings round every relic, and haunted survivors'
+-- cones. Used to check a Haunt is on a survivor the Maze Master can really see.
+local SIGHT_SLACK = 3
+local function monsterSideSees(position, except)
+	local spot = { center = position }
+	for _, monster in monsters do
+		if monster.pos and monster.facing and objectives:CanSee(monster.pos, monster.facing, spot) then return true end
+	end
+	if wards and wards:Sees(position) then return true end
+	for _, crusher in crushers and crushers.list or {} do
+		if wards:clearLine(crusher.center, position, maze.S / 2 + Config.CRUSHER_VISION + SIGHT_SLACK) then return true end
+	end
+	if mazeMasterTools then
+		for _, relic in maze.relics do
+			if not relic.collected and wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
+		end
+		for _, relic in objectives.fakes do
+			if wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
+		end
+	end
+	local now = workspace:GetServerTimeNow()
+	for _, other in survivorsInMatch() do
+		local character = other ~= except and (other:GetAttribute("HauntedUntil") or 0) > now and aliveCharacter(other)
+		if character then
+			local root = character.HumanoidRootPart
+			if objectives:CanSee(root.Position, root.CFrame.LookVector, spot) then return true end
+		end
+	end
+	return false
+end
+
+-- The Maze Master's Haunt on the survivor with this UserId (a player or a bot): -> ok, message
+local function haunt(userId)
+	for _, survivor in survivorsInMatch() do
+		if survivor.UserId ~= userId then continue end
+		local character = not survivor:GetAttribute("Seized") and aliveCharacter(survivor)
+		if not character then return false, "They can't be haunted now" end
+		local now = workspace:GetServerTimeNow()
+		local revealed = (survivor:GetAttribute("RevealedUntil") or 0) > now
+		if not revealed and not monsterSideSees(character.HumanoidRootPart.Position, survivor) then
+			return false, "You can't see them"
+		end
+		survivor:SetAttribute("HauntedUntil", now + Config.HAUNT_TIME)
+		survivor:SetAttribute("RevealedUntil", math.max(survivor:GetAttribute("RevealedUntil") or 0, now + Config.HAUNT_TIME))
+		return true
+	end
+	return false, "Click a survivor you can see"
+end
+
+-- A survivor clicked to destroy a ward (WardEyes checks they're really next to it)
+destroyWardEvent.OnServerEvent:Connect(function(player, wardId)
+	if state ~= States.Playing or not wards or typeof(wardId) ~= "number" then return end
+	if player:GetAttribute("Role") ~= Roles.Survivor or player:GetAttribute("Seized") then return end
+	wards:StartDestroying(player, wardId)
+end)
+
 -- A monster player clicked to lunge (PlayerMonster checks it's allowed)
 lungeEvent.OnServerEvent:Connect(function(player)
 	if state ~= States.Playing then return end
@@ -351,11 +414,14 @@ local function cleanUp()
 	if doors then doors:Destroy() end
 	doors = nil
 	crushers = nil
+	if wards then wards:Destroy() end
+	wards = nil
 	if mazeMasterTools then mazeMasterTools:Destroy() end
 	mazeMasterTools = nil
 	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
-		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil" } do
+		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
+		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil" } do
 			player:SetAttribute(name, nil)
 		end
 	end
@@ -528,8 +594,10 @@ local function runCountdown()
 	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch, ai = mazeMaster == nil,
 		bots = function() return bots end })
 	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end, survivors = survivorsInMatch })
+	wards = WardEyes.new(maze, objectives)
 	if mazeMaster then
-		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives })
+		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives,
+			wards = wards, haunt = haunt })
 	end
 
 	-- survivor bots for the empty survivor slots
@@ -562,6 +630,19 @@ local function runCountdown()
 		if role == Roles.MazeMaster then
 			if player.Character then player.Character:Destroy() end   -- no body in the maze
 			player.Character = nil
+			-- With streaming on, a player's computer only gets what's near their character. The
+			-- Maze Master has none, so give them a spot to stream around instead: the middle of the
+			-- maze (the streaming radius covers the whole map from there). Without it, survivors'
+			-- bodies never reach their computer, so they can't be seen (or haunted).
+			local focus = Instance.new("Part")
+			focus.Name = "MazeMasterFocus"
+			focus.Anchored = true
+			focus.CanCollide, focus.CanQuery, focus.CanTouch = false, false, false
+			focus.Transparency = 1
+			focus.Size = Vector3.one
+			focus.Position = Vector3.new(0, maze.floorY, 0)
+			focus.Parent = maze.model
+			player.ReplicationFocus = focus
 		else
 			task.spawn(player.LoadCharacter, player)  -- a fresh character (start room, or monster spot)
 		end
@@ -587,6 +668,7 @@ local function runPlaying()
 			if not player:GetAttribute("Seized") then table.insert(collectors, player) end
 		end
 		objectives:Update(collectors)
+		wards:Update(collectors)
 		objectives:UpdateMonsterSight(monsters)
 		if objectives.collected >= Config.RELICS_NEEDED then return "survivors" end
 		if os.clock() >= endsAt then return "time" end
@@ -672,6 +754,10 @@ end)
 --   "crush", id             -> set that crusher off (no dark mana needed)
 --   "falseRelic", x, z      -> place a false relic in cell (x, z); -> its id, or nil
 --   "monsters", on          -> switch every monster on or off (off: they stand still and catch nobody)
+--   "haunt", userId         -> the Maze Master's Haunt on that survivor (no dark mana): -> ok, message
+--   "ward", x, z            -> place a ward in cell (x, z) (no Maze Master needed); -> its id, or nil
+--   "sees", position        -> can the monster side see that spot right now?
+--   "bot", userId, cframe   -> hold that survivor bot at cframe (nil lets it go)
 if RunService:IsStudio() then
 	local hook = Instance.new("BindableFunction")
 	hook.Name = "MatchTest"
@@ -685,6 +771,18 @@ if RunService:IsStudio() then
 		elseif action == "monsters" then
 			for _, monster in monsters do monster.active = a == true end
 			return true
+		elseif action == "haunt" and maze then
+			return { haunt(a) }
+		elseif action == "ward" and wards then
+			local ward = wards:Add(a, b)
+			return ward and ward.id
+		elseif action == "sees" and maze then
+			return monsterSideSees(a)
+		elseif action == "bot" then
+			for _, bot in bots do
+				if bot.UserId == a then bot.heldAt = b return true end
+			end
+			return false
 		elseif action == "falseRelic" and objectives then
 			local relic = objectives:AddFalseRelic(a, b)
 			return relic and relic.id

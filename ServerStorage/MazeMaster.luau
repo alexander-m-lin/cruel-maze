@@ -1,6 +1,6 @@
 -- THE MAZE MASTER's tools, checked and carried out on the server.
 --
---   local mm = MazeMaster.new(player, { maze, doors, crushers, objectives })
+--   local mm = MazeMaster.new(player, { maze, doors, crushers, objectives, wards, haunt })
 --   mm:Step(dt)                 -- every frame: dark mana refills
 --   mm:Use(tool, target)        -- -> ok, message
 --   mm:Destroy()
@@ -8,6 +8,8 @@
 -- Each tool costs DARK MANA (Config.DARK_MANA_MAX, refilling Config.DARK_MANA_REGEN a second) and
 -- has its own cooldown (Config.MAZE_MASTER_TOOLS):
 --   Door       target = door id      open or shut it (that door then rests MAZE_MASTER_DOOR_COOLDOWN s)
+--   Ward       target = a position   place a ward (a floating eye, see WardEyes) in that cell
+--   Haunt      target = a UserId     haunt that survivor (parts.haunt checks the monster side sees them)
 --   FalseRelic target = a position   place a false relic in that cell (FALSE_RELICS_PER_MATCH a match)
 --   Crusher    target = crusher id   set off that crushing wall
 --
@@ -22,12 +24,14 @@ local Config = require(ReplicatedStorage.Config)
 local MazeMaster = {}
 MazeMaster.__index = MazeMaster
 
-local ATTRIBUTES = { "DarkMana", "ToolReadyDoor", "ToolReadyFalseRelic", "ToolReadyCrusher", "FalseRelicsLeft" }
+local ATTRIBUTES = { "DarkMana", "ToolReadyDoor", "ToolReadyWard", "ToolReadyHaunt", "ToolReadyFalseRelic",
+	"ToolReadyCrusher", "FalseRelicsLeft" }
 
 function MazeMaster.new(player, parts)
 	local self = setmetatable({}, MazeMaster)
 	self.player = player
 	self.maze, self.doors, self.crushers, self.objectives = parts.maze, parts.doors, parts.crushers, parts.objectives
+	self.wards, self.haunt = parts.wards, parts.haunt
 	self.mana = Config.DARK_MANA_MAX
 	self.readyAt = {}            -- [tool] = os.clock() when it can be used again
 	self.falseRelicsLeft = Config.FALSE_RELICS_PER_MATCH
@@ -74,6 +78,15 @@ function MazeMaster:Use(tool, target)
 		else
 			message = "That door is already moving"
 		end
+	elseif tool == "Ward" then
+		if typeof(target) ~= "Vector3" then return false, "" end
+		local x, z = self.objectives:CellOf(target)
+		ok = x ~= nil and self.wards:Add(x, z) ~= nil
+		if not ok then message = "Can't place a ward there" end
+	elseif tool == "Haunt" then
+		if typeof(target) ~= "number" then return false, "" end
+		ok, message = self.haunt(target)
+		message = message or ""
 	elseif tool == "FalseRelic" then
 		if self.falseRelicsLeft <= 0 then return false, "No false relics left this match" end
 		if typeof(target) ~= "Vector3" then return false, "" end

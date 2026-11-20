@@ -30,6 +30,9 @@ local Sounds = {
 	-- Crushing walls (see CrusherView): they rumble like doors, then slam
 	CrusherSlam    = { id = 9125393230,  volume = 1.2, range = 120, stopAfter = 1.5 },   -- big rocks dropping
 
+	-- The Maze Master
+	HauntWhisper   = { id = 72101610830828, volume = 0.8 },                           -- you've been haunted (only you hear it)
+
 	-- Background music: plays all the time, on a loop
 	Music          = { id = 138890398994853, volume = 0.1, looped = true },
 

@@ -1,6 +1,8 @@
 -- The relic-collecting effect: whoever is collecting a relic reaches out a hand toward it, and a
--- beam of light runs from their hand to the relic. Also the prompt to collect one, and the relics
--- floating and turning above their pedestals (both at the end).
+-- beam of light runs from their hand to the relic. Destroying a WARD (the Maze Master's floating
+-- eye, see WardEyes) looks and works the same. Also the prompt to collect a relic (or destroy a
+-- ward within Config.WARD_REACH), and the relics floating and turning above their pedestals (both
+-- at the end).
 -- Runs on every player's computer, for every collector, so everyone sees it (the server says who
 -- is collecting each relic in its "Collector" attribute; see Objectives). Everything made here
 -- exists only on this computer.
@@ -81,15 +83,31 @@ local function make(info, character, gem)
 	return { character = character, gem = gem, cleanup = cleanup }
 end
 
+-- What a relic's or ward's info points at: the relic's gem, or the ward's eye
+local function targetOf(info, maze)
+	local isWard = info.Parent and info.Parent.Name == "WardEyes"
+	local model = maze:FindFirstChild((isWard and "Ward" or "Relic") .. tostring(info:GetAttribute("Id")))
+	return model and model:FindFirstChild(isWard and "Eye" or "Gem")
+end
+
+local function infos()
+	local list = {}
+	for _, name in { "Relics", "WardEyes" } do
+		local folder = match:FindFirstChild(name)
+		if folder then
+			for _, info in folder:GetChildren() do table.insert(list, info) end
+		end
+	end
+	return list
+end
+
 RunService.Heartbeat:Connect(function()
-	local relics = match:FindFirstChild("Relics")
 	local maze = workspace:FindFirstChild("Maze")
 	local wanted = {}
-	if relics and maze then
-		for _, info in relics:GetChildren() do
+	if maze then
+		for _, info in infos() do
 			local character = Characters.of(info:GetAttribute("Collector"))   -- a player or a survivor bot
-			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
-			local gem = relicModel and relicModel:FindFirstChild("Gem")
+			local gem = targetOf(info, maze)
 			if character and gem and not info:GetAttribute("Collected") then
 				wanted[info] = true
 				local e = effects[info]
@@ -113,6 +131,7 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local collectEvent = Net.event("CollectRelic")
+local destroyWardEvent = Net.event("DestroyWard")
 local player = Players.LocalPlayer
 
 -- The prompt is a little picture of a mouse with its left button lit up (built from UI shapes, no
@@ -204,17 +223,26 @@ local function relicInReach()
 		if info:GetAttribute("Collected") or info:GetAttribute("CollectSince") then continue end
 		local rx, rz = cell(info:GetAttribute("Center"))
 		if rx == mx and rz == mz then
-			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
-			local gem = relicModel and relicModel:FindFirstChild("Gem")
+			local gem = targetOf(info, maze)
 			if gem then return info, gem end
+		end
+	end
+	-- a ward close by (the server also checks there's no wall between)
+	local wardFolder = match:FindFirstChild("WardEyes")
+	for _, info in wardFolder and wardFolder:GetChildren() or {} do
+		if info:GetAttribute("CollectSince") then continue end
+		local flat = (info:GetAttribute("Center") - root.Position) * Vector3.new(1, 0, 1)
+		if flat.Magnitude <= Config.WARD_REACH then
+			local eye = targetOf(info, maze)
+			if eye then return info, eye, true end
 		end
 	end
 	return nil
 end
 
 local function tryCollect()
-	local info = relicInReach()
-	if info then collectEvent:FireServer(info:GetAttribute("Id")) end
+	local info, _, isWard = relicInReach()
+	if info then (isWard and destroyWardEvent or collectEvent):FireServer(info:GetAttribute("Id")) end
 end
 
 RunService.Heartbeat:Connect(function()

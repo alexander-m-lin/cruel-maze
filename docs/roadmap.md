@@ -118,6 +118,12 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 
 **Added from testing (2026-11-19):** basic survivor bots pulled forward from Phase 5, so matches have survivors to hunt with few people (roam, collect relics in sight, flee to a spawn room on seeing a monster); Maze Master mouse-wheel zoom; a placement marker for false relics; false relics glow red for the monster side; the Maze Master has a vision ring round every relic from the start (as survivors do once they've spotted one).
 
+**Maze Master vision (2026-11-20):** testing found the Maze Master starved of information, so two more tools (still a baseplate, not a full kit) and fixed sight:
+- *Wards* (15 mana, 4 s): a floating eye placed in an open cell (not a spawn room or relic cell); the monster side sees all round it (22 studs, walls block). Up to 3 at a time, the oldest fading. Survivors see one like anything else and, once spotted, it stays shown to them. A survivor destroys one by standing within 8 studs and holding for 1.5 s (the relic beam); the monster side sees a pulsing ring where it is meanwhile.
+- *Haunt* (20 mana, 15 s): on a survivor the monster side can see right now (checked on the server against every sight source). For 3 s they're revealed and their vision cone counts as monster-side sight. They get a faint purple screen edge and a whisper.
+- *Crushing walls* give the monster side permanent sight of their cell plus 6 studs past it each way.
+- Fixed along the way: with streaming on, the Maze Master (no character) received no survivor bodies at all. The server now gives them a streaming focus in the middle of the maze.
+
 **Open (2026-11-19):** once, as a survivor, the user saw both survivor bots fly up off-screen at the same moment (a monster was nearby; not the kill animation). Not reproduced. SurvivorBot now puts a bot back if it goes more than 20 studs above or 5 below the floor, warns in the output, and sets a `Rescued` attribute. Watch for that warning in tests.
 
 **Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.

@@ -66,6 +66,8 @@ Config.DARK_MANA_MAX = 100
 Config.DARK_MANA_REGEN = 5        -- per second
 Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds
 	Door       = { cost = 10, cooldown = 1 },    -- open or shut a door (plus DOOR_COOLDOWN on that door)
+	Ward       = { cost = 15, cooldown = 4 },    -- place a ward (a floating eye that watches around it)
+	Haunt      = { cost = 20, cooldown = 15 },   -- haunt a survivor the monster side can see
 	FalseRelic = { cost = 30, cooldown = 5 },    -- place a false relic
 	Crusher    = { cost = 50, cooldown = 30 },   -- set off a crushing wall
 }
@@ -81,6 +83,21 @@ Config.FALSE_RELIC_SLOW_TIME = 3        -- ...for this long
 Config.FALSE_RELIC_BLINK_EVERY = 5      -- seconds (roughly) between the eyes going out...
 Config.FALSE_RELIC_BLINK_TIME = 0.15    -- ...for this long
 
+-- Wards: floating eyes the Maze Master places in open cells. The monster side sees all around one
+-- (walls block it). Survivors see one like anything else, and once one of them has spotted it, it
+-- stays shown to them. A survivor can destroy one by standing next to it and holding, like
+-- collecting a relic (the monster side is told where).
+Config.WARDS_MAX = 3                    -- at a time: placing another fades the oldest
+Config.WARD_VISION_RADIUS = 22          -- studs (a survivor sees 80 in a cone, 12 all round)
+Config.WARD_HEIGHT = 4.5                -- studs above the floor the eye floats
+Config.WARD_REACH = 8                   -- a survivor this close (studs, flat) can destroy it...
+Config.WARD_DESTROY_TIME = 1.5          -- ...by staying close this long
+
+-- Haunt: on a survivor the monster side can see right now. For a few seconds they're revealed to
+-- the monster side wherever they go, and their vision cone counts as the monster side's sight too.
+-- The haunted survivor feels it (a faint purple screen edge and a whisper).
+Config.HAUNT_TIME = 3
+
 -- Crushing walls: pairs of walls along straight corridor cells, built into the maze, that the Maze
 -- Master sets off. They rumble, slam together (killing survivors between), then slide back.
 Config.CRUSHERS = 6                     -- how many per maze
@@ -89,6 +106,7 @@ Config.CRUSHER_WARNING = 2              -- seconds of rumbling
 Config.CRUSHER_SLAM_TIME = 0.3
 Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
 Config.CRUSHER_RETURN_TIME = 1
+Config.CRUSHER_VISION = 6               -- the monster side always sees a crushing wall's cell and this many studs past it each way
 
 -- Match states, in the order they run. The server publishes the current one (see Match).
 Config.States = {

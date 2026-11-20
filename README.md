@@ -23,9 +23,12 @@ bottom left picks yours for the next match, and "New match" starts one.
 - **Monster:** move as usual; left-click to lunge. A survivor you hit is caught. You see what your
   team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
-  red for you and the monsters. Spend dark mana on doors (1), false relics
-  (2, two a match: they look like relics, and a survivor who clicks one is revealed and slowed) and
-  crushing walls (3: hidden in the maze, they slam together and crush survivors between them).
+  red for you and the monsters. You see what the monsters see, all round every relic, and each
+  crushing wall's stretch of corridor. Spend dark mana on doors (1), wards (2: a floating eye
+  your side sees all round; up to 3 at a time), haunt (3: click a survivor you can see; for 3
+  seconds your side sees them, and what they see), false relics (4, two a match: they look like
+  relics, and a survivor who clicks one is revealed and slowed) and crushing walls (5: hidden in
+  the maze, they slam together and crush survivors between them).
 
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):
@@ -34,6 +37,10 @@ bottom left picks yours for the next match, and "New match" starts one.
   the area around it stays visible to your team until it's collected.
 - An AI **monster** roams the maze, and chases you when it sees or hears you. If it catches you,
   you lose one of your **3 lives**.
+- **Wards** (floating purple eyes) let the monster side see around them. Once your team spots
+  one it stays shown; stand next to one and left-click, then stay close for 1.5 seconds, to
+  destroy it (the monster side sees where). A purple glow round your screen and a whisper mean
+  the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
 - **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
   for your team, and you can come back there after being caught. Your team's rooms (the start
   room, and any you capture) are on your map whole.
@@ -60,9 +67,10 @@ bottom left picks yours for the next match, and "New match" starts one.
 | `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and spawn rooms (capturing, monster barriers) |
 | `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches. Also builds the monster body |
 | `ServerStorage/PlayerMonster.luau` | ServerStorage (ModuleScript) | A monster played by a person: dresses their invisible character in the monster body; the lunge and its catches |
-| `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, false relics, crushing walls |
+| `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, haunt, false relics, crushing walls |
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a spawn room from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
+| `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, spawn rooms |
 | `ReplicatedStorage/Sounds.luau` | ReplicatedStorage (ModuleScript) | Every sound effect and the music, with volumes |
@@ -80,10 +88,12 @@ bottom left picks yours for the next match, and "New match" starts one.
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
 | `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's lunge (left click, or a button on touch screens) |
-| `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's dark mana bar, tool buttons and clicking on doors, cells and crushing walls |
+| `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's dark mana bar, tool buttons and clicking on doors, cells, survivors and crushing walls |
 | `StarterPlayerScripts/CrusherView.local.luau` | StarterPlayer › StarterPlayerScripts | A crushing wall's warning: its walls shake and dust pours out |
 | `StarterPlayerScripts/FalseRelicMarks.local.luau` | StarterPlayer › StarterPlayerScripts | False relics glow red for the monster side (only they're told which are false) |
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
+| `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
+| `StarterPlayerScripts/HauntAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The purple screen edge and whisper when you're haunted |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: pick your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Studio only: a panel to work the doors (and G toggles the door under the mouse) |
 | `StarterPlayerScripts/MonsterPing.local.luau` | StarterPlayer › StarterPlayerScripts | Sonar ping showing a nearby monster you can't see |

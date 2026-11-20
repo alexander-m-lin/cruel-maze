@@ -221,6 +221,12 @@ function SurvivorBot:Step(dt, monsters)
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root and humanoid.Health > 0) or self:GetAttribute("Seized") or self:GetAttribute("Out") then return end
+	if self.heldAt then                       -- (Studio tests: held in place, see Match's MatchTest "bot")
+		root.AssemblyLinearVelocity = Vector3.zero
+		character:PivotTo(self.heldAt)
+		humanoid:Move(Vector3.zero)
+		return
+	end
 	local now = os.clock()
 
 	-- collecting a relic: face it, as a player does (Controls), so its eyes stay on it

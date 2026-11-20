@@ -13,7 +13,7 @@
 -- countdown); this script scales it each frame. Your character's movement is simulated on your
 -- own computer, so setting WalkSpeed here is what takes effect.
 --
--- COLLECTING A RELIC: while you're collecting one, you face it (so your vision cone stays on it)
+-- COLLECTING A RELIC (or destroying a ward): while you're collecting one, you face it (so your vision cone stays on it)
 -- and move at the backwards speed whichever way you go.
 --
 -- BACKWARDS RUNNING: when you move away from where you face, the walk/run animation plays in
@@ -37,13 +37,14 @@ local match = game:GetService("ReplicatedStorage"):WaitForChild("Match")
 
 local GEM_HEIGHT = 3.4       -- how high a relic's gem sits above the floor (see MazeBuilder)
 
--- The relic you're collecting right now, if any: its gem's position
+-- The relic you're collecting (or ward you're destroying) right now, if any: its gem's or eye's position
 local function collectingAt()
-	local relics = match:FindFirstChild("Relics")
-	if not relics then return nil end
-	for _, info in relics:GetChildren() do
-		if info:GetAttribute("Collector") == player.UserId then
-			return info:GetAttribute("Center") + Vector3.new(0, GEM_HEIGHT, 0)
+	for _, name in { "Relics", "WardEyes" } do
+		local folder = match:FindFirstChild(name)
+		for _, info in folder and folder:GetChildren() or {} do
+			if info:GetAttribute("Collector") == player.UserId then
+				return info:GetAttribute("Eye") or info:GetAttribute("Center") + Vector3.new(0, GEM_HEIGHT, 0)
+			end
 		end
 	end
 	return nil

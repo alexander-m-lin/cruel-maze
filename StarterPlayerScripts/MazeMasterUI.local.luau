@@ -1,15 +1,18 @@
 -- The MAZE MASTER's interface (only while you're the Maze Master). The camera pans over the maze
 -- (IsometricCamera); this script adds:
 --
---   a DARK MANA bar and three TOOL buttons along the bottom (or keys 1, 2, 3):
+--   a DARK MANA bar and five TOOL buttons along the bottom (or keys 1-5):
 --     Door           - click near a door to open or shut it
+--     Ward           - click a cell to place a ward (a floating eye) there
+--     Haunt          - click a survivor you can see to haunt them
 --     False relic    - click a cell to place a false relic there
 --     Crushing wall  - click near a crushing wall to set it off
 --   Each button shows its cost and, while it recharges, how long is left.
 --   Outlines in the world: with Door picked, every door (purple = ready, grey = resting or moving);
 --   with Crushing wall picked, every crushing wall's cell. The one nearest the mouse is brighter.
---   With False relic picked, the cell under the mouse lights up: green = a false relic can go
+--   With False relic or Ward picked, the cell under the mouse lights up: green = one can go
 --   there, red = it can't (amber = it could, but you can't afford one or have none left).
+--   With Haunt picked, every survivor you can see is outlined.
 --
 -- Clicks and taps both work (no hover needed). The server checks everything (MazeMaster) and
 -- answers with a short message, shown above the bar.
@@ -17,6 +20,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
@@ -36,8 +40,10 @@ local GREY = Color3.fromRGB(110, 110, 120)
 
 local TOOLS = {
 	{ id = "Door", name = "Door", key = Enum.KeyCode.One },
-	{ id = "FalseRelic", name = "False relic", key = Enum.KeyCode.Two },
-	{ id = "Crusher", name = "Crushing wall", key = Enum.KeyCode.Three },
+	{ id = "Ward", name = "Ward", key = Enum.KeyCode.Two },
+	{ id = "Haunt", name = "Haunt", key = Enum.KeyCode.Three },
+	{ id = "FalseRelic", name = "False relic", key = Enum.KeyCode.Four },
+	{ id = "Crusher", name = "Crushing wall", key = Enum.KeyCode.Five },
 }
 local selected = "Door"
 
@@ -51,7 +57,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 local panel = Instance.new("Frame")
 panel.AnchorPoint = Vector2.new(0.5, 1)
 panel.Position = UDim2.new(0.5, 0, 1, -16)
-panel.Size = UDim2.fromOffset(420, 104)
+panel.Size = UDim2.fromOffset(620, 104)
 panel.BackgroundTransparency = 1
 panel.Parent = gui
 
@@ -92,8 +98,8 @@ barText.Parent = barBack
 local buttons = {}
 for i, tool in TOOLS do
 	local b = Instance.new("TextButton")
-	b.Position = UDim2.new((i - 1) / 3, i == 1 and 0 or 4, 0, 30)
-	b.Size = UDim2.new(1 / 3, -6, 0, 74)
+	b.Position = UDim2.new((i - 1) / #TOOLS, i == 1 and 0 or 4, 0, 30)
+	b.Size = UDim2.new(1 / #TOOLS, -6, 0, 74)
 	b.BackgroundColor3 = Color3.fromRGB(34, 26, 44)
 	b.BackgroundTransparency = 0.1
 	b.BorderSizePixel = 0
@@ -204,6 +210,31 @@ local function nearestCrusher(point)
 	return best
 end
 
+-- Survivors you can see right now (FogOfWar marks each "VisibleToMe"): [character] = UserId
+local function visibleSurvivors()
+	local list = {}
+	for _, other in Players:GetPlayers() do
+		local character = other.Character
+		if character and other:GetAttribute("Role") == Config.Roles.Survivor and character:GetAttribute("VisibleToMe") then
+			list[character] = other.UserId
+		end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do
+		if bot:GetAttribute("VisibleToMe") then list[bot] = bot:GetAttribute("BotUserId") end
+	end
+	return list
+end
+
+local function nearestSurvivor(point)
+	local best, bestId, bestDist
+	for character, userId in visibleSurvivors() do
+		local p = character:GetPivot().Position
+		local d = (Vector3.new(p.X, 0, p.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
+		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestId, bestDist = character, userId, d end
+	end
+	return best, bestId
+end
+
 local function use(screen, guiInset)
 	local point = floorPoint(screen, guiInset)
 	if not point then return end
@@ -213,8 +244,11 @@ local function use(screen, guiInset)
 	elseif selected == "Crusher" then
 		local id = nearestCrusher(point)
 		if id then toolEvent:FireServer("Crusher", id) else say("Click near a crushing wall") end
-	elseif selected == "FalseRelic" then
-		toolEvent:FireServer("FalseRelic", point)
+	elseif selected == "FalseRelic" or selected == "Ward" then
+		toolEvent:FireServer(selected, point)
+	elseif selected == "Haunt" then
+		local _, userId = nearestSurvivor(point)
+		if userId then toolEvent:FireServer("Haunt", userId) else say("Click a survivor you can see") end
 	end
 end
 
@@ -312,6 +346,25 @@ local function canPlaceAt(center, S, maze)
 	return true
 end
 
+-- WARD PLACEMENT: the server's rule (WardEyes:CanPlace): not in a spawn room, not on a relic's
+-- (or false relic's) cell, not where a ward already is
+local function canPlaceWardAt(center, S)
+	local function same(p, reach)
+		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
+	end
+	local rooms = match:FindFirstChild("SpawnRooms")
+	for _, info in rooms and rooms:GetChildren() or {} do
+		if same(info:GetAttribute("Center"), S) then return false end   -- (a room is 2x2 cells round its centre)
+	end
+	for _, name in { "Relics", "WardEyes" } do
+		local folder = match:FindFirstChild(name)
+		for _, info in folder and folder:GetChildren() or {} do
+			if not info:GetAttribute("Collected") and same(info:GetAttribute("Center"), S / 2 - 0.1) then return false end
+		end
+	end
+	return true
+end
+
 local function showPlacement(point)
 	local maze = workspace:FindFirstChild("Maze")
 	local x, z, center, S
@@ -329,9 +382,10 @@ local function showPlacement(point)
 		placeMarker.CastShadow = false
 		placeMarker.Parent = workspace
 	end
-	local affordable = (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS.FalseRelic.cost
-		and (player:GetAttribute("FalseRelicsLeft") or 0) > 0
-	local ok = canPlaceAt(center, S, maze)
+	local affordable = (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS[selected].cost
+		and (selected ~= "FalseRelic" or (player:GetAttribute("FalseRelicsLeft") or 0) > 0)
+	local ok
+	if selected == "Ward" then ok = canPlaceWardAt(center, S) else ok = canPlaceAt(center, S, maze) end
 	placeMarker.Color = not ok and RED or (affordable and GREEN or AMBER)
 	placeMarker.Size = Vector3.new(S - 3, 0.2, S - 3)
 	placeMarker.CFrame = CFrame.new(center + Vector3.new(0, 0.2, 0))
@@ -381,8 +435,14 @@ RunService.RenderStepped:Connect(function()
 				outline(ghost, (resting or moving) and GREY or (part == hover and PURPLE_BRIGHT or PURPLE), part == hover)
 			end
 		end
-	elseif selected == "FalseRelic" then
+	elseif selected == "FalseRelic" or selected == "Ward" then
 		showPlacement(point)
+	elseif selected == "Haunt" then
+		local hover = point and nearestSurvivor(point)
+		local ready = (player:GetAttribute("ToolReadyHaunt") or 0) <= now and mana >= Config.MAZE_MASTER_TOOLS.Haunt.cost
+		for character in visibleSurvivors() do
+			outline(character, not ready and GREY or (character == hover and PURPLE_BRIGHT or PURPLE), character == hover)
+		end
 	elseif selected == "Crusher" then
 		local hover = point and nearestCrusher(point)
 		for id, c in crushersList() do

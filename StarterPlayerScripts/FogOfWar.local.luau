@@ -22,7 +22,9 @@
 -- or when it's close with no wall between (then the fog clears in a small circle around it).
 --
 -- TEAMS: survivors share sight with each other. Monsters and the Maze Master are one team: they
--- share the sight of every monster, the AI ones too. The Maze Master has no eyes of their own,
+-- share the sight of every monster, the AI ones too, plus the Maze Master's WARDS (all round each
+-- floating eye), every CRUSHING WALL (its cell and a little past it each way), and HAUNTED
+-- survivors' cones (see Haunt in MazeMaster). The Maze Master has no eyes of their own,
 -- but knows the whole layout (all of it shows as explored) and how every door stands. Enemies -
 -- monsters for survivors, survivors for the monster team - are hidden unless your team sees them;
 -- your own side is always shown.
@@ -487,6 +489,13 @@ local function updateHiddenObjects(visibleNow, eyes)
 			objects[bot] = (bot:GetAttribute("RevealedUntil") or 0) > now
 		end
 	end
+	-- wards: the monster side's own; survivors see one like anything else, and always once spotted
+	local wardInfo = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	wardInfo = wardInfo and wardInfo:FindFirstChild("WardEyes")
+	for _, ward in CollectionService:GetTagged("WardEye") do
+		local info = wardInfo and wardInfo:FindFirstChild(ward.Name)
+		objects[ward] = mySide == "monsters" or (info ~= nil and info:GetAttribute("Discovered") == true)
+	end
 	for _, other in Players:GetPlayers() do   -- characters that aren't enemies (any more): show them
 		local character = other.Character
 		if character and objects[character] == nil and character:GetAttribute("FogState") then objects[character] = true end
@@ -721,6 +730,66 @@ local function relicRings()
 	return list
 end
 
+-- THE MONSTER SIDE'S FIXED EYES: all round every ward, and every crushing wall's cell plus
+-- Config.CRUSHER_VISION studs past it each way (a full circle from its middle: the corridor's
+-- walls cut it down to the corridor). Worked out once each, and again when a door moves.
+local fixedSight = {}  -- [ward model or crusher key] = { seen = {...}, maze, doors }
+
+local function fixedEye(keyObj, center, radius, list)
+	local cached = fixedSight[keyObj]
+	if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
+		cached = { seen = sightFrom(Vector3.new(center.X, floorY + EYE_HEIGHT, center.Z), nil, radius),
+			maze = maze, doors = doorVersion }
+		fixedSight[keyObj] = cached
+	end
+	cached.used = true
+	table.insert(list, cached.seen)
+end
+
+local function monsterSideEyes()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
+	for _, c in fixedSight do c.used = false end
+	for _, ward in CollectionService:GetTagged("WardEye") do
+		local center = ward:GetAttribute("Center")
+		if center and ward:IsDescendantOf(maze) then fixedEye(ward, center, Config.WARD_VISION_RADIUS, list) end
+	end
+	-- crushing walls: their slabs carry their resting spot ("Home"); the pair's middle is the cell
+	local S = maze:GetAttribute("CellSize")
+	local sums = {}
+	for _, c in maze:GetChildren() do
+		local id, home = c:GetAttribute("Id"), c:GetAttribute("Home")
+		if c.Name == "Crusher" and id and home then
+			sums[id] = sums[id] or { p = Vector3.zero, n = 0 }
+			sums[id].p += home.Position
+			sums[id].n += 1
+		end
+	end
+	for id, sum in sums do
+		fixedEye("crusher" .. id, sum.p / sum.n, S / 2 + Config.CRUSHER_VISION, list)
+	end
+	for k, c in fixedSight do
+		if not c.used then fixedSight[k] = nil end   -- a ward that's gone, or an old maze's
+	end
+	return list
+end
+
+-- Haunted survivors (players and bots): for the monster side, their cones count as sight
+local function hauntedSurvivors()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
+	local now = workspace:GetServerTimeNow()
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor and (other:GetAttribute("HauntedUntil") or 0) > now and other.Character then
+			table.insert(list, other.Character)
+		end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do
+		if (bot:GetAttribute("HauntedUntil") or 0) > now then table.insert(list, bot) end
+	end
+	return list
+end
+
 -- CAPTURED SPAWN ROOMS: your team knows its own rooms. The start room (captured from the start)
 -- and every room your team captures are added to your map whole - floor and walls - rather than
 -- only the parts someone happened to look at. Remembered, not in view: they show dim until seen.
@@ -816,8 +885,28 @@ local function updateVisibility()
 		end
 		table.insert(eyes, botEye)
 	end
+	-- Haunted survivors' sight (for the monster side), refreshed the same way
+	for _, character in hauntedSurvivors() do
+		local hauntedEye, hauntedFacing = eyesOf(character)
+		if hauntedEye then
+			current[character] = true
+			local cached = teamSight[character]
+			if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
+				cached = { seen = sightFrom(hauntedEye, hauntedFacing), at = now, maze = maze }
+				teamSight[character] = cached
+			end
+			for tile, t in cached.seen do
+				if not merged[tile] or t > merged[tile] then merged[tile] = t end
+			end
+		end
+	end
 	for mate in teamSight do
 		if not current[mate] then teamSight[mate] = nil end   -- left the team / the game
+	end
+	for _, seen in monsterSideEyes() do
+		for tile, t in seen do
+			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
 	end
 	for _, seen in relicRings() do
 		for tile, t in seen do
