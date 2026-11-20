@@ -143,6 +143,13 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 
 ### [ ] 4. Heroes and abilities
 
+**Decisions so far (2026-11-20):**
+- Survivor kits: a primary ability on the right mouse button, a secondary on Q, an ultimate on E. Left click stays each role's own action (collecting relics; a monster's lunge).
+- First hero: **Sara, the Cryptraider** (an explorer with a whip). Whip (5 s): the first wall or relic pulls her to it, a teammate is pulled to her, a monster is pulled to her and stunned for 1 s. Treasure hunt (15 s): the nearest relic her team hasn't spotted, real or false, within 110 studs, is spotted. Flourish (60 s): monsters within 14 studs stunned for 1 s.
+- Character models come later: the abilities, the whip and the animations first (Sara is the default avatar).
+- STUN is a shared mechanic (can't move, lunge or catch); crushing walls stun monsters caught between them. PULL is shared too (players, bots and monsters).
+- Until there's a character select, every survivor plays Sara (`Config.DEFAULT_SURVIVOR_HERO`). Bots don't use abilities yet.
+
 **Notes from testing, before heroes (2026-11-20):** haunt (AI) prefers survivors near a monster; destroying a ward takes 3 s with a progress bar like a relic's, and the AI won't put a ward back where one was just destroyed for 10 s; anything that reveals a survivor also gives the monster side a small ring of sight round them (`Config.REVEAL_VISION_RADIUS`), and AI monsters go for revealed survivors within sight range, walls or not. The match's per-frame systems now run separately, so an error in one can't stop the others.
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay

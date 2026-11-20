@@ -1,0 +1,135 @@
+-- Your HERO'S ABILITIES: the controls and the ability bar (survivors with a hero, during a match).
+--   right mouse button - Primary     Q - Secondary     E - Ultimate
+-- (on a touch screen or gamepad: the buttons on the bar, or the gamepad's shoulder buttons)
+-- Each ability aims the way you face. The server checks and carries it out (Abilities); the bar
+-- shows each one's key, name and cooldown (the "AbilityReady<Slot>" attributes it publishes).
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
+
+local player = Players.LocalPlayer
+local match = ReplicatedStorage:WaitForChild("Match")
+local useEvent = Net.event("UseAbility")
+local resultEvent = Net.event("AbilityResult")
+
+local INPUTS = {
+	Primary = { Enum.UserInputType.MouseButton2, Enum.KeyCode.ButtonR1 },
+	Secondary = { Enum.KeyCode.Q, Enum.KeyCode.ButtonL1 },
+	Ultimate = { Enum.KeyCode.E, Enum.KeyCode.ButtonY },
+}
+local GOLD = Color3.fromRGB(235, 190, 90)
+
+local function myHero()
+	if player:GetAttribute("Role") ~= Config.Roles.Survivor then return nil end
+	if match:GetAttribute("State") ~= Config.States.Playing then return nil end
+	return Heroes.get(player:GetAttribute("Hero"))
+end
+
+local function use(slot)
+	local hero = myHero()
+	if not (hero and hero.abilities[slot]) then return end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	useEvent:FireServer(slot, root.CFrame.LookVector)
+end
+
+---------------------------------------------------------------- the bar
+local gui = Instance.new("ScreenGui")
+gui.Name = "AbilityBar"
+gui.ResetOnSpawn = false
+gui.Enabled = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local bar = Instance.new("Frame")
+bar.AnchorPoint = Vector2.new(0.5, 1)
+bar.Position = UDim2.new(0.5, 0, 1, -16)
+bar.Size = UDim2.fromOffset(3 * 104 + 2 * 8, 84)
+bar.BackgroundTransparency = 1
+bar.Parent = gui
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.FillDirection.Horizontal
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.Padding = UDim.new(0, 8)
+layout.Parent = bar
+
+local message = Instance.new("TextLabel")
+message.AnchorPoint = Vector2.new(0.5, 1)
+message.Position = UDim2.new(0.5, 0, 0, -6)
+message.Size = UDim2.fromOffset(400, 20)
+message.BackgroundTransparency = 1
+message.Font = Enum.Font.GothamMedium
+message.TextSize = 14
+message.TextColor3 = Color3.fromRGB(240, 230, 210)
+message.TextStrokeTransparency = 0.4
+message.Text = ""
+message.Parent = bar
+local messageUntil = 0
+resultEvent.OnClientEvent:Connect(function(_, text)
+	message.Text = text
+	messageUntil = os.clock() + 2
+end)
+
+local buttons = {}
+for _, slot in Heroes.SLOTS do
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.fromOffset(104, 84)
+	b.BackgroundColor3 = Color3.fromRGB(36, 30, 24)
+	b.BackgroundTransparency = 0.1
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = true
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 14
+	b.TextColor3 = Color3.new(1, 1, 1)
+	b.TextWrapped = true
+	b.Parent = bar
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = GOLD
+	stroke.Thickness = slot == "Ultimate" and 2 or 1
+	stroke.Parent = b
+	local shade = Instance.new("Frame")            -- drains as it recharges
+	shade.AnchorPoint = Vector2.new(0, 1)
+	shade.Position = UDim2.fromScale(0, 1)
+	shade.Size = UDim2.fromScale(1, 0)
+	shade.BackgroundColor3 = Color3.new(0, 0, 0)
+	shade.BackgroundTransparency = 0.45
+	shade.BorderSizePixel = 0
+	shade.ZIndex = 2
+	shade.Parent = b
+	Instance.new("UICorner", shade).CornerRadius = UDim.new(0, 8)
+	b.Activated:Connect(function() use(slot) end)
+	buttons[slot] = { button = b, shade = shade }
+end
+
+RunService.RenderStepped:Connect(function()
+	local hero = myHero()
+	gui.Enabled = hero ~= nil
+	if not hero then return end
+	if os.clock() > messageUntil then message.Text = "" end
+	local now = workspace:GetServerTimeNow()
+	for slot, b in buttons do
+		local def = hero.abilities[slot]
+		b.button.Visible = def ~= nil
+		if not def then continue end
+		local left = math.max(0, (player:GetAttribute("AbilityReady" .. slot) or 0) - now)
+		b.button.Text = ("[%s]\n%s%s"):format(Heroes.KEYS[slot], def.name, left > 0 and ("\n%ds"):format(math.ceil(left)) or "")
+		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))
+	end
+end)
+
+---------------------------------------------------------------- the keys
+for slot, inputs in INPUTS do
+	ContextActionService:BindAction("Ability" .. slot, function(_, state)
+		if state ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
+		if not myHero() then return Enum.ContextActionResult.Pass end
+		use(slot)
+		return Enum.ContextActionResult.Sink
+	end, false, table.unpack(inputs))
+end

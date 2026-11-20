@@ -3,6 +3,8 @@
 --   local monster = PlayerMonster.new(player, maze, { onCatch = fn(player, monster), startCell = {x, z} })
 --   monster:Step(dt, targets)   -- every frame, like MonsterAI (targets = survivors it may catch)
 --   monster:Lunge()             -- the player clicked to lunge (checked here)
+--   monster:Stun(seconds)       -- can't move, lunge or catch for a while
+--   monster:Pull(to, speed)     -- their character dragged to `to` (Pull); -> seconds
 --   monster:Destroy()
 --
 -- The player moves an ordinary character, made invisible (see Match), and this module dresses it
@@ -23,6 +25,7 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Config = require(ReplicatedStorage.Config)
 local MonsterAI = require(ServerStorage.MonsterAI)
+local Pull = require(ServerStorage.Pull)
 
 local KILL = MonsterAI.KILL
 local CATCH_GRACE = 4      -- seconds a just-caught survivor is ignored
@@ -57,7 +60,10 @@ end
 function PlayerMonster:Destroy()
 	if self.model then self.model:Destroy() end
 	self.model = nil
-	if self.player.Parent then self.player:SetAttribute("Killing", nil) end
+	if self.player.Parent then
+		self.player:SetAttribute("Killing", nil)
+		self.player:SetAttribute("StunnedUntil", nil)
+	end
 end
 
 -- Put the player's (new) character at the start spot. Until this is done, the body ignores the
@@ -90,10 +96,25 @@ function PlayerMonster:publish()
 	if model:GetAttribute("Mode") ~= self.mode then model:SetAttribute("Mode", self.mode) end
 end
 
+-- Stunned: the player's character can't move (Movement reads "StunnedUntil"), and they can't
+-- lunge or catch. A lunge under way is called off.
+function PlayerMonster:Stun(seconds)
+	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
+	local untilServer = workspace:GetServerTimeNow() + (self.stunUntil - os.clock())
+	self.player:SetAttribute("StunnedUntil", untilServer)
+	if self.model then self.model:SetAttribute("StunnedUntil", untilServer) end
+	self.lungeHitFrom, self.lungeUntil = nil, nil
+end
+
+function PlayerMonster:Pull(to, speed)
+	return Pull.character(self.player, to, speed)
+end
+
 -- The player clicked to lunge. Returns true if it started.
 function PlayerMonster:Lunge()
 	local now = os.clock()
 	if not self.active or self.killUntil or now < self.cooldownUntil then return false end
+	if now < (self.stunUntil or 0) then return false end
 	if not rootOf(self.player) then return false end
 	self.lungeHitFrom = now + Config.LUNGE_WINDUP
 	self.lungeUntil = self.lungeHitFrom + Config.LUNGE_TIME + LATENCY_SLACK

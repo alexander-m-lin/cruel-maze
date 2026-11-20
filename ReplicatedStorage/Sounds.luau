@@ -33,6 +33,11 @@ local Sounds = {
 	-- The Maze Master
 	HauntWhisper   = { id = 72101610830828, volume = 0.8 },                           -- you've been haunted (only you hear it)
 
+	-- Heroes
+	WhipCrack      = { id = 9113612888, volume = 0.9, range = 90 },                    -- Sara's whip (Pro Sound Effects)
+	WhipSpin       = { id = 9120972321, volume = 0.9, range = 90 },                    -- Sara's Flourish
+	TreasureHunt   = { id = 90618709727045, volume = 0.7 },                            -- a relic found by Treasure hunt (only Sara's team hears it)
+
 	-- Background music: plays all the time, on a loop
 	Music          = { id = 138890398994853, volume = 0.1, looped = true },
 

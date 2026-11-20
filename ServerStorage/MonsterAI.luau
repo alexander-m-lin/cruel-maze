@@ -2,6 +2,8 @@
 --
 --   local monster = MonsterAI.new(maze, { onCatch = function(player) ... end })
 --   monster:Step(dt, targets)   -- every frame; targets = the players it may hunt
+--   monster:Stun(seconds)       -- can't move or catch for a while ("StunnedUntil" on the body)
+--   monster:Pull(to, speed)     -- dragged in a straight line to `to` (Sara's whip); -> seconds
 --   monster:Destroy()           -- at the end of the match
 --
 -- A match can create as many as it likes; each keeps its own state.
@@ -256,6 +258,22 @@ function MonsterAI:MazeChanged()
 	self.path = {}
 end
 
+---------------------------------------------------------------- stun and pull
+function MonsterAI:Stun(seconds)
+	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
+	if self.model then
+		self.model:SetAttribute("StunnedUntil", workspace:GetServerTimeNow() + (self.stunUntil - os.clock()))
+	end
+end
+
+function MonsterAI:Pull(to, speed)
+	local target = Vector3.new(to.X, self.pos.Y, to.Z)
+	local distance = (target - self.pos).Magnitude
+	if distance < 0.5 then return 0 end
+	self.pull = { from = self.pos, to = target, startedAt = os.clock(), time = distance / speed }
+	return self.pull.time
+end
+
 ---------------------------------------------------------------- senses
 -- revealed: the survivor is revealed to the monster side (a false relic, a haunt...): seen within
 -- sight range even through walls
@@ -356,6 +374,22 @@ function MonsterAI:Step(dt, targets)
 		self.mode = "roam"
 		self.model:SetAttribute("KillVictim", nil)
 		self.model:SetAttribute("KillStart", nil)
+	end
+	-- Being pulled (a whip): dragged along, nothing else
+	if self.pull then
+		local k = math.clamp((now - self.pull.startedAt) / self.pull.time, 0, 1)
+		self.pos = self.pull.from:Lerp(self.pull.to, k)
+		if k >= 1 then
+			self.pull = nil
+			self.path = {}
+		end
+		self:publish(now)
+		return
+	end
+	-- Stunned: stands still and catches nobody
+	if now < (self.stunUntil or 0) then
+		self:publish(now)
+		return
 	end
 	local maze = self.maze
 

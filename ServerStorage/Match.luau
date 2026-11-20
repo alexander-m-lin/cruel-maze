@@ -55,6 +55,8 @@ local MazeMaster = require(ServerStorage.MazeMaster)
 local MazeMasterAI = require(ServerStorage.MazeMasterAI)
 local WardEyes = require(ServerStorage.WardEyes)
 local Dev = require(ServerStorage.Dev)
+local Abilities = require(ServerStorage.Abilities)
+local Pull = require(ServerStorage.Pull)
 local SpeedCheck = require(ServerStorage.SpeedCheck)
 
 local States, Roles = Config.States, Config.Roles
@@ -424,6 +426,7 @@ chooseSpawnEvent.OnServerEvent:Connect(function(player, roomId)
 end)
 
 local function cleanUp()
+	Abilities.stop()
 	restartRequested = false    -- (a "New match" click during the countdown still ends that match, once it's playing)
 	for _, monster in monsters do monster:Destroy() end
 	table.clear(monsters)
@@ -443,7 +446,8 @@ local function cleanUp()
 	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
-		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil" } do
+		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
+			"StunnedUntil", "PullAt", "PullTime", "PullFrom", "PullTo" } do
 			player:SetAttribute(name, nil)
 		end
 	end
@@ -633,7 +637,8 @@ local function runCountdown()
 	-- random door AI works the doors)
 	doors = Doors.new(maze, { monsters = monsters, survivors = survivorsInMatch,
 		ai = mazeMaster == nil and not Config.MAZE_MASTER_AI, bots = function() return bots end })
-	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end, survivors = survivorsInMatch })
+	crushers = Crushers.new(maze, { onCrush = function(player) onCaught(player, nil) end, survivors = survivorsInMatch,
+		monsters = monsters })
 	wards = WardEyes.new(maze, objectives)
 	if mazeMaster or Config.MAZE_MASTER_AI then
 		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives,
@@ -659,6 +664,7 @@ local function runCountdown()
 		bot:SetAttribute("Role", Roles.Survivor)
 		bot:SetAttribute("Lives", Config.LIVES)
 		bot:SetAttribute("SpawnRoom", 1)
+		bot:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
 		bot:SetAttribute("BaseSpeed", 0)
 		bot:LoadCharacter()
 		setUpSurvivorCharacter(bot.Character)
@@ -671,6 +677,7 @@ local function runCountdown()
 		player:SetAttribute("Respawning", nil)
 		player:SetAttribute("Killing", nil)
 		player:SetAttribute("SpawnRoom", role == Roles.Survivor and 1 or nil)
+		player:SetAttribute("Hero", role == Roles.Survivor and Config.DEFAULT_SURVIVOR_HERO or nil)
 		if role == Roles.MazeMaster then
 			if player.Character then player.Character:Destroy() end   -- no body in the maze
 			player.Character = nil
@@ -703,6 +710,8 @@ local function runPlaying()
 	doors.running = true
 	if mazeMasterTools then mazeMasterTools.active = true end
 	if mazeMasterAI then mazeMasterAI:Start() end
+	Abilities.start({ maze = maze, objectives = objectives, monsters = monsters, survivors = survivorsInMatch,
+		stun = function(monster, seconds) if monster.Stun then monster:Stun(seconds) end end })
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
 	local hadSurvivors = #survivorsInMatch() > 0
@@ -723,6 +732,7 @@ local function runPlaying()
 end
 
 local function runResults(outcome, elapsed)
+	Abilities.stop()
 	for _, monster in monsters do monster.active = false end
 	if doors then doors.running = false end
 	if mazeMasterTools then mazeMasterTools.active = false end
@@ -785,6 +795,7 @@ local function onPlayerAdded(player)
 		player:SetAttribute("Role", Roles.Survivor)
 		player:SetAttribute("Lives", Config.LIVES)
 		player:SetAttribute("SpawnRoom", 1)
+		player:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
 	end
 	player:LoadCharacter()
 end
@@ -805,11 +816,12 @@ end)
 --   "sees", position        -> can the monster side see that spot right now?
 --   "reveal", userId, secs  -> reveal that survivor to the monster side (as a false relic does)
 --   "teleport", player, cf  -> move a player's character there (past the speed check)
+--   "ability", userId, slot, aim -> use a hero ability as that survivor (player or bot): -> ok, message
 --   "bot", userId, cframe   -> hold that survivor bot at cframe (nil lets it go)
 if RunService:IsStudio() then
 	local hook = Instance.new("BindableFunction")
 	hook.Name = "MatchTest"
-	hook.OnInvoke = function(action, a, b)
+	hook.OnInvoke = function(action, a, b, ...)
 		if action == "crushers" and crushers then
 			local out = {}
 			for id, c in crushers.list do out[id] = { center = c.center, state = c.state, x = c.x, z = c.z, along = c.along } end
@@ -828,6 +840,11 @@ if RunService:IsStudio() then
 			a.Character:PivotTo(b)
 			SpeedCheck.moved(a)
 			return true
+		elseif action == "ability" then
+			for _, survivor in survivorsInMatch() do
+				if survivor.UserId == a then return { Abilities.use(survivor, b, select(1, ...)) } end
+			end
+			return { false, "no such survivor" }
 		elseif action == "reveal" then
 			for _, survivor in survivorsInMatch() do
 				if survivor.UserId == a then
@@ -872,6 +889,7 @@ function Match.run()
 	end
 	RunService.Heartbeat:Connect(function(dt)
 		safely("speed check", SpeedCheck.step, dt)
+		safely("pulls", Pull.step)
 		if doors then safely("doors", doors.Step, doors, dt) end
 		if crushers then safely("crushers", crushers.Step, crushers) end
 		if mazeMasterTools then safely("Maze Master tools", mazeMasterTools.Step, mazeMasterTools, dt) end

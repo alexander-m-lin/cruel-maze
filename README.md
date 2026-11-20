@@ -36,6 +36,17 @@ starts another straight away, and "Doors" opens the doors panel.
   relics, and a survivor who clicks one is revealed and slowed) and crushing walls (5: hidden in
   the maze, they slam together and crush survivors between them).
 
+**Heroes:** every survivor plays **Sara, the Cryptraider** for now (more heroes and a character
+select are coming). Abilities aim the way you face:
+- **Right mouse: Whip** (5 s). Lashes out 30 studs. A wall or relic pulls you to it; a teammate is
+  pulled to you; a monster is pulled to you and stunned for 1 second.
+- **Q: Treasure hunt** (15 s). The nearest relic your team hasn't spotted (real or false) within
+  110 studs is spotted, with a pillar of light over it.
+- **E: Flourish** (60 s). Spin the whip overhead: every monster within 14 studs is stunned for
+  1 second.
+A stunned monster can't move, lunge or catch (stars circle its head). Crushing walls stun
+monsters caught between them too.
+
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):
   **left-click** to start collecting, then stay on it for 3 seconds (leaving or getting caught
@@ -80,6 +91,11 @@ starts another straight away, and "Doors" opens the doors panel.
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
+| `ReplicatedStorage/Heroes.luau` | ReplicatedStorage (ModuleScript) | The heroes and their abilities' numbers (Sara) |
+| `ServerStorage/Abilities.luau` | ServerStorage (ModuleScript) | Hero abilities on the server: checks, cooldowns, what each one does |
+| `ServerStorage/Pull.luau` | ServerStorage (ModuleScript) | Pulling a player, bot or monster along a line (the whip) |
+| `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse, Q, E) and the ability bar |
+| `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | The whip, Flourish's spin, Treasure hunt's light, stun stars |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |

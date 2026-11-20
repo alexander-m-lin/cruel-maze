@@ -156,6 +156,11 @@ local function discover(relic)
 	relic.info:SetAttribute("Discovered", true)
 end
 
+-- Spotted for the survivors by other means (Sara's Treasure hunt), as if they'd seen it
+function Objectives:Discover(relic)
+	discover(relic)
+end
+
 local function collect(self, relic, player)
 	relic.collected = true
 	relic.info:SetAttribute("Collected", true)

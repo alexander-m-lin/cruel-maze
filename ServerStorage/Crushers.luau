@@ -7,8 +7,9 @@
 -- A crusher goes: WARNING (Config.CRUSHER_WARNING seconds: the two walls rumble, nothing moves)
 -- -> SLAM (Config.CRUSHER_SLAM_TIME: a slab shoots out of each wall and they meet in the middle)
 -- -> HOLD (Config.CRUSHER_HOLD_TIME) -> RETURN (Config.CRUSHER_RETURN_TIME: back into the walls).
--- A survivor caught between the slabs as they meet is crushed (loses a life). Monsters are never
--- hurt: monster players' characters pass through the slabs (collision groups, see Match).
+-- A survivor caught between the slabs as they meet is crushed (loses a life). Monsters aren't
+-- hurt (monster players' characters pass through the slabs: collision groups, see Match), but
+-- one caught between them is stunned for Config.CRUSHER_STUN seconds.
 --
 -- Players' computers follow along through attributes on each slab: State ("idle", "warning",
 -- "slam", "hold", "return"), WarnAt and SlamAt (server times).
@@ -26,6 +27,7 @@ function Crushers.new(maze, options)
 	self.maze = maze
 	self.onCrush = options.onCrush or function() end
 	self.survivors = options.survivors or function() return {} end   -- players and survivor bots
+	self.monsters = options.monsters or {}                             -- AI and played monsters (stunned)
 	self.list = {}
 	for _, crusher in maze.crushers do
 		crusher.state = "idle"
@@ -49,6 +51,7 @@ function Crushers:Trigger(id)
 	local now = os.clock()
 	crusher.slamAt = now + Config.CRUSHER_WARNING
 	crusher.crushed = {}
+	crusher.stunned = {}
 	local serverNow = workspace:GetServerTimeNow()
 	for _, slab in crusher.slabs do
 		slab:SetAttribute("WarnAt", serverNow)
@@ -64,9 +67,21 @@ local function placeSlabs(crusher, t)   -- t: 0 = in the walls, 1 = shut
 	end
 end
 
--- Survivors standing between the slabs once they're nearly shut
+-- Survivors standing between the slabs once they're nearly shut (and monsters, who are stunned)
 local function crush(self, crusher)
 	local S = self.maze.S
+	local function between(p)
+		local offset = p - crusher.center
+		local across = math.abs(offset:Dot(crusher.inward))
+		local along = ((offset - crusher.inward * offset:Dot(crusher.inward)) * Vector3.new(1, 0, 1)).Magnitude
+		return across < S / 2 - 1 and along < S / 2 - 0.5
+	end
+	for _, monster in self.monsters do
+		if monster.pos and not crusher.stunned[monster] and between(Vector3.new(monster.pos.X, crusher.center.Y, monster.pos.Z)) then
+			crusher.stunned[monster] = true
+			if monster.Stun then monster:Stun(Config.CRUSHER_STUN) end
+		end
+	end
 	for _, player in self.survivors() do
 		if player:GetAttribute("Seized") then continue end
 		if crusher.crushed[player] then continue end

@@ -19,6 +19,8 @@
 -- BACKWARDS RUNNING: when you move away from where you face, the walk/run animation plays in
 -- reverse, so your legs match your movement instead of moonwalking.
 --
+-- PULLED (Sara's whip) or STUNNED: carried along / held still (see Movement.held, Pull).
+--
 -- FALSE RELIC: clicking one slows you to Config.FALSE_RELIC_SLOW for a few seconds ("SlowUntil").
 --
 -- HELD BY A MONSTER (the "Seized" attribute): no control at all until it's over. The same while
@@ -86,6 +88,25 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 	if not (humanoid and root) or humanoid.Health <= 0 then return end
 	if player:GetAttribute("Seized") or player:GetAttribute("Killing") or player:GetAttribute("Lunging") then
 		humanoid.WalkSpeed = 0              -- (Movement says the same; no turning to face either)
+		return
+	end
+
+	-- PULLED (a whip; see Pull on the server): the server says from where to where and when; your
+	-- character is yours to move, so it's carried along here
+	local pullAt = player:GetAttribute("PullAt")
+	if pullAt then
+		local k = (workspace:GetServerTimeNow() - pullAt) / math.max(0.01, player:GetAttribute("PullTime") or 0)
+		local from, to = player:GetAttribute("PullFrom"), player:GetAttribute("PullTo")
+		if k >= 0 and k < 1.05 and from and to then
+			local at = from:Lerp(to, math.min(k, 1))
+			root.CFrame = CFrame.new(Vector3.new(at.X, root.Position.Y, at.Z)) * root.CFrame.Rotation
+			root.AssemblyLinearVelocity = Vector3.zero
+			humanoid.WalkSpeed = 0
+			return
+		end
+	end
+	if Movement.held(player) then          -- stunned
+		humanoid.WalkSpeed = 0
 		return
 	end
 

@@ -5,7 +5,8 @@
 --   local speed, angle = Movement.walkSpeed(who, humanoid, root, options)
 --   Movement.setRunBackwards(humanoid, angle > Movement.BACKWARDS_FROM)
 --
--- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil)
+-- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil,
+--   StunnedUntil, PullAt/PullTime)
 -- options.aiming: true when facing comes from aiming (the mouse) rather than from moving, so moving
 --   away from where you face is slower (Config.FACING_*). A bot faces the way it walks.
 -- options.collecting: true while collecting a relic (you face it, and move at the backwards speed)
@@ -30,6 +31,14 @@ function Movement.facingSpeed(angle)
 	return side + (Config.FACING_BACK_SPEED - side) * toBack
 end
 
+-- Is `who` stunned or being pulled right now? ("StunnedUntil"; "PullAt" + "PullTime", server times)
+function Movement.held(who)
+	local now = workspace:GetServerTimeNow()
+	if (who:GetAttribute("StunnedUntil") or 0) > now then return true end
+	local pullAt = who:GetAttribute("PullAt")
+	return pullAt ~= nil and now < pullAt + (who:GetAttribute("PullTime") or 0)
+end
+
 -- Returns the walk speed, and the angle (degrees) between moving and facing
 function Movement.walkSpeed(who, humanoid, root, options)
 	options = options or {}
@@ -37,6 +46,8 @@ function Movement.walkSpeed(who, humanoid, root, options)
 	if who:GetAttribute("Seized") or who:GetAttribute("Killing") or who:GetAttribute("Lunging") then
 		return 0, 0
 	end
+	-- stunned (a monster), or being pulled along by a whip (Pull): not under your own control
+	if Movement.held(who) then return 0, 0 end
 	local base = who:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED
 	local move = humanoid.MoveDirection * Vector3.new(1, 0, 1)
 	local angle = 0

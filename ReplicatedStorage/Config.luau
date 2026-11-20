@@ -115,6 +115,7 @@ Config.CRUSHER_WARNING = 2              -- seconds of rumbling
 Config.CRUSHER_SLAM_TIME = 0.3
 Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
 Config.CRUSHER_RETURN_TIME = 1
+Config.CRUSHER_STUN = 1                 -- seconds a monster caught between them is stunned
 Config.CRUSHER_VISION = 6               -- the monster side always sees a crushing wall's cell and this many studs past it each way
 
 -- Match states, in the order they run. The server publishes the current one (see Match).
@@ -141,6 +142,11 @@ Config.ROLE_SLOTS = { Survivor = 3, Monster = 2, MazeMaster = 1 }
 -- published game for the experience's owner plus these UserIds:
 Config.DEV_USER_IDS = {}
 Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (SurvivorBot)
+
+-- Heroes (ReplicatedStorage.Heroes has their abilities). Until there's a character select, every
+-- survivor plays this one. A STUNNED monster can't move, lunge or catch (abilities and crushing
+-- walls stun).
+Config.DEFAULT_SURVIVOR_HERO = "Sara"
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)
