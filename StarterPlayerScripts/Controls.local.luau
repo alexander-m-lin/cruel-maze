@@ -53,6 +53,13 @@ local function collectingAt()
 end
 
 local pullHeardAt = nil      -- os.clock() when we heard about the latest pull (see PULLED below)
+
+-- Sliding along a whip (PullStyle "slide"): side-on, right hand toward where you're going,
+-- leaning back from it. (The server's Pull.pose for bots does the same.)
+local function slidePose(direction)
+	local facing = Vector3.yAxis:Cross(direction)
+	return CFrame.lookAt(Vector3.zero, facing) * CFrame.Angles(0, 0, math.rad(14))
+end
 player:GetAttributeChangedSignal("PullAt"):Connect(function()
 	pullHeardAt = player:GetAttribute("PullAt") and os.clock() or nil
 end)
@@ -104,7 +111,13 @@ RunService:BindToRenderStep("FaceMouse", Enum.RenderPriority.Camera.Value + 2, f
 		local from, to = player:GetAttribute("PullFrom"), player:GetAttribute("PullTo")
 		if k >= 0 and k < 1.05 and from and to then
 			local at = from:Lerp(to, math.min(k, 1))
-			root.CFrame = CFrame.new(Vector3.new(at.X, root.Position.Y, at.Z)) * root.CFrame.Rotation
+			local turn = root.CFrame.Rotation
+			local travel = (to - from) * Vector3.new(1, 0, 1)
+			if player:GetAttribute("PullStyle") == "slide" and travel.Magnitude > 0.1 then
+				-- skateboarder style: turned side-on and leaning back (swinging into it quickly)
+				turn = turn:Lerp(slidePose(travel.Unit), math.min(1, k * 5))
+			end
+			root.CFrame = CFrame.new(Vector3.new(at.X, root.Position.Y, at.Z)) * turn
 			root.AssemblyLinearVelocity = Vector3.zero
 			humanoid.WalkSpeed = 0
 			return

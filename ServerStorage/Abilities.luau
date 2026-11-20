@@ -123,7 +123,7 @@ function handlers.Whip(user, root, aim, def)
 		if hit.kind == "wall" or hit.kind == "relic" then
 			-- you're pulled to it (stopping short of the wall, or beside the relic)
 			local stopShort = hit.kind == "wall" and 2.5 or 3.5
-			Pull.character(user, tip - aim * stopShort, def.pullSpeed)
+			Pull.character(user, tip - aim * stopShort, def.pullSpeed, "slide")
 		elseif hit.kind == "ally" then
 			local ally = hit.thing
 			Pull.character(ally, here + aim * 3, def.pullSpeed)

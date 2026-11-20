@@ -5,10 +5,11 @@
 -- turns the head toward a target part, on top of whatever animation is playing), so moving the
 -- target part animates the body.
 --
---   WHIP          - a quick wind-up (the hand drawn back over the shoulder), then the lash flies
---                   out the way she faces, rippling, with the head following its tip. It cracks
---                   where it lands (dust off a wall, sparks off a monster, a glint off a relic),
---                   then holds while she's pulled along it, or drags whoever it caught back in.
+--   WHIP          - a quick wind-up (the hand drawn back over the shoulder, the head tipping
+--                   slightly back), then the lash flies out the way she faces, rippling, with the
+--                   head following its tip. It cracks where it lands (dust off a wall, sparks off
+--                   a monster, a glint off a relic), then holds while she slides along it side-on,
+--                   free arm out for balance, or drags whoever it caught back in.
 --   FLOURISH      - the hand circles over her head and the whip swings wide from it like a
 --                   lasso, out to the stun's full range, faster and faster, over a faint disc showing its reach; a bright flash
 --                   out to the edge as the stun goes out.
@@ -192,19 +193,27 @@ local function makeWhip(character)
 		ik.Parent = humanoid
 		table.insert(controls, ik)
 	end
+	-- the head (and a little of the upper body) turns toward `headTarget`: the tip, unless the
+	-- caller says otherwise (whip.lookAtTip)
+	local headTarget = anchoredPart("WhipHeadTarget")
+	headTarget.Position = hand.Position
 	local head, torso = character:FindFirstChild("Head"), character:FindFirstChild("UpperTorso")
 	if head and torso then
 		local look = Instance.new("IKControl")
 		look.Type = Enum.IKControlType.LookAt
 		look.ChainRoot = torso
 		look.EndEffector = head
-		look.Target = tip
+		look.Target = headTarget
 		look.Weight = 0.7
 		look.SmoothTime = 0.08
 		look.Parent = humanoid
 		table.insert(controls, look)
 	end
-	local whip = { tip = tip, armTarget = armTarget, hand = hand, followTip = true, sag = 0, ripple = 0 }
+	-- the free (left) arm, held out for balance while whip.balanceAt is set (a point it reaches for)
+	local balanceTarget, balanceIK = nil, nil
+	local leftUpper, leftHand = character:FindFirstChild("LeftUpperArm"), character:FindFirstChild("LeftHand")
+	local whip = { tip = tip, armTarget = armTarget, headTarget = headTarget, hand = hand, head = head,
+		followTip = true, lookAtTip = true, balanceAt = nil, sag = 0, ripple = 0 }
 	-- The lash's shape. A Beam bends toward the way each end's attachment points, and the hand
 	-- end turns with the hand, so left alone the lash would leave the hand sideways or even
 	-- backwards. Instead, every frame both ends are pointed along the line from hand to tip, then
@@ -213,6 +222,24 @@ local function makeWhip(character)
 		whip.sag, whip.ripple = sag, ripple
 	end
 	local shaping = RunService.RenderStepped:Connect(function()
+		if whip.lookAtTip then headTarget.Position = tip.Position end
+		if whip.balanceAt and leftUpper and leftHand then
+			if not balanceIK then
+				balanceTarget = anchoredPart("WhipBalanceTarget")
+				balanceIK = Instance.new("IKControl")
+				balanceIK.Type = Enum.IKControlType.Position
+				balanceIK.ChainRoot = leftUpper
+				balanceIK.EndEffector = leftHand
+				balanceIK.Target = balanceTarget
+				balanceIK.SmoothTime = 0.08
+				balanceIK.Parent = humanoid
+			end
+			balanceTarget.Position = whip.balanceAt
+		elseif balanceIK then
+			balanceIK:Destroy()
+			balanceTarget:Destroy()
+			balanceIK, balanceTarget = nil, nil
+		end
 		local from, to = a0.WorldPosition, a1.WorldPosition
 		local span = to - from
 		local length = span.Magnitude
@@ -234,6 +261,8 @@ local function makeWhip(character)
 		shaping:Disconnect()
 		tip:Destroy()
 		armTarget:Destroy()
+		headTarget:Destroy()
+		if balanceIK then balanceIK:Destroy() balanceTarget:Destroy() end
 		a0:Destroy()
 		for _, c in controls do c:Destroy() end
 	end
@@ -274,11 +303,16 @@ local function whip(character, tipFloor, kind)
 	local target = tipFloor + Vector3.new(0, LASH_HEIGHT, 0)
 	local aim = ((target - root.Position) * Vector3.new(1, 0, 1))
 	aim = aim.Magnitude > 0.01 and aim.Unit or root.CFrame.LookVector
-	-- the wind-up: the hand drawn back over the shoulder
+	-- the wind-up: the hand drawn back over the shoulder, the head (and upper body) tipping very
+	-- slightly back and up; both swing forward onto the lash as it flies
 	w.followTip = false
+	w.lookAtTip = false
 	w.armTarget.Position = root.Position - aim * 1.5 + Vector3.new(0, 3, 0) + root.CFrame.RightVector * 0.8
-	hold(0.07)
+	local headAt = w.head and w.head.Position or root.Position + Vector3.new(0, 1.5, 0)
+	w.headTarget.Position = headAt + Vector3.new(0, 5, 0) - aim * 1.2
+	hold(0.1)
 	w.followTip = true
+	w.lookAtTip = true
 	-- the lash
 	local outTime = (target - w.tip.Position).Magnitude / def.speed
 	fly(w, target, outTime, 1.5, 3)
@@ -291,10 +325,17 @@ local function whip(character, tipFloor, kind)
 		burst("glint", target, Vector3.yAxis)
 	end
 	if kind == "wall" or kind == "relic" then
-		-- holds there, taut, while she's pulled along it
+		-- holds there, taut, while she slides along it side-on (her body is turned and leaned by
+		-- whoever moves her: Controls, for a player), the free arm out behind for balance
 		local pull = ((target - root.Position) * Vector3.new(1, 0, 1)).Magnitude / def.pullSpeed
 		w.setCurve(0, 0)
-		hold(pull + 0.05)
+		local t0 = os.clock()
+		local seconds = (pull + 0.05) * slow()
+		while os.clock() - t0 < seconds and root.Parent do
+			w.balanceAt = root.Position - aim * 3 + Vector3.new(0, 0.6, 0)
+			RunService.RenderStepped:Wait()
+		end
+		w.balanceAt = nil
 		local hand = handOf(character)
 		fly(w, hand and hand.Position or root.Position, 0.12, 0.6, 1)
 	elseif kind == "ally" or kind == "monster" then

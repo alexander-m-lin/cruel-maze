@@ -447,7 +447,7 @@ local function cleanUp()
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
 		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
-			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo" } do
+			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo", "PullStyle" } do
 			player:SetAttribute(name, nil)
 		end
 	end
