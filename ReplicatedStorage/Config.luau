@@ -95,7 +95,12 @@ Config.WARDS_MAX = 4                    -- at a time: placing another fades the 
 Config.WARD_VISION_RADIUS = 22          -- studs (a survivor sees 80 in a cone, 12 all round)
 Config.WARD_HEIGHT = 4.5                -- studs above the floor the eye floats
 Config.WARD_REACH = 8                   -- a survivor this close (studs, flat) can destroy it...
-Config.WARD_DESTROY_TIME = 1.5          -- ...by staying close this long
+Config.WARD_DESTROY_TIME = 3            -- ...by staying close this long (a bar shows how far along)
+
+-- Revealed survivors (a false relic, a haunt...): the monster side sees them wherever they are,
+-- with a small ring of sight round them (smaller than a relic's), and AI monsters go for them
+-- if they're within their usual sight range, walls or not.
+Config.REVEAL_VISION_RADIUS = 10
 
 -- Haunt: on a survivor the monster side can see right now. For a few seconds they're revealed to
 -- the monster side wherever they go, and their vision cone counts as the monster side's sight too.

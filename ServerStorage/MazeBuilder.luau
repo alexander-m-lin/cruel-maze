@@ -224,12 +224,20 @@ function MazeBuilder.buildRelic(parent, center, id)
 	local light = Instance.new("PointLight")
 	light.Color, light.Range, light.Brightness = RELIC_COLOR, 16, 2.5   -- the golden glow around it
 	light.Parent = gem
+	MazeBuilder.buildProgressBar(relicModel, gem, RELIC_COLOR, 6)
+	return relicModel, gem
+end
+
+-- A progress bar floating `height` studs above `adornee`, named "Progress" in `parent`: hidden
+-- until someone collects a relic (or destroys a ward), then shown and filled by players'
+-- computers (HUD)
+function MazeBuilder.buildProgressBar(parent, adornee, color, height)
 	local bar = Instance.new("BillboardGui")
 	bar.Name = "Progress"
 	bar.Size = UDim2.fromOffset(70, 10)
-	bar.StudsOffsetWorldSpace = Vector3.new(0, 6, 0)
-	bar.Enabled = false                   -- shown and filled by players' computers (HUD) while someone collects
-	bar.Adornee = gem
+	bar.StudsOffsetWorldSpace = Vector3.new(0, height, 0)
+	bar.Enabled = false
+	bar.Adornee = adornee
 	local back = Instance.new("Frame")
 	back.Size = UDim2.fromScale(1, 1)
 	back.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
@@ -238,11 +246,11 @@ function MazeBuilder.buildRelic(parent, center, id)
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.fromScale(0, 1)
-	fill.BackgroundColor3 = RELIC_COLOR
+	fill.BackgroundColor3 = color
 	fill.BorderSizePixel = 0
 	fill.Parent = back
-	bar.Parent = relicModel
-	return relicModel, gem
+	bar.Parent = parent
+	return bar
 end
 
 -- Builds the maze in the workspace (replacing any previous one).

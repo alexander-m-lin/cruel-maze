@@ -7,6 +7,7 @@
 --   wards:Update(survivors)      -- a few times a second: spotting, and destroying
 --   wards:StartDestroying(player, id)   -- a survivor clicked to destroy one (checked here)
 --   wards:Sees(position)         -- does any ward see this spot? (for Haunt's "can the monster side see them")
+--   wards.destroyedAt[MazeLayout.key(x, z)] -- os.clock() a survivor last destroyed a ward in that cell
 --   wards:Destroy()
 --
 -- The monster side sees all around a ward (FogOfWar, Config.WARD_VISION_RADIUS, walls block it).
@@ -25,6 +26,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Config)
 local MazeLayout = require(game:GetService("ServerStorage").MazeLayout)
+local MazeBuilder = require(game:GetService("ServerStorage").MazeBuilder)
 
 local WardEyes = {}
 WardEyes.__index = WardEyes
@@ -38,6 +40,7 @@ function WardEyes.new(maze, objectives, callbacks)
 	self.objectives = objectives
 	self.callbacks = callbacks or {}
 	self.list = {}           -- wards standing, oldest first
+	self.destroyedAt = {}    -- [cell key] = when a survivor destroyed a ward there
 	self.count = 0
 	self.lastUpdate = os.clock()
 	self.rayParams = RaycastParams.new()
@@ -105,6 +108,7 @@ local function buildEye(parent, id, at)
 	light.Brightness = 1.5
 	light.Parent = eye
 	model.PrimaryPart = eye
+	MazeBuilder.buildProgressBar(model, eye, IRIS, 2.5)   -- (filled by players' computers while it's being destroyed)
 	model.Parent = parent
 	CollectionService:AddTag(model, "WardEye")
 	return model, eye
@@ -210,6 +214,7 @@ function WardEyes:Update(survivors)
 		if root and self:inReach(root, ward) then
 			ward.progress += dt
 			if ward.progress >= Config.WARD_DESTROY_TIME then
+				self.destroyedAt[MazeLayout.key(ward.x, ward.z)] = os.clock()
 				self:remove(ward)
 				if self.callbacks.onDestroyed then self.callbacks.onDestroyed(ward, player) end
 			end

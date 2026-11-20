@@ -44,8 +44,10 @@ starts another straight away, and "Doors" opens the doors panel.
 - An AI **monster** roams the maze, and chases you when it sees or hears you. If it catches you,
   you lose one of your **3 lives**.
 - **Wards** (floating purple eyes) let the monster side see around them. Once your team spots
-  one it stays shown; stand next to one and left-click, then stay close for 1.5 seconds, to
-  destroy it (the monster side sees where). A purple glow round your screen and a whisper mean
+  one it stays shown; stand next to one and left-click, then stay close for 3 seconds (a bar
+  fills), to destroy it (the monster side sees where). Anything that reveals you (a false relic,
+  a haunt) also lights up a small ring round you for the monster side, and draws nearby AI
+  monsters even through walls. A purple glow round your screen and a whisper mean
   the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
 - **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
   for your team, and you can come back there after being caught. Your team's rooms (the start

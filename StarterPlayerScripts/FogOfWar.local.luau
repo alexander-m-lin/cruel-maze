@@ -23,8 +23,8 @@
 --
 -- TEAMS: survivors share sight with each other. Monsters and the Maze Master are one team: they
 -- share the sight of every monster, the AI ones too, plus the Maze Master's WARDS (all round each
--- floating eye), every CRUSHING WALL (its cell and a little past it each way), and HAUNTED
--- survivors' cones (see Haunt in MazeMaster). The Maze Master has no eyes of their own,
+-- floating eye), every CRUSHING WALL (its cell and a little past it each way), HAUNTED
+-- survivors' cones (see Haunt in MazeMaster), and a small ring round every REVEALED survivor. The Maze Master has no eyes of their own,
 -- but knows the whole layout (all of it shows as explored) and how every door stands. Enemies -
 -- monsters for survivors, survivors for the monster team - are hidden unless your team sees them;
 -- your own side is always shown.
@@ -790,6 +790,23 @@ local function hauntedSurvivors()
 	return list
 end
 
+-- Revealed survivors (a false relic, a haunt...): for the monster side, a small ring of sight
+-- round each (Config.REVEAL_VISION_RADIUS), so they and the ground round them light up
+local function revealedSurvivors()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
+	local now = workspace:GetServerTimeNow()
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor and (other:GetAttribute("RevealedUntil") or 0) > now and other.Character then
+			table.insert(list, other.Character)
+		end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do
+		if (bot:GetAttribute("RevealedUntil") or 0) > now then table.insert(list, bot) end
+	end
+	return list
+end
+
 -- CAPTURED SPAWN ROOMS: your team knows its own rooms. The start room (captured from the start)
 -- and every room your team captures are added to your map whole - floor and walls - rather than
 -- only the parts someone happened to look at. Remembered, not in view: they show dim until seen.
@@ -894,6 +911,22 @@ local function updateVisibility()
 			if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
 				cached = { seen = sightFrom(hauntedEye, hauntedFacing), at = now, maze = maze }
 				teamSight[character] = cached
+			end
+			for tile, t in cached.seen do
+				if not merged[tile] or t > merged[tile] then merged[tile] = t end
+			end
+		end
+	end
+	-- Rings round revealed survivors (for the monster side), refreshed the same way
+	for _, character in revealedSurvivors() do
+		local revealedEye = eyesOf(character)
+		if revealedEye then
+			local ringKey = "ring:" .. character:GetFullName()
+			current[ringKey] = true
+			local cached = teamSight[ringKey]
+			if not cached or cached.maze ~= maze or now - cached.at >= TEAM_UPDATE_EVERY then
+				cached = { seen = sightFrom(revealedEye, nil, Config.REVEAL_VISION_RADIUS), at = now, maze = maze }
+				teamSight[ringKey] = cached
 			end
 			for tile, t in cached.seen do
 				if not merged[tile] or t > merged[tile] then merged[tile] = t end

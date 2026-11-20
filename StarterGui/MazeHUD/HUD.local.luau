@@ -12,6 +12,13 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local States = Config.States
 
+-- Things with a progress bar (see MazeBuilder.buildProgressBar): their info folder in
+-- ReplicatedStorage.Match, their model's name in the maze, and how long they take
+local BAR_KINDS = {
+	{ folder = "Relics", prefix = "Relic", time = Config.RELIC_COLLECT_TIME },
+	{ folder = "WardEyes", prefix = "Ward", time = Config.WARD_DESTROY_TIME },
+}
+
 local gui = script.Parent
 local timerLabel = gui:WaitForChild("TimerLabel")
 local announceLabel = gui:WaitForChild("AnnounceLabel")
@@ -92,20 +99,21 @@ RunService.RenderStepped:Connect(function()
 	announceLabel.Text = text
 	announceLabel.Visible = text ~= ""
 
-	-- Relic progress bars: the server says when collecting started (CollectSince); the bar is
-	-- filled here every frame so it moves smoothly
-	local relics = match:FindFirstChild("Relics")
+	-- Progress bars, for collecting a relic or destroying a ward: the server says when it started
+	-- (CollectSince); the bar is filled here every frame so it moves smoothly
 	local maze = workspace:FindFirstChild("Maze")
-	if relics and maze then
-		for _, info in relics:GetChildren() do
-			local relicModel = maze:FindFirstChild("Relic" .. tostring(info:GetAttribute("Id")))
-			local bar = relicModel and relicModel:FindFirstChild("Progress")
+	for _, kind in BAR_KINDS do
+		local folder = match:FindFirstChild(kind.folder)
+		if not (folder and maze) then continue end
+		for _, info in folder:GetChildren() do
+			local model = maze:FindFirstChild(kind.prefix .. tostring(info:GetAttribute("Id")))
+			local bar = model and model:FindFirstChild("Progress")
 			local fill = bar and bar:FindFirstChild("Fill", true)
 			if not fill then continue end
 			local since = info:GetAttribute("CollectSince")
 			bar.Enabled = since ~= nil and not info:GetAttribute("Collected")
 			if bar.Enabled then
-				fill.Size = UDim2.fromScale(math.clamp((now - since) / Config.RELIC_COLLECT_TIME, 0, 1), 1)
+				fill.Size = UDim2.fromScale(math.clamp((now - since) / kind.time, 0, 1), 1)
 			end
 		end
 	end

@@ -142,6 +142,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 **Build order:** roles and the role picker → human monsters (body, lunge, spawn-room barrier) → team vision for monsters and the Maze Master (enemies hidden by fog) → the Maze Master's camera and interface with dark mana and doors → false relics → crushing walls → 3 v 2 + 1 tests.
 
 ### [ ] 4. Heroes and abilities
+
+**Notes from testing, before heroes (2026-11-20):** haunt (AI) prefers survivors near a monster; destroying a ward takes 3 s with a progress bar like a relic's, and the AI won't put a ward back where one was just destroyed for 10 s; anything that reveals a survivor also gives the monster side a small ring of sight round them (`Config.REVEAL_VISION_RADIUS`), and AI monsters go for revealed survivors within sight range, walls or not. The match's per-frame systems now run separately, so an error in one can't stop the others.
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay
 - Character select where each team can't see the other's picks

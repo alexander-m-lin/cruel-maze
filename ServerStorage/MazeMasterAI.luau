@@ -12,8 +12,8 @@
 -- What it does, most urgent first:
 --   CRUSHING WALLS - sets one off when a seen survivor will be between its walls as they slam
 --                    (where they'll be after the warning, from how they're moving).
---   HAUNT          - on a seen survivor, preferring one no monster is near (that's where it
---                    learns the most), whenever it's ready.
+--   HAUNT          - on a seen survivor, preferring the one nearest a monster (so the hunter
+--                    can follow them), whenever it's ready.
 --   DOORS          - when a seen survivor is being chased, shuts open doors a few cells ahead of
 --                    them (on their side, away from the monster), cutting off the escape.
 --                    Otherwise, now and then, shifts a door near where survivors were last seen.
@@ -40,6 +40,7 @@ local MEMORY = 20            -- seconds a last sighting stays useful
 local WARD_SPACING = 3       -- cells between wards
 local WARD_MOVE_IF_UNWATCHED = 3   -- with every ward out, move one if survivors were seen this many cells from any ward...
 local WARD_MOVE_EVERY = 8    -- ...at most this often (seconds)
+local WARD_REPLACE_AFTER = 10   -- no new ward where a survivor destroyed one for this long (so they can tell it worked)
 local FAKE_ROOM_GAP = 6      -- false relics go at least this many cells (walking the grid) from any spawn room
 
 local MazeMasterAI = {}
@@ -203,7 +204,7 @@ function MazeMasterAI:crush(seen)
 	end
 end
 
--- HAUNT: a seen survivor, preferring the one furthest from any monster
+-- HAUNT: a seen survivor, preferring the one nearest a monster
 function MazeMasterAI:haunt(seen)
 	if #seen == 0 or not self:ready("Haunt") then return end
 	local nowServer = workspace:GetServerTimeNow()
@@ -214,7 +215,7 @@ function MazeMasterAI:haunt(seen)
 		for _, monster in self.monsters do
 			if monster.pos then nearest = math.min(nearest, ((monster.pos - s.root.Position) * Vector3.new(1, 0, 1)).Magnitude) end
 		end
-		if not bestScore or nearest > bestScore then best, bestScore = s, nearest end
+		if not bestScore or nearest < bestScore then best, bestScore = s, nearest end
 	end
 	if best and self.tools:Use("Haunt", best.survivor.UserId) then note("haunt " .. best.survivor.Name) end
 end
@@ -308,6 +309,7 @@ function MazeMasterAI:ward(now)
 		for z = 1, maze.n do
 			if MazeLayout.openSides(maze.walls, x, z) < 3 or not wards:CanPlace(x, z) then continue end
 			if wardNear(x, z, WARD_SPACING) then continue end
+			if now - (wards.destroyedAt[key(x, z)] or -math.huge) < WARD_REPLACE_AFTER then continue end
 			local center = cellCenter(maze, x, z)
 			local score = math.random() * 0.5
 			-- not somewhere already seen (relic rings, crushing walls, monsters)

@@ -803,6 +803,8 @@ end)
 --   "haunt", userId         -> the Maze Master's Haunt on that survivor (no dark mana): -> ok, message
 --   "ward", x, z            -> place a ward in cell (x, z) (no Maze Master needed); -> its id, or nil
 --   "sees", position        -> can the monster side see that spot right now?
+--   "reveal", userId, secs  -> reveal that survivor to the monster side (as a false relic does)
+--   "teleport", player, cf  -> move a player's character there (past the speed check)
 --   "bot", userId, cframe   -> hold that survivor bot at cframe (nil lets it go)
 if RunService:IsStudio() then
 	local hook = Instance.new("BindableFunction")
@@ -822,6 +824,18 @@ if RunService:IsStudio() then
 		elseif action == "ward" and wards then
 			local ward = wards:Add(a, b)
 			return ward and ward.id
+		elseif action == "teleport" and typeof(a) == "Instance" and a.Character then
+			a.Character:PivotTo(b)
+			SpeedCheck.moved(a)
+			return true
+		elseif action == "reveal" then
+			for _, survivor in survivorsInMatch() do
+				if survivor.UserId == a then
+					survivor:SetAttribute("RevealedUntil", workspace:GetServerTimeNow() + (b or 5))
+					return true
+				end
+			end
+			return false
 		elseif action == "sees" and maze then
 			return monsterSideSees(a)
 		elseif action == "bot" then
@@ -844,16 +858,28 @@ function Match.run()
 	for _, player in Players:GetPlayers() do task.spawn(onPlayerAdded, player) end
 
 	-- Doors move and the monsters think every frame while a match is on
+	-- Each system runs on its own (safely), so an error in one can't stop the rest: it's reported
+	-- (once every few seconds per system) and, in Studio, kept in the "LastError" attribute on
+	-- ReplicatedStorage.Match.
+	local reportedAt = {}
+	local function safely(name, fn, ...)
+		local ok, err = xpcall(fn, debug.traceback, ...)
+		if not ok and os.clock() - (reportedAt[name] or -math.huge) > 5 then
+			reportedAt[name] = os.clock()
+			warn(("Match: %s failed: %s"):format(name, tostring(err)))
+			if RunService:IsStudio() then status:SetAttribute("LastError", name .. ": " .. tostring(err):sub(1, 400)) end
+		end
+	end
 	RunService.Heartbeat:Connect(function(dt)
-		SpeedCheck.step(dt)
-		if doors then doors:Step(dt) end
-		if crushers then crushers:Step() end
-		if mazeMasterTools then mazeMasterTools:Step(dt) end
-		if mazeMasterAI then mazeMasterAI:Step(dt) end
-		for _, bot in bots do bot:Step(dt, monsters) end
+		safely("speed check", SpeedCheck.step, dt)
+		if doors then safely("doors", doors.Step, doors, dt) end
+		if crushers then safely("crushers", crushers.Step, crushers) end
+		if mazeMasterTools then safely("Maze Master tools", mazeMasterTools.Step, mazeMasterTools, dt) end
+		if mazeMasterAI then safely("Maze Master AI", mazeMasterAI.Step, mazeMasterAI, dt) end
+		for _, bot in bots do safely("survivor bot", bot.Step, bot, dt, monsters) end
 		if #monsters == 0 then return end
 		local targets = huntable()
-		for _, monster in monsters do monster:Step(dt, targets) end
+		for _, monster in monsters do safely("monster", monster.Step, monster, dt, targets) end
 	end)
 
 	while true do

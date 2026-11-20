@@ -257,12 +257,15 @@ function MonsterAI:MazeChanged()
 end
 
 ---------------------------------------------------------------- senses
-function MonsterAI:canDetect(root)
+-- revealed: the survivor is revealed to the monster side (a false relic, a haunt...): seen within
+-- sight range even through walls
+function MonsterAI:canDetect(root, revealed)
 	local eye = self.pos + Vector3.new(0, HOVER, 0)
 	local offset = root.Position - eye
 	local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
 	if flat <= HEAR_RANGE then return true end
 	if flat > SIGHT_RANGE then return false end
+	if revealed then return true end
 	return workspace:Raycast(eye, offset, self.rayParams) == nil   -- nothing in the way = it can see you
 end
 
@@ -373,7 +376,8 @@ function MonsterAI:Step(dt, targets)
 		local best, bestDist
 		for _, player in targets do
 			local root = rootOf(player)
-			if root and (self.graceUntil[player] or 0) < now and self:canDetect(root) then
+			local revealed = (player:GetAttribute("RevealedUntil") or 0) > workspace:GetServerTimeNow()
+			if root and (self.graceUntil[player] or 0) < now and self:canDetect(root, revealed) then
 				local d = (root.Position - self.pos).Magnitude
 				if not bestDist or d < bestDist then best, bestDist = player, d end
 			end
