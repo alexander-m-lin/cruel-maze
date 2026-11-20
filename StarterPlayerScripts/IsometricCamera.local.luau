@@ -82,12 +82,15 @@ local lastFocus = nil
 -- keys move it across the screen (up on the screen is +X+Z in the world, since the camera looks
 -- from the -X-Z corner). It starts over the middle and can't leave the maze.
 local PAN_SPEED = 90   -- studs per second (scaled with zoom)
-local ZOOM_MIN, ZOOM_MAX = 0.65, 3   -- the Maze Master zooms (mouse wheel, or pinch): this much less or more of the maze fits on screen
--- Zooming widens or narrows the lens rather than moving the camera away. Moving it away (to 3x
--- DISTANCE) took it past what lower graphics settings draw: far walls vanished, and the
--- atmosphere's haze, which thickens with distance, washed everything out.
+local ZOOM_MIN, ZOOM_MAX = 0.65, 1.6 -- the Maze Master zooms (mouse wheel, or pinch) between these times DISTANCE
+-- Why only 1.6: lower graphics settings stop drawing parts a few hundred studs from the camera
+-- (about 480 in one Studio test window), and scripts can't change that. The top of the screen is
+-- about 1.4x the camera's distance away, so past ~1.6x the far walls vanish. (Widening the lens
+-- instead would avoid that, but it bends the isometric look too much.)
 local ZOOM_STEP = 1.15               -- per wheel notch
 local zoom = 1
+local atmosphere = game:GetService("Lighting"):FindFirstChildOfClass("Atmosphere")
+local baseDensity = atmosphere and atmosphere.Density or 0
 local panFocus = nil
 local panMaze = nil
 local PAN_KEYS = {
@@ -137,9 +140,7 @@ end
 -- BindToRenderStep runs right before each frame is drawn, after Roblox's default camera
 RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
 	camera.CameraType = Enum.CameraType.Scriptable
-	-- the lens: `zoom` times as much fits across the screen (the Maze Master's zoom)
-	local zoomed = isMazeMaster() and zoom or 1
-	camera.FieldOfView = 2 * math.deg(math.atan(math.tan(math.rad(FOV / 2)) * zoomed))
+	camera.FieldOfView = FOV
 
 	local character = player.Character
 	local root = aliveRoot(character)
@@ -156,8 +157,12 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 	if not focus then return end
 	lastFocus = focus
 
-	local camPos = focus + DIRECTION * DISTANCE
+	local zoomed = isMazeMaster() and zoom or 1
+	local camPos = focus + DIRECTION * DISTANCE * zoomed
 	camera.CFrame = CFrame.lookAt(camPos, focus)
+	-- The atmosphere's haze builds up with distance from the camera, so zooming out would wash the
+	-- maze out. Thin it (on this computer only) by as much as the camera moved away.
+	if atmosphere then atmosphere.Density = baseDensity / zoomed end
 	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
 
 	if character then fadeBlockingWalls(focus, camPos, character) end
