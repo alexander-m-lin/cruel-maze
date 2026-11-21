@@ -41,6 +41,7 @@ return {
 			fearedCone = 40,        -- degrees (total width) around where you face that counts as aimed at them
 			reach = 7,              -- a survivor this close to his reach point is caught (studs)...
 			reachForward = 2,       -- ...which is this far in front of his middle (so: 9 ahead, 7 to the sides, 5 behind)
+			nightmareCooldown = 1,  -- seconds to recharge during Living Nightmare (casting it also cuts what's left to this)
 		},
 		-- Every survivor in the maze, wherever they are, is filled with DREAD: within dreadTime they
 		-- must reach a sanctuary or get within nearAlly studs of another survivor (bots count).
@@ -55,8 +56,9 @@ return {
 			castTime = 0.6,         -- seconds he stands still, arms spread, casting it
 		},
 		-- For `duration` seconds he passes through the maze's inner walls and doors (not the outer
-		-- wall, nor into sanctuaries), and moves much faster toward feared survivors. Ending inside
-		-- a wall, he's pushed out into the middle of the cell he's in.
+		-- wall, nor into sanctuaries), moves much faster toward feared survivors, and Devour
+		-- recharges in its nightmareCooldown. Ending inside a wall, he's pushed out into the middle
+		-- of the cell he's in.
 		Ultimate = {
 			id = "LivingNightmare", name = "Living Nightmare", cooldown = 60,
 			duration = 7,           -- seconds he passes through inner walls and doors

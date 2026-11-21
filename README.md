@@ -70,7 +70,8 @@ sleeves; left click does nothing for him):
 - **E: Living Nightmare** (60 s). For 7 seconds he goes half see-through, trailing dark mist, and
   passes through the maze's inner walls and doors (not the outer wall, and never into a
   sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
-  them). Ending inside a wall pushes him out into the middle of that cell.
+  them), and Devour recharges in 1 second (casting it cuts Devour's wait to 1 s too). Ending
+  inside a wall pushes him out into the middle of that cell.
 AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range (they
 don't use Q or E yet). The cast animations are simple stand-ins for now.
 

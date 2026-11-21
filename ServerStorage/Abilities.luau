@@ -21,7 +21,9 @@
 --   cast = { user (the player, nil for an AI monster), monster (the monster using it, if one),
 --            root (the user's HumanoidRootPart, if they have a character), aim (flat, unit),
 --            def (the ability's numbers), hero }
--- and returns ok, message. Everyone's computer is told what happened through "AbilityFx" (kind, the
+-- and returns ok, message[, cooldown] (cooldown: seconds, instead of the ability's own, e.g. Devour's
+-- during Living Nightmare). ctx.shortenCooldown(who, slot, seconds) cuts what's left of another
+-- ability's cooldown to at most `seconds`. Everyone's computer is told what happened through "AbilityFx" (kind, the
 -- user's UserId, details) so it can draw it (HeroVisuals).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -105,6 +107,12 @@ local function setCooldown(who, slot, seconds)
 	end
 end
 
+-- Cut what's left of a cooldown to at most `seconds`
+function ctx.shortenCooldown(who, slot, seconds)
+	local left = ((readyAt[who] or {})[slot] or 0) - os.clock()
+	if left > seconds then setCooldown(who, slot, seconds) end
+end
+
 function Abilities.ready(who, slot)
 	return ctx.match ~= nil and os.clock() >= ((readyAt[who] or {})[slot] or 0)
 end
@@ -122,9 +130,9 @@ local function cast(who, slot, c)
 	local handler = handlers[c.def.id]
 	if not handler then return false end         -- not built yet
 	if not Abilities.ready(who, slot) then return false end
-	local ok, message = handler(ctx, c)
+	local ok, message, cooldown = handler(ctx, c)
 	if ok then
-		setCooldown(who, slot, c.def.cooldown)
+		setCooldown(who, slot, cooldown or c.def.cooldown)
 	elseif c.def.missCooldown then
 		setCooldown(who, slot, c.def.missCooldown)
 	end

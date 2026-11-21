@@ -33,7 +33,8 @@ local lungeEvent = Net.event("Lunge")
 local ACTION = "MonsterLunge"
 local readyAt = 0     -- os.clock() when you can lunge again
 
--- Carry your character `distance` studs along `direction` in `seconds` (gravity still works)
+-- Carry your character `distance` studs along `direction` in `seconds` (gravity still works).
+-- Catching someone ends it on the spot (the kill plays where you caught them).
 local function spring(root, direction, distance, seconds)
 	local attachment = Instance.new("Attachment")
 	attachment.Parent = root
@@ -47,11 +48,20 @@ local function spring(root, direction, distance, seconds)
 	push.PlaneVelocity = Vector2.new(velocity.X, velocity.Z)
 	push.MaxForce = 1e6
 	push.Parent = root
-	task.delay(seconds, function()
+	local stopped = false
+	local caught
+	local function stop()
+		if stopped then return end
+		stopped = true
+		if caught then caught:Disconnect() end
 		push:Destroy()
 		attachment:Destroy()
 		if root.Parent then root.AssemblyLinearVelocity *= Vector3.new(0, 1, 0) end   -- stop dead, don't slide on
+	end
+	caught = player:GetAttributeChangedSignal("Killing"):Connect(function()
+		if player:GetAttribute("Killing") then stop() end
 	end)
+	task.delay(seconds, stop)
 end
 
 local function lunge()

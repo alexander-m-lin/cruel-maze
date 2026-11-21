@@ -49,7 +49,10 @@ function handlers.Devour(ctx, cast)
 		distance = math.min(best.d + 1, def.fearedRange)
 		time = distance / def.fearedSpeed
 	end
-	return monster:Devour(aim, distance, time, def)
+	if not monster:Devour(aim, distance, time, def) then return false end
+	-- in his Living Nightmare it recharges much faster
+	local nightmare = cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow()
+	return true, nil, nightmare and def.nightmareCooldown or nil
 end
 
 ---------------------------------------------------------------- Instill Fear
@@ -146,6 +149,11 @@ function handlers.LivingNightmare(ctx, cast)
 	local monster, def = cast.monster, cast.def
 	if not (monster and monster.Nightmare) then return false end
 	markInnerWalls(ctx.match)
+	-- Devour recharges in its nightmareCooldown meanwhile; whatever's left of it now is cut to that
+	local devour = cast.hero.abilities.Primary
+	if devour and devour.nightmareCooldown then
+		ctx.shortenCooldown(cast.user or monster, "Primary", devour.nightmareCooldown)
+	end
 	return monster:Nightmare(def, function(character)
 		-- ending inside a wall: pushed out to the middle of the cell he's in (or the nearest open one)
 		local root = character:FindFirstChild("HumanoidRootPart")

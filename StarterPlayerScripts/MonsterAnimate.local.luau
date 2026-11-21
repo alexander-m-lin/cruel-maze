@@ -472,14 +472,17 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 		local cf = smoothPivot(s)
 		-- Your own monster body (you're playing a monster): follow your character directly, so it
-		-- never lags behind your controls. (Except mid-kill, when it faces its victim.)
-		if cf and model:GetAttribute("OwnerUserId") == Players.LocalPlayer.UserId and not model:GetAttribute("KillStart") then
+		-- never lags behind your controls. Mid-kill it stays where your character is but faces the
+		-- way the server says (its victim); the server's position lags behind, and mid-dash that
+		-- would make the body jump back as the kill starts.
+		if cf and model:GetAttribute("OwnerUserId") == Players.LocalPlayer.UserId then
 			local character = Players.LocalPlayer.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			if root then
 				local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+				if model:GetAttribute("KillStart") or look.Magnitude < 0.01 then look = cf.LookVector end
 				local at = Vector3.new(root.Position.X, cf.Position.Y, root.Position.Z)
-				cf = CFrame.lookAt(at, at + (look.Magnitude > 0.01 and look.Unit or cf.LookVector))
+				cf = CFrame.lookAt(at, at + look.Unit)
 			end
 		end
 		if cf then
