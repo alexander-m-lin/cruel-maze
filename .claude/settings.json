@@ -19,7 +19,6 @@
       "Bash(git checkout -b *)"
     ],
     "ask": [
-      "mcp__Roblox_Studio__generate_mesh",
       "mcp__Roblox_Studio__generate_material",
       "mcp__Roblox_Studio__generate_texture",
       "mcp__Roblox_Studio__generate_procedural_model",
