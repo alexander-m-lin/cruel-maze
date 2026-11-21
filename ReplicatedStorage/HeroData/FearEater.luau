@@ -39,8 +39,8 @@ return {
 			fearedRange = 35,       -- at a feared survivor: this far...
 			fearedSpeed = 75,       -- ...at this many studs per second
 			fearedCone = 40,        -- degrees (total width) around where you face that counts as aimed at them
-			reach = 4.5,            -- a survivor this close to his hands' reach point is caught (studs)...
-			reachForward = 2.5,     -- ...which is this far in front of his middle
+			reach = 7,              -- a survivor this close to his reach point is caught (studs)...
+			reachForward = 2,       -- ...which is this far in front of his middle (so: 9 ahead, 7 to the sides, 5 behind)
 		},
 		-- Every survivor in the maze, wherever they are, is filled with DREAD: within dreadTime they
 		-- must reach a sanctuary or get within nearAlly studs of another survivor (bots count).

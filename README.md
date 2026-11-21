@@ -58,7 +58,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching out of his
 sleeves; left click does nothing for him):
 - **Right mouse: Devour** (5 s). He gathers himself for a moment, then lunges 14 studs the way he
-  faces; the first survivor his hands reach is caught. He holds them up facing away, struggling,
+  faces; the first survivor his hands reach is caught (within 9 studs ahead, 7 to the sides). He holds them up facing away, struggling,
   winds his head back, lifts them flat and draws their head into his hood, where they keep
   struggling until it dies away; then he draws them back out and drops the body, which lies there
   for 4 seconds. Aimed at a *feared* survivor (within 20°
