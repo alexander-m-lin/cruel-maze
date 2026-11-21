@@ -16,7 +16,9 @@
 --   (These two are stand-ins, to be replaced by full animations.)
 --   AIMING DEVOUR - while right click is held (AbilityControls), the area the dash would catch in
 --              is painted blue on the floor: his reach swept along the dash, stopping at the first
---              wall he can't pass, and swung onto a feared survivor it would lock on to (brighter).
+--              wall he can't pass, swung onto a survivor the aim assist would turn it to, and onto
+--              a feared survivor it would lock on to (stretched, brighter). Only survivors you can
+--              see count, so the preview never gives away anyone hidden by the fog.
 --   THE KILL - ("KillStart"/"KillVictim") his hands close on the victim, held off their feet in
 --              front of him facing away, flailing. He winds his head back, lifting them, then
 --              brings their head up into his hood and tips forward over them, laid flat; they keep
@@ -513,7 +515,20 @@ local function updateAim(player, def)
 		local hit = workspace:Raycast(from, to - from, walls)
 		return hit ~= nil and hit.Instance.CanCollide
 	end
-	local dir, distance, _, target = DevourAim.pick(root.Position, look.Unit, def, Movement.fearedRoots(), blocked)
+	-- survivors you can see (the fog sets "FogState" on their bodies for the monster side)
+	local feared, others = {}, {}
+	local isFeared = {}
+	for _, r in Movement.fearedRoots() do isFeared[r] = true end
+	local function consider(character)
+		local r = character and character:FindFirstChild("HumanoidRootPart")
+		if not r or character:GetAttribute("FogState") == "hidden" then return end
+		table.insert(isFeared[r] and feared or others, r)
+	end
+	for _, other in game:GetService("Players"):GetPlayers() do
+		if other:GetAttribute("Role") == "Survivor" then consider(other.Character) end
+	end
+	for _, bot in game:GetService("CollectionService"):GetTagged("SurvivorBot") do consider(bot) end
+	local dir, distance, _, _, locked = DevourAim.pick(root.Position, look.Unit, def, feared, others, blocked)
 	-- the dash itself stops at the first wall he can't pass (in Living Nightmare: not inner ones)
 	local solid = RaycastParams.new()
 	solid.FilterType = Enum.RaycastFilterType.Include
@@ -534,7 +549,7 @@ local function updateAim(player, def)
 	p.to.Size, p.to.CFrame = Vector3.new(0.1, r * 2, r * 2), CFrame.new(finish - Vector3.new(0, 0.02, 0)) * disc
 	p.strip.Size = Vector3.new(r * 2, 0.1, math.max(0.05, distance))
 	p.strip.CFrame = CFrame.lookAt((start + finish) / 2, (start + finish) / 2 + dir)
-	local color = target and AIM_LOCKED or AIM_COLOR
+	local color = locked and AIM_LOCKED or AIM_COLOR
 	p.from.Color, p.to.Color, p.strip.Color = color, color, color
 end
 

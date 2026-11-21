@@ -28,15 +28,20 @@ function handlers.Devour(ctx, cast)
 	if not (monster and monster.Devour and monster.pos) then return false end
 	-- straight ahead, or at a feared survivor (DevourAim: the same choice the player's computer
 	-- previews while the button is held)
+	-- (aim assist only toward survivors he could catch: not in a sanctuary)
 	local now = workspace:GetServerTimeNow()
-	local feared = {}
+	local feared, others = {}, {}
 	for _, survivor in ctx.match.survivors() do
 		local root = ctx.rootOf(survivor)
-		if root and (survivor:GetAttribute("FearedUntil") or 0) > now and not survivor:GetAttribute("Seized") then
-			table.insert(feared, root)
+		if root and not survivor:GetAttribute("Seized") then
+			if (survivor:GetAttribute("FearedUntil") or 0) > now then
+				table.insert(feared, root)
+			elseif not ctx.match.objectives:IsSafe(root.Position) then
+				table.insert(others, root)
+			end
 		end
 	end
-	local aim, distance, time = DevourAim.pick(monster.pos, cast.aim, def, feared, ctx.wallBetween)
+	local aim, distance, time = DevourAim.pick(monster.pos, cast.aim, def, feared, others, ctx.wallBetween)
 	if not monster:Devour(aim, distance, time, def) then return false end
 	-- in his Living Nightmare it recharges much faster
 	local nightmare = cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow()

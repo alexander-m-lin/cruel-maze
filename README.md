@@ -58,7 +58,9 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching out of his
 sleeves; left click does nothing for him):
 - **Right mouse: Devour** (5 s). Hold right click to aim: the area it would catch in is painted
-  blue on the floor (brighter when it would lock on to a feared survivor); let go to Devour. He gathers himself for a moment, then lunges 14 studs the way he
+  blue on the floor (brighter when it would lock on to a feared survivor); let go to Devour.
+  Aim assist: a survivor within 30 degrees either side of where he faces and close enough to
+  reach (23 studs, clear line) turns the dash straight at them (same range and reach). He gathers himself for a moment, then lunges 14 studs the way he
   faces; the first survivor his hands reach is caught (within 9 studs ahead, 7 to the sides). He holds them up facing away, struggling,
   winds his head back, lifts them flat and draws their head into his hood, where they keep
   struggling until it dies away; then he draws them back out and drops the body, which lies there

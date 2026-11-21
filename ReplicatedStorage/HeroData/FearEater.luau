@@ -39,6 +39,10 @@ return {
 			fearedRange = 35,       -- at a feared survivor: this far...
 			fearedSpeed = 75,       -- ...at this many studs per second
 			fearedCone = 40,        -- degrees (total width) around where you face that counts as aimed at them
+			-- aim assist: a survivor this far round from where you face (total width), and close
+			-- enough for the dash to reach, turns the dash to head straight at them (same range and reach)
+			assistCone = 60,
+			assistRange = 23,       -- (range + reachForward + reach)
 			reach = 7,              -- a survivor this close to his reach point is caught (studs)...
 			reachForward = 2,       -- ...which is this far in front of his middle (so: 9 ahead, 7 to the sides, 5 behind)
 			nightmareCooldown = 1,  -- seconds to recharge during Living Nightmare (casting it also cuts what's left to this)
