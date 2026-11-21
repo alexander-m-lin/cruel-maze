@@ -60,7 +60,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
   one it stays shown; stand next to one and left-click, then stay close for 3 seconds (a bar
   fills), to destroy it (the monster side sees where). Anything that reveals you (a false relic,
   a haunt) also lights up a small ring round you for the monster side. AI monsters come for you,
-  even through walls, whenever you're within their sight range and the monster side can see you
+  even through walls, whenever you're within 120 studs and the monster side can see you
   in any way: another monster, a ward, a crushing wall, a relic's ring, a reveal. The monster
   side has vision rings round relics too: the Maze Master round every relic, monsters round
   false relics and the real ones they've spotted. A purple glow round your screen and a whisper mean

@@ -30,6 +30,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
+local Config = require(game:GetService("ReplicatedStorage").Config)
 
 local ROAM_SPEED   = 15     -- studs per second (players walk at Config.PLAYER_SPEED)
 local SEARCH_SPEED = 18
@@ -292,15 +293,15 @@ end
 
 ---------------------------------------------------------------- senses
 -- revealed: the survivor is revealed to the monster side (a false relic, a haunt...) or their side
--- can see them (another monster, a ward, a relic's ring: options.spottedBySide): seen within sight
--- range even through walls
+-- can see them (another monster, a ward, a relic's ring: options.spottedBySide): seen within
+-- Config.REVEALED_CHASE_RANGE even through walls
 function MonsterAI:canDetect(root, revealed)
 	local eye = self.pos + Vector3.new(0, HOVER, 0)
 	local offset = root.Position - eye
 	local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
 	if flat <= HEAR_RANGE then return true end
+	if revealed then return flat <= Config.REVEALED_CHASE_RANGE end
 	if flat > SIGHT_RANGE then return false end
-	if revealed then return true end
 	return workspace:Raycast(eye, offset, self.rayParams) == nil   -- nothing in the way = it can see you
 end
 

@@ -101,6 +101,9 @@ Config.WARD_DESTROY_TIME = 3            -- ...by staying close this long (a bar 
 -- with a small ring of sight round them (smaller than a relic's), and AI monsters go for them
 -- if they're within their usual sight range, walls or not.
 Config.REVEAL_VISION_RADIUS = 10
+-- AI monsters go after a survivor their side can see (revealed, or seen by a ward, another
+-- monster, a relic ring...) within this many studs, straight line, walls or not (6 cells)
+Config.REVEALED_CHASE_RANGE = 120
 
 -- Haunt: on a survivor the monster side can see right now. For a few seconds they're revealed to
 -- the monster side wherever they go, and their vision cone counts as the monster side's sight too.
