@@ -5,7 +5,7 @@
 --   local speed, angle = Movement.walkSpeed(who, humanoid, root, options)
 --   Movement.setRunBackwards(humanoid, angle > Movement.BACKWARDS_FROM)
 --
--- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil,
+-- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil, HauntedUntil,
 --   StunnedUntil, PullAt/PullTime)
 -- options.aiming: true when facing comes from aiming (the mouse) rather than from moving, so moving
 --   away from where you face is slower (Config.FACING_*). A bot faces the way it walks.
@@ -68,6 +68,10 @@ function Movement.walkSpeed(who, humanoid, root, options)
 	-- tricked by a false relic: slowed for a while
 	if (who:GetAttribute("SlowUntil") or 0) > workspace:GetServerTimeNow() then
 		multiplier *= Config.FALSE_RELIC_SLOW
+	end
+	-- haunted by the Maze Master: slowed while it lasts
+	if (who:GetAttribute("HauntedUntil") or 0) > workspace:GetServerTimeNow() then
+		multiplier *= Config.HAUNT_SLOW
 	end
 	return base * multiplier, angle
 end

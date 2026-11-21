@@ -115,12 +115,13 @@ Config.REVEALED_CHASE_RANGE = 120
 -- the monster side wherever they go, and their vision cone counts as the monster side's sight too.
 -- The haunted survivor feels it (a faint purple screen edge and a whisper).
 Config.HAUNT_TIME = 5
+Config.HAUNT_SLOW = 0.7              -- a haunted survivor moves at this fraction of their speed while it lasts
 
 -- Crushing walls: pairs of walls along straight corridor cells, built into the maze, that the Maze
 -- Master sets off. They rumble, slam together (killing survivors between), then slide back.
 Config.CRUSHERS = 6                     -- how many per maze
 Config.CRUSHER_SPACING = 3              -- at least this many cells apart (and from doors)
-Config.CRUSHER_WARNING = 2              -- seconds of rumbling
+Config.CRUSHER_WARNING = 1              -- seconds of rumbling
 Config.CRUSHER_SLAM_TIME = 0.3
 Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
 Config.CRUSHER_RETURN_TIME = 1

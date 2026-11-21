@@ -30,11 +30,14 @@ starts another straight away, and "Doors" opens the doors panel.
   team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
   red for you and the monsters. You see what the monsters see, all round every relic, and each
-  crushing wall's stretch of corridor. Spend dark mana on doors (1), wards (2: a floating eye
-  your side sees all round; up to 3 at a time), haunt (3: click a survivor you can see; for 3
-  seconds your side sees them, and what they see), false relics (4, two a match: they look like
-  relics, and a survivor who clicks one is revealed and slowed) and crushing walls (5: hidden in
-  the maze, they slam together and crush survivors between them).
+  crushing wall's stretch of corridor. Every door, crushing wall and survivor you can see is
+  outlined (purple = ready, grey = not yet): click one to use it. A door opens or shuts; a
+  crushing wall (hidden in the maze) slams together, crushing survivors between them; a survivor
+  is haunted (for 5 seconds your side sees them and what they see, and they're slowed to 70%).
+  Hovering one shows the ability's name, or a clock while it recharges. Two buttons place things:
+  wards (1: a floating eye your side sees round, 50 studs in line of sight; up to 4 at a time) and
+  false relics (2, two a match: they look like relics, and a survivor who clicks one is revealed
+  and slowed). Right-click or Esc cancels placing.
 
 **Heroes:** every survivor plays **Sara, the Cryptraider** for now (more heroes and a character
 select are coming). Abilities aim the way you face:
@@ -124,7 +127,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
 | `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's lunge (left click, or a button on touch screens) |
-| `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's dark mana bar, tool buttons and clicking on doors, cells, survivors and crushing walls |
+| `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's controls: outlined targets (doors, crushing walls, survivors) to click, the hover name or cooldown clock, and the ward / false relic placement buttons |
 | `StarterPlayerScripts/CrusherView.local.luau` | StarterPlayer › StarterPlayerScripts | A crushing wall's warning: its walls shake and dust pours out |
 | `StarterPlayerScripts/FalseRelicMarks.local.luau` | StarterPlayer › StarterPlayerScripts | False relics glow red for the monster side (only they're told which are false) |
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |

@@ -1,22 +1,18 @@
 -- The MAZE MASTER's interface (only while you're the Maze Master). The camera pans over the maze
 -- (IsometricCamera); this script adds:
 --
---   a DARK MANA bar (only while Config.DARK_MANA_ENABLED) and five TOOL buttons along the bottom
---   (or keys 1-5):
---     Door           - click near a door to open or shut it
---     Ward           - click a cell to place a ward (a floating eye) there
---     Haunt          - click a survivor you can see to haunt them
---     False relic    - click a cell to place a false relic there
---     Crushing wall  - click near a crushing wall to set it off
---   Each button shows its cost and, while it recharges, how long is left.
---   Outlines in the world: with Door picked, every door (purple = ready, grey = resting or moving);
---   with Crushing wall picked, every crushing wall's cell. The one nearest the mouse is brighter.
---   With False relic or Ward picked, the cell under the mouse lights up: green = one can go
---   there, red = it can't (amber = it could, but you can't afford one or have none left).
---   With Haunt picked, every survivor you can see is outlined.
+--   TARGETS in the world, always outlined: every door, every crushing wall, and every survivor you
+--   can see. Purple = ready to use, grey = not yet (recharging, or the door/wall is busy). Click one
+--   to use it on that: a door opens or shuts, a crushing wall slams, a survivor is haunted.
+--   Hovering one brightens it and shows, by the mouse, the ability's name in a box when it's ready,
+--   or a clock filling up (with the seconds left) while it recharges.
+--   Two PLACEMENT buttons along the bottom (or keys 1-2): Ward and False relic. Pick one, then click
+--   a cell: it lights up green where one can go, red where it can't (amber: it could, but none
+--   are left / no mana). Right-click, Esc or the button again cancels. Placing ends placement.
+--   A DARK MANA bar (only while Config.DARK_MANA_ENABLED).
 --
--- Clicks and taps both work (no hover needed). The server checks everything (MazeMaster) and
--- answers with a short message, shown above the bar.
+-- Clicks and taps both work (a tap picks the target nearest it). The server checks everything
+-- (MazeMaster) and answers with a short message, shown above the buttons.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -39,14 +35,14 @@ local PURPLE = Color3.fromRGB(150, 70, 220)
 local PURPLE_BRIGHT = Color3.fromRGB(205, 140, 255)
 local GREY = Color3.fromRGB(110, 110, 120)
 
+-- the abilities used by clicking a target, and their names on the hover box
+local TARGET_TOOLS = { Door = "Door", Crusher = "Crushing wall", Haunt = "Haunt" }
+-- the placement abilities, which have buttons
 local TOOLS = {
-	{ id = "Door", name = "Door", key = Enum.KeyCode.One },
-	{ id = "Ward", name = "Ward", key = Enum.KeyCode.Two },
-	{ id = "Haunt", name = "Haunt", key = Enum.KeyCode.Three },
-	{ id = "FalseRelic", name = "False relic", key = Enum.KeyCode.Four },
-	{ id = "Crusher", name = "Crushing wall", key = Enum.KeyCode.Five },
+	{ id = "Ward", name = "Ward", key = Enum.KeyCode.One },
+	{ id = "FalseRelic", name = "False relic", key = Enum.KeyCode.Two },
 }
-local selected = "Door"
+local placing = nil          -- "Ward" / "FalseRelic" while placing one, else nil (clicks use targets)
 
 ---------------------------------------------------------------- the panel
 local gui = Instance.new("ScreenGui")
@@ -58,7 +54,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 local panel = Instance.new("Frame")
 panel.AnchorPoint = Vector2.new(0.5, 1)
 panel.Position = UDim2.new(0.5, 0, 1, -16)
-panel.Size = UDim2.fromOffset(620, 104)
+panel.Size = UDim2.fromOffset(300, 104)
 panel.BackgroundTransparency = 1
 panel.Parent = gui
 
@@ -127,8 +123,108 @@ for i, tool in TOOLS do
 	shade.ZIndex = 2
 	shade.Parent = b
 	Instance.new("UICorner", shade).CornerRadius = UDim.new(0, 8)
-	b.Activated:Connect(function() selected = tool.id end)
+	b.Activated:Connect(function() placing = placing ~= tool.id and tool.id or nil end)
 	buttons[tool.id] = { button = b, stroke = stroke, shade = shade, tool = tool }
+end
+
+-- THE HOVER TIP: by the mouse, over a target. Ready: the ability's name in a box. Recharging: a
+-- clock that fills clockwise from 12 as it recharges, with the seconds left in the middle.
+gui.IgnoreGuiInset = true          -- (so it lines up with GetMouseLocation)
+local tip = Instance.new("Frame")
+tip.BackgroundTransparency = 1
+tip.Size = UDim2.fromOffset(1, 1)
+tip.Visible = false
+tip.Parent = gui
+
+local nameBox = Instance.new("TextLabel")
+nameBox.AutomaticSize = Enum.AutomaticSize.XY
+nameBox.Size = UDim2.fromOffset(0, 0)
+nameBox.BackgroundColor3 = Color3.fromRGB(22, 16, 30)
+nameBox.BackgroundTransparency = 0.1
+nameBox.BorderSizePixel = 0
+nameBox.Font = Enum.Font.GothamBold
+nameBox.TextSize = 15
+nameBox.TextColor3 = Color3.new(1, 1, 1)
+nameBox.Parent = tip
+do
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft, pad.PaddingRight = UDim.new(0, 10), UDim.new(0, 10)
+	pad.PaddingTop, pad.PaddingBottom = UDim.new(0, 6), UDim.new(0, 6)
+	pad.Parent = nameBox
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 2
+	stroke.Color = PURPLE_BRIGHT
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = nameBox
+end
+
+local CLOCK_SIZE = 46
+local clock = Instance.new("Frame")
+clock.Size = UDim2.fromOffset(CLOCK_SIZE, CLOCK_SIZE)
+clock.BackgroundColor3 = Color3.fromRGB(22, 16, 30)
+clock.BackgroundTransparency = 0.15
+clock.BorderSizePixel = 0
+clock.Parent = tip
+Instance.new("UICorner", clock).CornerRadius = UDim.new(0.5, 0)
+do
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 2
+	stroke.Color = GREY
+	stroke.Parent = clock
+end
+-- The fill: each half of the clock is a clipped half of a purple disc whose gradient is opaque on
+-- one side of a line through the middle; turning the gradient sweeps that line round.
+local clockHalves = {}
+for _, side in { "right", "left" } do
+	local clip = Instance.new("Frame")
+	clip.BackgroundTransparency = 1
+	clip.ClipsDescendants = true
+	clip.Size = UDim2.new(0.5, 0, 1, 0)
+	clip.Position = side == "right" and UDim2.fromScale(0.5, 0) or UDim2.fromScale(0, 0)
+	clip.Parent = clock
+	local disc = Instance.new("Frame")
+	disc.Size = UDim2.fromOffset(CLOCK_SIZE, CLOCK_SIZE)
+	disc.Position = side == "right" and UDim2.fromOffset(-CLOCK_SIZE / 2, 0) or UDim2.fromOffset(0, 0)
+	disc.BackgroundColor3 = PURPLE
+	disc.BorderSizePixel = 0
+	disc.Parent = clip
+	Instance.new("UICorner", disc).CornerRadius = UDim.new(0.5, 0)
+	local gradient = Instance.new("UIGradient")
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(0.501, 1), NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = disc
+	clockHalves[side] = gradient
+end
+local clockText = Instance.new("TextLabel")
+clockText.Size = UDim2.fromScale(1, 1)
+clockText.BackgroundTransparency = 1
+clockText.Font = Enum.Font.GothamBold
+clockText.TextSize = 16
+clockText.TextColor3 = Color3.new(1, 1, 1)
+clockText.TextStrokeTransparency = 0.3
+clockText.ZIndex = 3
+clockText.Parent = clock
+
+-- filled: 0..1 of the way round, clockwise from 12 o'clock
+local function setClock(filled)
+	local angle = math.clamp(filled, 0, 1) * 360
+	clockHalves.right.Rotation = math.clamp(angle, 0, 180)
+	clockHalves.left.Rotation = math.clamp(angle, 180, 360)
+end
+
+local function showTip(screen, name, left, total)
+	tip.Visible = true
+	tip.Position = UDim2.fromOffset(screen.X + 18, screen.Y + 14)
+	if left <= 0 then
+		nameBox.Visible, clock.Visible = true, false
+		nameBox.Text = name
+	else
+		nameBox.Visible, clock.Visible = false, true
+		setClock(total > 0 and 1 - left / total or 1)
+		clockText.Text = tostring(math.ceil(left))
+	end
 end
 
 local messageUntil = 0
@@ -192,25 +288,6 @@ local function crushersList()
 	return list
 end
 
-local function nearestDoor(point)
-	local best, bestDist
-	for _, part in doorsList() do
-		local at = (part:GetAttribute("ClosedCFrame") or part.CFrame).Position
-		local d = (Vector3.new(at.X, 0, at.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
-		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestDist = part, d end
-	end
-	return best
-end
-
-local function nearestCrusher(point)
-	local best, bestDist
-	for id, c in crushersList() do
-		local d = (Vector3.new(c.center.X, 0, c.center.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
-		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestDist = id, d end
-	end
-	return best
-end
-
 -- Survivors you can see right now (FogOfWar marks each "VisibleToMe"): [character] = UserId
 local function visibleSurvivors()
 	local list = {}
@@ -225,48 +302,6 @@ local function visibleSurvivors()
 	end
 	return list
 end
-
-local function nearestSurvivor(point)
-	local best, bestId, bestDist
-	for character, userId in visibleSurvivors() do
-		local p = character:GetPivot().Position
-		local d = (Vector3.new(p.X, 0, p.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
-		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestId, bestDist = character, userId, d end
-	end
-	return best, bestId
-end
-
-local function use(screen, guiInset)
-	local point = floorPoint(screen, guiInset)
-	if not point then return end
-	if selected == "Door" then
-		local door = nearestDoor(point)
-		if door then toolEvent:FireServer("Door", door:GetAttribute("Id")) else say("Click near a door") end
-	elseif selected == "Crusher" then
-		local id = nearestCrusher(point)
-		if id then toolEvent:FireServer("Crusher", id) else say("Click near a crushing wall") end
-	elseif selected == "FalseRelic" or selected == "Ward" then
-		toolEvent:FireServer(selected, point)
-	elseif selected == "Haunt" then
-		local _, userId = nearestSurvivor(point)
-		if userId then toolEvent:FireServer("Haunt", userId) else say("Click a survivor you can see") end
-	end
-end
-
-UserInputService.InputBegan:Connect(function(input, processed)
-	if not isMazeMaster() then return end
-	if not processed then
-		for _, tool in TOOLS do
-			if input.KeyCode == tool.key then selected = tool.id end
-		end
-	end
-	if processed then return end   -- (clicks on the panel's own buttons)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		use(UserInputService:GetMouseLocation())
-	elseif input.UserInputType == Enum.UserInputType.Touch then
-		use(Vector2.new(input.Position.X, input.Position.Y), true)
-	end
-end)
 
 -- Outlines: one SelectionBox per door ghost or crusher marker, reused
 local outlines = {}      -- [object] = SelectionBox
@@ -317,6 +352,18 @@ local wallRays = RaycastParams.new()
 wallRays.FilterType = Enum.RaycastFilterType.Include
 local placeMarker = nil
 
+-- Is this point in a sanctuary (or within `margin` studs of one)? From its corners (Min, Max).
+local function inSanctuary(p, margin)
+	local folder = match:FindFirstChild("Sanctuaries")
+	for _, info in folder and folder:GetChildren() or {} do
+		local lo, hi = info:GetAttribute("Min"), info:GetAttribute("Max")
+		if lo and hi and p.X > lo.X - margin and p.X < hi.X + margin and p.Z > lo.Z - margin and p.Z < hi.Z + margin then
+			return true
+		end
+	end
+	return false
+end
+
 local function cellAt(point, maze)
 	local S, n = maze:GetAttribute("CellSize"), maze:GetAttribute("Cells")
 	local half = n * S / 2
@@ -336,10 +383,7 @@ local function canPlaceAt(center, S, maze)
 	local function near(p, reach)
 		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
 	end
-	local sanctuaries = match:FindFirstChild("Sanctuaries")
-	for _, info in sanctuaries and sanctuaries:GetChildren() or {} do
-		if near(info:GetAttribute("Center"), 1.5 * S + 0.1) then return false end
-	end
+	if inSanctuary(center, S + 0.1) then return false end      -- in or next to one
 	local relics = match:FindFirstChild("Relics")
 	for _, info in relics and relics:GetChildren() or {} do
 		if not info:GetAttribute("Collected") and near(info:GetAttribute("Center"), S + 0.1) then return false end
@@ -353,10 +397,7 @@ local function canPlaceWardAt(center, S)
 	local function same(p, reach)
 		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
 	end
-	local sanctuaries = match:FindFirstChild("Sanctuaries")
-	for _, info in sanctuaries and sanctuaries:GetChildren() or {} do
-		if same(info:GetAttribute("Center"), S) then return false end   -- (a sanctuary is 2x2 cells round its centre)
-	end
+	if inSanctuary(center, 0) then return false end
 	for _, name in { "Relics", "WardEyes" } do
 		local folder = match:FindFirstChild(name)
 		for _, info in folder and folder:GetChildren() or {} do
@@ -366,13 +407,14 @@ local function canPlaceWardAt(center, S)
 	return true
 end
 
+-- -> whether a placement there would be allowed (and the marker is drawn)
 local function showPlacement(point)
 	local maze = workspace:FindFirstChild("Maze")
 	local x, z, center, S
 	if maze and point then x, z, center, S = cellAt(point, maze) end
 	if not x then
 		if placeMarker then placeMarker.Transparency = 1 end
-		return
+		return false
 	end
 	if not placeMarker or not placeMarker.Parent then
 		placeMarker = Instance.new("Part")
@@ -383,15 +425,96 @@ local function showPlacement(point)
 		placeMarker.CastShadow = false
 		placeMarker.Parent = workspace
 	end
-	local affordable = (not Config.DARK_MANA_ENABLED or (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS[selected].cost)
-		and (selected ~= "FalseRelic" or (player:GetAttribute("FalseRelicsLeft") or 0) > 0)
+	local affordable = (not Config.DARK_MANA_ENABLED or (player:GetAttribute("DarkMana") or 0) >= Config.MAZE_MASTER_TOOLS[placing].cost)
+		and (placing ~= "FalseRelic" or (player:GetAttribute("FalseRelicsLeft") or 0) > 0)
 	local ok
-	if selected == "Ward" then ok = canPlaceWardAt(center, S) else ok = canPlaceAt(center, S, maze) end
+	if placing == "Ward" then ok = canPlaceWardAt(center, S) else ok = canPlaceAt(center, S, maze) end
 	placeMarker.Color = not ok and RED or (affordable and GREEN or AMBER)
 	placeMarker.Size = Vector3.new(S - 3, 0.2, S - 3)
 	placeMarker.CFrame = CFrame.new(center + Vector3.new(0, 0.2, 0))
 	placeMarker.Transparency = 0.55
+	return ok and affordable
 end
+
+---------------------------------------------------------------- targets
+-- Everything you can click to use an ability on, with whether it's ready:
+-- { tool, adornee (to outline), at (floor point), use = args for the server, left, total, busy, name }
+local function targetsNow(now)
+	local list = {}
+	local function toolLeft(id)
+		return math.max(0, (player:GetAttribute("ToolReady" .. id) or 0) - now), Config.MAZE_MASTER_TOOLS[id].cooldown
+	end
+	-- doors: the tool's cooldown, and each door's own rest after being changed
+	local doorLeft, doorTotal = toolLeft("Door")
+	for _, part in doorsList() do
+		local ghost = FogState.doorGhosts[part]
+		if not ghost then continue end
+		local left, total = doorLeft, doorTotal
+		local rest = math.max(0, (part:GetAttribute("RestUntil") or 0) - now)
+		if rest > left then left, total = rest, Config.MAZE_MASTER_DOOR_COOLDOWN end
+		local state = part:GetAttribute("State")
+		table.insert(list, { tool = "Door", adornee = ghost, at = (part:GetAttribute("ClosedCFrame") or part.CFrame).Position,
+			use = { "Door", part:GetAttribute("Id") }, left = left, total = total,
+			busy = state == "warning" or state == "moving",
+			name = part:GetAttribute("Open") and "Shut door" or "Open door" })
+	end
+	local crushLeft, crushTotal = toolLeft("Crusher")
+	for id, c in crushersList() do
+		table.insert(list, { tool = "Crusher", adornee = crusherMarker(id, c.center), at = c.center,
+			use = { "Crusher", id }, left = crushLeft, total = crushTotal,
+			busy = c.slab:GetAttribute("State") ~= "idle", name = TARGET_TOOLS.Crusher })
+	end
+	local hauntLeft, hauntTotal = toolLeft("Haunt")
+	for character, userId in visibleSurvivors() do
+		table.insert(list, { tool = "Haunt", adornee = character, at = character:GetPivot().Position,
+			use = { "Haunt", userId }, left = hauntLeft, total = hauntTotal, name = TARGET_TOOLS.Haunt,
+			survivor = true })
+	end
+	return list
+end
+
+-- the target nearest a floor point (within PICK_RANGE); survivors win close calls, as they move
+local function targetAt(list, point)
+	local best, bestDist
+	for _, t in list do
+		local d = (Vector3.new(t.at.X, 0, t.at.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
+		if t.survivor then d -= 4 end
+		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestDist = t, d end
+	end
+	return best
+end
+
+local function use(screen, guiInset)
+	local point = floorPoint(screen, guiInset)
+	if not point then return end
+	if placing then
+		if showPlacement(point) then
+			toolEvent:FireServer(placing, point)
+			placing = nil
+		else
+			say(placing == "Ward" and "A ward can't go there" or "A false relic can't go there")
+		end
+		return
+	end
+	local target = targetAt(targetsNow(workspace:GetServerTimeNow()), point)
+	if target then toolEvent:FireServer(table.unpack(target.use)) end
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if not isMazeMaster() then return end
+	if not processed then
+		for _, tool in TOOLS do
+			if input.KeyCode == tool.key then placing = placing ~= tool.id and tool.id or nil end
+		end
+		if input.KeyCode == Enum.KeyCode.Escape or input.UserInputType == Enum.UserInputType.MouseButton2 then placing = nil end
+	end
+	if processed then return end   -- (clicks on the panel's own buttons)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		use(UserInputService:GetMouseLocation())
+	elseif input.UserInputType == Enum.UserInputType.Touch then
+		use(Vector2.new(input.Position.X, input.Position.Y), true)
+	end
+end)
 
 RunService.RenderStepped:Connect(function()
 	local active = isMazeMaster()
@@ -423,36 +546,27 @@ RunService.RenderStepped:Connect(function()
 			manaOn and ("\n%d mana"):format(def.cost) or "", extra,
 			left > 0 and ("  ·  %ds"):format(math.ceil(left)) or "")
 		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))
-		b.stroke.Transparency = selected == id and 0 or 1
+		b.stroke.Transparency = placing == id and 0 or 1
 		b.button.TextTransparency = mana < def.cost and 0.45 or 0
 	end
 
-	-- outlines for the picked tool, the one nearest the mouse brighter
-	local point = floorPoint(UserInputService:GetMouseLocation())
-	if selected == "Door" then
-		local hover = point and nearestDoor(point)
-		for _, part in doorsList() do
-			local ghost = FogState.doorGhosts[part]
-			if ghost then
-				local resting = (part:GetAttribute("RestUntil") or 0) > now
-				local moving = part:GetAttribute("State") == "warning" or part:GetAttribute("State") == "moving"
-				outline(ghost, (resting or moving) and GREY or (part == hover and PURPLE_BRIGHT or PURPLE), part == hover)
-			end
-		end
-	elseif selected == "FalseRelic" or selected == "Ward" then
+	-- placing a ward or false relic: just the cell under the mouse
+	local mouse = UserInputService:GetMouseLocation()
+	local point = floorPoint(mouse)
+	tip.Visible = false
+	if placing then
 		showPlacement(point)
-	elseif selected == "Haunt" then
-		local hover = point and nearestSurvivor(point)
-		local ready = (player:GetAttribute("ToolReadyHaunt") or 0) <= now and mana >= Config.MAZE_MASTER_TOOLS.Haunt.cost
-		for character in visibleSurvivors() do
-			outline(character, not ready and GREY or (character == hover and PURPLE_BRIGHT or PURPLE), character == hover)
-		end
-	elseif selected == "Crusher" then
-		local hover = point and nearestCrusher(point)
-		for id, c in crushersList() do
-			local marker = crusherMarker(id, c.center)
-			local busy = c.slab:GetAttribute("State") ~= "idle"
-			outline(marker, busy and GREY or (id == hover and PURPLE_BRIGHT or PURPLE), id == hover)
-		end
+		return
+	end
+	-- otherwise every target outlined (purple = ready, grey = not), the one under the mouse brighter
+	local list = targetsNow(now)
+	local hover = point and targetAt(list, point)
+	for _, t in list do
+		local ready = t.left <= 0 and not t.busy and mana >= Config.MAZE_MASTER_TOOLS[t.tool].cost
+		outline(t.adornee, not ready and GREY or (t == hover and PURPLE_BRIGHT or PURPLE), t == hover)
+	end
+	if hover then
+		showTip(mouse, hover.name, hover.left, hover.total)
+		nameBox.TextTransparency = hover.busy and 0.45 or 0
 	end
 end)
