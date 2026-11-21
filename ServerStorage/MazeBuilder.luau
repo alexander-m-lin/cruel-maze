@@ -303,9 +303,14 @@ function MazeBuilder.build(options)
 	y0 += 1 -- everything else sits on the maze floor
 
 	-- The layout: maze, then sanctuaries, then relic rooms (see MazeLayout)
-	local walls = MazeBuilder.generate(n)
-	local sanctuaryPlans = MazeLayout.carveSanctuaries(walls, n, options.sanctuaries or 4, options.sanctuarySpacing or 5, {
-		startSize = options.startSanctuarySize, size = options.sanctuarySize, exitSpacing = options.sanctuaryExitSpacing })
+	-- (a few tries for a maze whose start sanctuary gets 3 well-spread exits: not every maze has room)
+	local walls, sanctuaryPlans
+	for _ = 1, 10 do
+		walls = MazeBuilder.generate(n)
+		sanctuaryPlans = MazeLayout.carveSanctuaries(walls, n, options.sanctuaries or 4, options.sanctuarySpacing or 5, {
+			startSize = options.startSanctuarySize, size = options.sanctuarySize, exitSpacing = options.sanctuaryExitSpacing })
+		if #sanctuaryPlans[1].exits >= 3 then break end
+	end
 	local blocked = {}      -- cells monsters can't enter
 	for _, sanctuary in sanctuaryPlans do
 		for k in sanctuary.cells do blocked[k] = true end
@@ -316,6 +321,7 @@ function MazeBuilder.build(options)
 	local doorPlans = MazeLayout.placeDoors(walls, n, sanctuaryPlans, relicPlans, {
 		corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
 		spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
+		exitSpacing = options.sanctuaryExitSpacing,
 	})
 	local crusherPlans = MazeLayout.placeCrushers(walls, n, sanctuaryPlans, relicPlans, doorPlans,
 		options.crushers or 0, options.crusherSpacing or 3)

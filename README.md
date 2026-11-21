@@ -67,8 +67,9 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
   the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
 - **Sanctuaries** (cyan barriers) are safe: the monster can't enter, and the monster side can't
   see you inside one at all (not through wards, relic rings, reveals or haunts). The start
-  sanctuary is 3x3 cells, the others 2x2; their 2-3 exits are spread apart, so nobody can watch
-  two from one spot. Walk into one to capture it
+  sanctuary is 3x3 cells with 3 exits, the others 2x2 with 2-3; walking from just outside one
+  exit to just outside another takes at least 6 cells, even with every door open, so nobody can
+  hold two. Walk into one to capture it
   for your team, and you can come back there after being caught. Your team's sanctuaries (the start
   sanctuary, and any you capture) are on your map whole.
 - **Doors** (wall panels between two darker posts) open and close during the match. A door shakes,

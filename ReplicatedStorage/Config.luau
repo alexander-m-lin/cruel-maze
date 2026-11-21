@@ -50,8 +50,9 @@ Config.SANCTUARIES = 3              -- including the start sanctuary
 Config.SANCTUARY_SPACING = 5        -- minimum distance between sanctuaries, in cells
 Config.SANCTUARY_SIZE = 2           -- cells across (2x2)
 Config.START_SANCTUARY_SIZE = 3     -- the start sanctuary: 3x3
-Config.SANCTUARY_EXIT_SPACING = 3   -- the cells just outside any two exits are at least this far apart
-                                    -- (cells, Manhattan), so one camper can't cover two exits
+Config.SANCTUARY_EXIT_SPACING = 6   -- walking the maze from the cell just outside one exit to the cell
+                                    -- just outside another takes at least this many steps (cells), even
+                                    -- with every door open, so one camper can't cover two exits
 
 -- Doors: passages that open and close during a match (see MazeLayout.placeDoors and Doors).
 -- The maze is laid out so that everything stays reachable even with every door shut.

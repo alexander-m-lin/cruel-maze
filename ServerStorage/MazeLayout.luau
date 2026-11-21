@@ -69,6 +69,30 @@ local function components(walls, n, blocked)
 	return comp, count
 end
 
+-- Shortest walking distance (in steps) from cell a to cell b, avoiding blocked cells, or nil if
+-- there's no way through.
+local function distance(walls, n, ax, az, bx, bz, blocked)
+	local dist = { [key(ax, az)] = 0 }
+	local queue, head = { {ax, az} }, 1
+	while head <= #queue do
+		local c = queue[head]
+		head += 1
+		local here = dist[key(c[1], c[2])]
+		if c[1] == bx and c[2] == bz then return here end
+		for _, d in DIRS do
+			if not walls[c[1]][c[2]][d[3]] then
+				local nx, nz = c[1] + d[1], c[2] + d[2]
+				local nk = key(nx, nz)
+				if dist[nk] == nil and not blocked[nk] then
+					dist[nk] = here + 1
+					table.insert(queue, {nx, nz})
+				end
+			end
+		end
+	end
+	return nil
+end
+
 -- Knock down walls between unblocked cells until all unblocked cells are one connected region.
 -- Never touches walls next to a blocked cell (so sanctuaries keep exactly the exits they were given).
 function MazeLayout.connect(walls, n, blocked)
@@ -115,9 +139,10 @@ end
 -- in the corner from (1,1); the others are size x size, placed at random, each wholly inside a
 -- quarter of the maze that no other sanctuary is in (while there are free quarters left), and at
 -- least `spacing` cells (Chebyshev distance, between their corners) from every other.
--- Each gets 2-3 exits, spread out: the cells just outside any two exits are at least exitSpacing
--- apart (Manhattan distance), so nobody standing at one exit is also at another. (A sanctuary in
--- a corner may only fit 2.)
+-- Each gets 2-3 exits, spread out: from the cell just outside one exit to the cell just outside
+-- another is at least exitSpacing steps walking the maze (not through any sanctuary), so nobody can
+-- hold two exits at once. (It also connects the maze round the sanctuaries first - see connect -
+-- so those walks are the real ones.)
 -- Returns a list of sanctuaries: { id, x, z (top-left cell), size, cells = {[key]=true}, exits = {...} }
 function MazeLayout.carveSanctuaries(walls, n, count, spacing, options)
 	options = options or {}
@@ -160,6 +185,13 @@ function MazeLayout.carveSanctuaries(walls, n, count, spacing, options)
 		if fits(c[1], c[2]) then addSanctuary(c[1], c[2], size) end
 	end
 
+	-- The rest of the maze as one piece round the sanctuaries, so walking distances are final
+	local blocked = {}
+	for _, sanctuary in sanctuaries do
+		for k in sanctuary.cells do blocked[k] = true end
+	end
+	MazeLayout.connect(walls, n, blocked)
+
 	-- Give each 2-3 exits: keep some of its existing openings (else open new ones), spread apart
 	for _, sanctuary in sanctuaries do
 		local edges, open = {}, {}
@@ -174,20 +206,55 @@ function MazeLayout.carveSanctuaries(walls, n, count, spacing, options)
 				end
 			end
 		end
-		local want = math.random(2, 3)
-		shuffle(open)
+		-- the start sanctuary always aims for 3 (everyone begins there); the others 2 or 3
+		local want = sanctuary.id == 1 and 3 or math.random(2, 3)
 		shuffle(edges)
-		local exits = {}
-		local function apart(e)
-			for _, other in exits do
-				if math.abs(e.out[1] - other.out[1]) + math.abs(e.out[2] - other.out[2]) < exitSpacing then return false end
+		-- walking steps between the cells just outside each pair of edges (nil: no way round)
+		local steps = {}
+		for i, e in edges do
+			steps[i] = {}
+			for j, f in edges do
+				if j > i then steps[i][j] = distance(walls, n, e.out[1], e.out[2], f.out[1], f.out[2], blocked) end
 			end
-			return true
 		end
-		for _, list in { open, edges } do                -- existing openings first, then new ones
-			for _, e in list do
-				if #exits >= want then break end
-				if not table.find(exits, e) and apart(e) then table.insert(exits, e) end
+		local function far(i, j)
+			if i > j then i, j = j, i end
+			local d = steps[i][j]
+			return d == nil or d >= exitSpacing
+		end
+		local isOpen = {}
+		for _, e in open do isOpen[e] = true end
+		-- every set of `want` edges (then fewer) that are all spread apart; among them, the ones
+		-- keeping the most existing openings (changing the maze least), one at random
+		local exits = {}
+		for size = want, 1, -1 do
+			local best, bestScore, ties = nil, -1, 0
+			local chosen = {}
+			local function search(from)
+				if #chosen == size then
+					local score = 0
+					for _, i in chosen do if isOpen[edges[i]] then score += 1 end end
+					if score > bestScore then best, bestScore, ties = table.clone(chosen), score, 1
+					elseif score == bestScore then
+						ties += 1
+						if math.random(ties) == 1 then best = table.clone(chosen) end
+					end
+					return
+				end
+				for i = from, #edges do
+					local ok = true
+					for _, c in chosen do if not far(c, i) then ok = false break end end
+					if ok then
+						table.insert(chosen, i)
+						search(i + 1)
+						table.remove(chosen)
+					end
+				end
+			end
+			search(1)
+			if best then
+				for _, i in best do table.insert(exits, edges[i]) end
+				break
 			end
 		end
 		for _, e in edges do setWall(walls, e[1], e[2], e[3], true) end   -- close every edge...
@@ -255,30 +322,6 @@ function tryPick(walls, n, sanctuaries, count, spacing, nearStart)
 end
 
 ---------------------------------------------------------------- doors
--- Shortest walking distance (in steps) from cell a to cell b, avoiding blocked cells, or nil if
--- there's no way through.
-local function distance(walls, n, ax, az, bx, bz, blocked)
-	local dist = { [key(ax, az)] = 0 }
-	local queue, head = { {ax, az} }, 1
-	while head <= #queue do
-		local c = queue[head]
-		head += 1
-		local here = dist[key(c[1], c[2])]
-		if c[1] == bx and c[2] == bz then return here end
-		for _, d in DIRS do
-			if not walls[c[1]][c[2]][d[3]] then
-				local nx, nz = c[1] + d[1], c[2] + d[2]
-				local nk = key(nx, nz)
-				if dist[nk] == nil and not blocked[nk] then
-					dist[nk] = here + 1
-					table.insert(queue, {nx, nz})
-				end
-			end
-		end
-	end
-	return nil
-end
-
 -- Picks DOOR SLOTS: cell sides that can open and close during a match. Two kinds:
 --   corridor doors - in an existing opening; they start open, and closing one forces a detour
 --   shortcut doors - in place of a wall; they start closed, and opening one cuts a long way round
@@ -287,7 +330,9 @@ end
 -- combination of doors can cut anyone off from a relic or a sanctuary - doors only redirect.
 -- Doors never touch a sanctuary or a relic cell (sanctuaries keep their exits, relics their 2-3 ways in).
 -- options: corridors, shortcuts (how many of each), spacing (cells between doors), minDetour
--- (closing a corridor door / opening a shortcut must save or cost at least this many steps).
+-- (closing a corridor door / opening a shortcut must save or cost at least this many steps),
+-- exitSpacing (with every door open, a sanctuary's exits must still be at least this many steps
+-- apart: no shortcut door between them - see carveSanctuaries).
 -- Leaves walls with corridor doors open and shortcut doors closed.
 -- Returns a list of { x, z, d (a DIRS entry: the side of cell x,z), open (starting state), kind }.
 function MazeLayout.placeDoors(walls, n, sanctuaries, relics, options)
@@ -349,10 +394,30 @@ function MazeLayout.placeDoors(walls, n, sanctuaries, relics, options)
 		end
 	end
 	table.sort(shortcuts, function(a, b) return a[4] > b[4] end)   -- the biggest shortcuts first
+	-- With every door so far and this one open, are all sanctuaries' exits still spread apart?
+	local exitSpacing = options.exitSpacing or 0
+	local function keepsExitsApart(x, z, d)
+		if exitSpacing <= 0 then return true end
+		for _, door in doors do setWall(walls, door.x, door.z, door.d, false) end
+		setWall(walls, x, z, d, false)
+		local ok = true
+		for _, sanctuary in sanctuaries do
+			for i = 1, #sanctuary.exits do
+				for j = i + 1, #sanctuary.exits do
+					local a, b = sanctuary.exits[i].out, sanctuary.exits[j].out
+					local steps = a and b and distance(walls, n, a[1], a[2], b[1], b[2], sanctuaryCells)
+					if steps and steps < exitSpacing then ok = false end
+				end
+			end
+		end
+		setWall(walls, x, z, d, true)
+		for _, door in doors do setWall(walls, door.x, door.z, door.d, true) end
+		return ok
+	end
 	local added = 0
 	for _, s in shortcuts do
 		if added >= options.shortcuts then break end
-		if spacedOut(s[1], s[2], s[3]) then
+		if spacedOut(s[1], s[2], s[3]) and keepsExitsApart(s[1], s[2], s[3]) then
 			table.insert(doors, { x = s[1], z = s[2], d = s[3], open = false, kind = "shortcut" })
 			added += 1
 		end
