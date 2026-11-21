@@ -904,6 +904,14 @@ if RunService:IsStudio() then
 			return false
 		elseif action == "sees" and maze then
 			return monsterSideSees(a)
+		elseif action == "attr" then   -- set an attribute on a survivor (player or bot) by UserId
+			for _, survivor in survivorsInMatch() do
+				if survivor.UserId == a then
+					survivor:SetAttribute(b, (select(1, ...)))
+					return true
+				end
+			end
+			return false
 		elseif action == "bot" then
 			for _, bot in bots do
 				if bot.UserId == a then bot.heldAt = b return true end
