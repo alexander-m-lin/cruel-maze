@@ -470,7 +470,7 @@ end
 -- painted bright see-through blue on the floor: a strip with a round disc at each end.
 local AIM_COLOR = Color3.fromRGB(40, 150, 255)
 local AIM_LOCKED = Color3.fromRGB(120, 225, 255)   -- locked on to a feared survivor
-local AIM_TRANSPARENCY = 0.35
+local AIM_TRANSPARENCY = 0.75
 local preview = nil
 
 local function previewParts()
