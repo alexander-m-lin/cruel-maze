@@ -213,6 +213,8 @@ end
 -- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is Devour catches
 -- only with Devour (it dashes at you once you're in range); otherwise it catches anyone who gets
 -- within CATCH_DIST, like the stand-in.
+-- options.castsAbilities: also uses its hero's Secondary and Ultimate (for now only Fear Eater's):
+-- Instill Fear whenever it's ready, Living Nightmare whenever it's ready and a survivor is feared.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
@@ -235,6 +237,7 @@ function MonsterAI.new(maze, options)
 	local heroDef = Heroes.get(self.model:GetAttribute("Hero"))
 	local primary = heroDef and heroDef.abilities.Primary
 	self.devourDef = primary and primary.id == "Devour" and primary or nil
+	self.castsAbilities = options.castsAbilities == true
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])
@@ -354,6 +357,7 @@ function MonsterAI:canPass(a, b)
 	local from = a + Vector3.new(0, BODY_RADIUS + 0.6, 0)   -- ball clears the floor, below wall tops
 	local offset = (b - a) * Vector3.new(1, 0, 1)
 	if offset.Magnitude < 0.1 then return true end
+	if self.nightmareUntil then return self:canPassNightmare(a, b) end
 	-- check the cells along the line (and the body's width either side) every couple of studs
 	local side = Vector3.new(-offset.Z, 0, offset.X).Unit * BODY_RADIUS
 	local steps = math.ceil(offset.Magnitude / 2)
@@ -364,6 +368,82 @@ function MonsterAI:canPass(a, b)
 		end
 	end
 	return workspace:Spherecast(from, BODY_RADIUS, offset, self.rayParams) == nil
+end
+
+-- In Living Nightmare: through inner walls and doors, so only the cells matter - none it may not
+-- enter (sanctuaries), and nothing outside the maze (the outer wall), along the line or the body's
+-- width either side
+function MonsterAI:canPassNightmare(a, b)
+	local maze = self.maze
+	local offset = (b - a) * Vector3.new(1, 0, 1)
+	if offset.Magnitude < 0.1 then return true end
+	local side = Vector3.new(-offset.Z, 0, offset.X).Unit * BODY_RADIUS
+	local steps = math.ceil(offset.Magnitude / 2)
+	for i = 0, steps do
+		local p = a + offset * (i / steps)
+		for _, q in { p, p + side, p - side } do
+			if math.abs(q.X) > maze.half - 1 or math.abs(q.Z) > maze.half - 1 then return false end
+			if self.isBlocked(self:cellOf(q)) then return false end
+		end
+	end
+	return true
+end
+
+---------------------------------------------------------------- abilities (castsAbilities)
+-- Instill Fear on cooldown; Living Nightmare when it's ready and any survivor is feared
+function MonsterAI:castAbilities(targets)
+	if self.dash or self.killUntil then return end
+	if Abilities.ready(self, "Secondary") then
+		Abilities.useMonster(self, "Secondary", self.facing)
+	end
+	if not self.nightmareUntil and Abilities.ready(self, "Ultimate") then
+		local now = workspace:GetServerTimeNow()
+		for _, player in targets do
+			if (player:GetAttribute("FearedUntil") or 0) > now then
+				Abilities.useMonster(self, "Ultimate", self.facing)
+				break
+			end
+		end
+	end
+end
+
+-- Stand still for `seconds` (casting)
+function MonsterAI:Cast(seconds)
+	self.castUntil = os.clock() + seconds
+end
+
+-- LIVING NIGHTMARE (HeroAbilities.FearEater): for def.duration it goes straight through inner
+-- walls and doors (canPass only minds sanctuaries and the outer wall), and chases feared
+-- survivors def.speedBoost faster. (onEnd is for monster players; it sorts itself out: endNightmare.)
+function MonsterAI:Nightmare(def)
+	if not self.active or self.killUntil or self.pull or os.clock() < (self.stunUntil or 0) then return false end
+	self.nightmareUntil = os.clock() + def.duration
+	self.nightmareBoost = def.speedBoost
+	self.path = {}
+	local untilServer = workspace:GetServerTimeNow() + def.duration
+	self.model:SetAttribute("NightmareUntil", untilServer)
+	self.model:SetAttribute("CastKind", "LivingNightmare")
+	self.model:SetAttribute("CastAt", workspace:GetServerTimeNow())
+	return true
+end
+
+function MonsterAI:Nightmaring()
+	return self.nightmareUntil ~= nil and os.clock() < self.nightmareUntil
+end
+
+-- It wore off: if it's inside a wall, out into the middle of its cell; then plan routes afresh
+function MonsterAI:endNightmare()
+	self.nightmareUntil, self.nightmareBoost = nil, nil
+	self.model:SetAttribute("NightmareUntil", nil)
+	self.path = {}
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { self.maze.model }
+	local stuck = false
+	for _, part in workspace:GetPartBoundsInRadius(self.pos + Vector3.new(0, 3, 0), BODY_RADIUS * 0.6, params) do
+		if part.CanCollide and (part.Name == "Wall" or part.Name == "Door") then stuck = true break end
+	end
+	if stuck then self.pos = self:centerOf(self:cellOf(self.pos)) end
 end
 
 ---------------------------------------------------------------- publishing to clients
@@ -457,6 +537,13 @@ function MonsterAI:Step(dt, targets)
 		self:publish(now)
 		return
 	end
+	-- Casting (Instill Fear): stands still
+	if now < (self.castUntil or 0) then
+		self:publish(now)
+		return
+	end
+	if self.castsAbilities then self:castAbilities(targets) end
+	if self.nightmareUntil and now >= self.nightmareUntil then self:endNightmare() end
 	local maze = self.maze
 
 	-- The player it was chasing is out of reach (reached safety, caught, left): give up on them
@@ -545,6 +632,10 @@ function MonsterAI:Step(dt, targets)
 		local playerSpeed = targetHumanoid and targetHumanoid.WalkSpeed or 16
 		local ratio = math.min(CHASE_START + CHASE_RAMP * (now - self.chaseStartedAt), CHASE_MAX)
 		speed = playerSpeed * ratio
+		-- Living Nightmare: much faster after a feared survivor
+		if self.nightmareUntil and (self.chaseTarget:GetAttribute("FearedUntil") or 0) > workspace:GetServerTimeNow() then
+			speed *= 1 + (self.nightmareBoost or 0)
+		end
 	else
 		speed = (self.mode == "search" and SEARCH_SPEED) or ROAM_SPEED
 	end

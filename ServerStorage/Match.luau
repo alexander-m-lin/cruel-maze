@@ -648,6 +648,7 @@ local function runCountdown()
 		if role == Roles.MazeMaster then mazeMaster = player end
 	end
 	local starts = {}
+	local aiMonsters = 0
 	for i = 1, math.max(Config.MONSTER_COUNT, #monsterPlayers) do
 		local startCell = monsterStartCell(starts)
 		table.insert(starts, startCell)
@@ -658,9 +659,13 @@ local function runCountdown()
 				hero = player:GetAttribute("Hero") or Config.DEFAULT_MONSTER_HERO })
 			playerMonsters[player] = monster
 		else
+			aiMonsters += 1
 			monster = MonsterAI.new(maze, {
 				onCatch = onCaught,
 				hero = Config.DEFAULT_MONSTER_HERO,
+				-- one AI monster a match uses its hero's other abilities too (a real match has no
+				-- duplicate heroes: this keeps testing to one set)
+				castsAbilities = aiMonsters <= Config.AI_MONSTERS_CASTING,
 				isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
 				startCell = startCell,
 				pack = monsters,                        -- they spread out from each other when roaming

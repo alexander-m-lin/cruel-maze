@@ -44,7 +44,8 @@ function handlers.Devour(ctx, cast)
 	local aim, distance, time = DevourAim.pick(monster.pos, cast.aim, def, feared, others, ctx.wallBetween)
 	if not monster:Devour(aim, distance, time, def) then return false end
 	-- in his Living Nightmare it recharges much faster
-	local nightmare = cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow()
+	local nightmare = (cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow())
+		or (cast.user == nil and monster.Nightmaring ~= nil and monster:Nightmaring())
 	return true, nil, nightmare and def.nightmareCooldown or nil
 end
 
@@ -62,6 +63,7 @@ function handlers.InstillFear(ctx, cast)
 	local objectives = match.objectives
 	local now = workspace:GetServerTimeNow()
 	if cast.user then cast.user:SetAttribute("CastingUntil", now + def.castTime) end   -- holds still (Movement.held)
+	if not cast.user and cast.monster and cast.monster.Cast then cast.monster:Cast(def.castTime) end   -- (an AI monster)
 	showCast(cast.monster, "InstillFear")
 
 	local dreaded = {}

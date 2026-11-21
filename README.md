@@ -75,8 +75,10 @@ sleeves; left click does nothing for him):
   sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
   them), and Devour recharges in 1 second (casting it cuts Devour's wait to 1 s too). Ending
   inside a wall pushes him out into the middle of that cell.
-AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range (they
-don't use Q or E yet). The cast animations are simple stand-ins for now.
+AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range. One
+AI monster a match (`Config.AI_MONSTERS_CASTING`) also casts Instill Fear whenever it's ready,
+and Living Nightmare whenever it's ready and a survivor is feared (then it goes straight through
+inner walls after feared survivors, faster). The cast animations are simple stand-ins for now.
 
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):

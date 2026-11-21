@@ -160,6 +160,7 @@ Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (Surviv
 -- walls stun).
 Config.DEFAULT_SURVIVOR_HERO = "Sara"
 Config.DEFAULT_MONSTER_HERO = "FearEater"   -- every monster, AI or player (nil or an unknown id: the stand-in)
+Config.AI_MONSTERS_CASTING = 1    -- this many AI monsters a match also use their hero's Q and E (the rest only catch)
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)
