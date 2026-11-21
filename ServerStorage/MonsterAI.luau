@@ -175,12 +175,15 @@ end
 -- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
 -- options.startCell = {x, z}: where it appears.
 -- options.pack: a list of all the match's monsters (this one included), to spread out from.
+-- options.spottedBySide(player): true if the monster side can see them right now (another
+-- monster, a ward, a relic's ring...): it goes after them as if it saw them itself, when near.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
 	self.maze = maze
 	self.isBlocked = options.isBlocked or function() return false end
 	self.pack = options.pack or {}
+	self.spottedBySide = options.spottedBySide
 	self.onCatch = options.onCatch or function(player)
 		local _, humanoid = rootOf(player)
 		if humanoid then humanoid.Health = 0 end
@@ -288,8 +291,9 @@ function MonsterAI:Pull(to, speed)
 end
 
 ---------------------------------------------------------------- senses
--- revealed: the survivor is revealed to the monster side (a false relic, a haunt...): seen within
--- sight range even through walls
+-- revealed: the survivor is revealed to the monster side (a false relic, a haunt...) or their side
+-- can see them (another monster, a ward, a relic's ring: options.spottedBySide): seen within sight
+-- range even through walls
 function MonsterAI:canDetect(root, revealed)
 	local eye = self.pos + Vector3.new(0, HOVER, 0)
 	local offset = root.Position - eye
@@ -423,7 +427,8 @@ function MonsterAI:Step(dt, targets)
 		local best, bestDist
 		for _, player in targets do
 			local root = rootOf(player)
-			local revealed = (player:GetAttribute("RevealedUntil") or 0) > workspace:GetServerTimeNow()
+			local revealed = root and ((player:GetAttribute("RevealedUntil") or 0) > workspace:GetServerTimeNow()
+				or (self.spottedBySide ~= nil and self.spottedBySide(player)))
 			if root and (self.graceUntil[player] or 0) < now and self:canDetect(root, revealed) then
 				local d = (root.Position - self.pos).Magnitude
 				if not bestDist or d < bestDist then best, bestDist = player, d end

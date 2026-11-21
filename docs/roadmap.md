@@ -153,6 +153,8 @@ The feature that makes Cruel Maze different, and the biggest design risk. Get a 
 **Tuning from testing (2026-11-20):** crushing walls' cooldown 30 s -> 10 s; a crushed survivor's view stays on the shut walls for 1.5 s (`Config.CRUSHED_LINGER`) before the spawn picker, and they no longer die the default Roblox way (no "oof"); monsters mid-kill can't be stunned or pulled.
 
 **Notes from testing, before heroes (2026-11-20):** haunt (AI) prefers survivors near a monster; destroying a ward takes 3 s with a progress bar like a relic's, and the AI won't put a ward back where one was just destroyed for 10 s; anything that reveals a survivor also gives the monster side a small ring of sight round them (`Config.REVEAL_VISION_RADIUS`), and AI monsters go for revealed survivors within sight range, walls or not. The match's per-frame systems now run separately, so an error in one can't stop the others.
+
+**Phase 4 notes (2026-11-20):** AI monsters treat any survivor their side can see (another monster's cone, a ward, a crushing wall, a relic ring, a haunt, a reveal: Match's `monsterSideSees`) as seen, within their sight range, walls or not. Monster players now also get vision rings round false relics and round real relics their side has spotted (the Maze Master still has every relic's). The human monster's lunge reach is 9 studs (was 5) while the monster is a stand-in, and it no longer catches through walls.
 - Ability system with server-checked cooldowns and use (Q, E, left click, F)
 - A first roster: 2–3 survivors and 2 monsters with clearly different counterplay
 - Character select where each team can't see the other's picks

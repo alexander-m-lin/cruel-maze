@@ -328,8 +328,10 @@ end
 
 -- Can the monster side see this spot right now? The same sources as their fog (FogOfWar), checked
 -- more simply (straight sight lines, a little extra range for the difference): every monster's
--- cone, wards, crushing walls, the Maze Master's rings round every relic, and haunted survivors'
--- cones. Used to check a Haunt is on a survivor the Maze Master can really see.
+-- cone, wards, crushing walls, the rings round relics (every relic if there's a Maze Master, who
+-- knows them all; otherwise the ones a monster has spotted; false relics always), and haunted
+-- survivors' cones. Used to check a Haunt is on a survivor the Maze Master can really see, and by
+-- AI monsters (spottedBySide) to go after survivors their side can see.
 local SIGHT_SLACK = 3
 local function monsterSideSees(position, except)
 	local spot = { center = position }
@@ -340,13 +342,12 @@ local function monsterSideSees(position, except)
 	for _, crusher in crushers and crushers.list or {} do
 		if wards:clearLine(crusher.center, position, maze.S / 2 + Config.CRUSHER_VISION + SIGHT_SLACK) then return true end
 	end
-	if mazeMasterTools then
-		for _, relic in maze.relics do
-			if not relic.collected and wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
-		end
-		for _, relic in objectives.fakes do
-			if wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
-		end
+	for _, relic in maze.relics do
+		if not relic.collected and (mazeMasterTools or relic.monsterDiscovered)
+			and wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
+	end
+	for _, relic in objectives.fakes do
+		if wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
 	end
 	local now = workspace:GetServerTimeNow()
 	for _, other in survivorsInMatch() do
@@ -646,6 +647,11 @@ local function runCountdown()
 				isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
 				startCell = startCell,
 				pack = monsters,                        -- they spread out from each other when roaming
+				-- can the monster side see this survivor right now (another monster, a ward, a relic...)?
+				spottedBySide = function(survivor)
+					local character = aliveCharacter(survivor)
+					return character ~= nil and monsterSideSees(character.HumanoidRootPart.Position)
+				end,
 			})
 		end
 		monster.active = false

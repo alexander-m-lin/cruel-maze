@@ -709,11 +709,13 @@ local function relicRings()
 	local folder = status and status:FindFirstChild("Relics")
 	local role = player:GetAttribute("Role")
 	local mazeMaster = role == Config.Roles.MazeMaster
-	if not folder or (role ~= Config.Roles.Survivor and not mazeMaster) then return list end
+	local monster = role == Config.Roles.Monster
+	if not folder or (role ~= Config.Roles.Survivor and not mazeMaster and not monster) then return list end
 	for _, info in folder:GetChildren() do
 		-- survivors: once their team has spotted it; the Maze Master: every relic, from the start
-		-- (false relics included)
-		if (mazeMaster or info:GetAttribute("Discovered")) and not info:GetAttribute("Collected") then
+		-- (false relics included); monsters: once their side has spotted it (false relics: always)
+		local known = mazeMaster or info:GetAttribute(monster and "MonsterDiscovered" or "Discovered")
+		if known and not info:GetAttribute("Collected") then
 			local cached = relicSight[info]
 			if not cached or cached.maze ~= maze or cached.doors ~= doorVersion then
 				local c = info:GetAttribute("Center")

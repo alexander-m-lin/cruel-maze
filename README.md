@@ -59,8 +59,11 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 - **Wards** (floating purple eyes) let the monster side see around them. Once your team spots
   one it stays shown; stand next to one and left-click, then stay close for 3 seconds (a bar
   fills), to destroy it (the monster side sees where). Anything that reveals you (a false relic,
-  a haunt) also lights up a small ring round you for the monster side, and draws nearby AI
-  monsters even through walls. A purple glow round your screen and a whisper mean
+  a haunt) also lights up a small ring round you for the monster side. AI monsters come for you,
+  even through walls, whenever you're within their sight range and the monster side can see you
+  in any way: another monster, a ward, a crushing wall, a relic's ring, a reveal. The monster
+  side has vision rings round relics too: the Maze Master round every relic, monsters round
+  false relics and the real ones they've spotted. A purple glow round your screen and a whisper mean
   the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
 - **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
   for your team, and you can come back there after being caught. Your team's rooms (the start

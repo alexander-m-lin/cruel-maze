@@ -313,12 +313,13 @@ function Objectives:AddFalseRelic(x, z)
 	local center = Vector3.new((x - 0.5) * maze.S - maze.half, maze.floorY, (z - 0.5) * maze.S - maze.half)
 	local model, gem = MazeBuilder.buildRelic(maze.model, center, id)
 	local relic = { id = id, x = x, z = z, center = center, model = model, gem = gem, fake = true,
-		discovered = false, blinkAt = os.clock() + math.random() * Config.FALSE_RELIC_BLINK_EVERY }
+		discovered = false, monsterDiscovered = true, blinkAt = os.clock() + math.random() * Config.FALSE_RELIC_BLINK_EVERY }
 	local info = Instance.new("Configuration")
 	info.Name = "Relic" .. id
 	info:SetAttribute("Id", id)
 	info:SetAttribute("Center", center)
 	info:SetAttribute("Discovered", false)
+	info:SetAttribute("MonsterDiscovered", true)   -- the monster side's own trap: they all know it
 	info:SetAttribute("Collected", false)
 	info.Parent = self.relicFolder
 	relic.info = info
