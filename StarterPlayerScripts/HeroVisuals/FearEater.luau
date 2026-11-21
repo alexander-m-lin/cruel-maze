@@ -37,10 +37,10 @@ local HERO = Heroes.list.FearEater
 local K = HERO.kill
 
 ---------------------------------------------------------------- tuning
-local HOVER_BOB    = 0.25    -- studs he rises and sinks while hovering in place...
-local HOVER_RATE   = 0.45    -- ...cycles per second
+local HOVER_BOB    = 0.25    -- studs his body rises and sinks while hovering in place, like breathing...
+local HOVER_RATE   = 0.32    -- ...breaths per second (the same rhythm while moving)
 local MOVE_BOB     = 0.2     -- studs of bob while chasing (arms and all)...
-local WALK_BOB     = 0.18    -- studs his body bobs while just moving (his arms don't)
+local WALK_BOB     = 0.18    -- studs his body rises and sinks while moving (not chasing)
 local MOVE_STRIDE  = 9       -- ...once every this many studs travelled
 local FULL_SPEED   = 24      -- speed that counts as "full speed" for leaning
 local LEAN         = 0.16    -- radians he tips forward at full speed
@@ -99,7 +99,11 @@ function animate.setup(model, s)
 			local e = pivot:PointToObjectSpace((elbow.Part0.CFrame * elbow.C0).Position)
 			local w = pivot:PointToObjectSpace((wrist.Part0.CFrame * wrist.C0).Position)
 			local g = pivot:PointToObjectSpace(grip.WorldPosition)
-			fe.arms[side] = { elbow = e, forearm = w - e, hand = g - w, sx = side == "Left" and -1 or 1 }
+			-- how far out from the shoulder the elbow is (for bending the shoulder to hold the elbow level)
+			local shoulder = fe.joints[side .. "Shoulder"]
+			local sh = shoulder and pivot:PointToObjectSpace((shoulder.Part0.CFrame * shoulder.C0).Position) or e
+			fe.arms[side] = { elbow = e, forearm = w - e, hand = g - w, sx = side == "Left" and -1 or 1,
+				reachOut = math.max(0.5, math.abs(e.X - sh.X)) }
 		end
 	end
 	s.fe = fe
@@ -141,13 +145,13 @@ function animate.pose(model, s, dt)
 	fe.stride = (fe.stride + dt * speed / MOVE_STRIDE) % 1
 	fe.sway = (fe.sway + dt * speed / (MOVE_STRIDE * 2)) % 1
 
-	-- FLOATING: the body hovers up and down standing still, or bobs gently with each stride when
-	-- moving, leaving the arms where they are (the shoulders move the other way: armsStill).
+	-- FLOATING: the body rises and sinks slowly, like breathing, standing still or moving, while the
+	-- arms hold their height: the shoulders bend by just enough to keep the elbows level (armsStill).
 	-- While chasing, everything bobs together, arms and all, with a sway. Tipping forward with speed.
 	fe.reach += ((s.mode == "chase" and 1 or 0) - fe.reach) * math.min(1, dt * REACH_EASE)
 	local hover = math.sin(fe.t * math.pi * 2 * HOVER_RATE) * HOVER_BOB
 	local stride = math.sin(fe.stride * math.pi * 2)
-	local bodyOnly = lerp(hover, stride * WALK_BOB, move)                  -- (arms held still)
+	local bodyOnly = hover * lerp(1, WALK_BOB / HOVER_BOB, move)            -- (arms held level)
 	local whole = lerp(hover, stride * MOVE_BOB + hover * 0.4, move)       -- (chasing: arms too)
 	local bob = lerp(bodyOnly, whole, fe.reach)
 	local armsStill = bodyOnly * (1 - fe.reach)
@@ -263,12 +267,17 @@ function animate.pose(model, s, dt)
 	end
 
 	j.Root.Transform = CFrame.new(0, bob, 0) * CFrame.Angles(pitch, yaw, roll)
-	for _, side in { "Left", "Right" } do
-		local shoulder = j[side .. "Shoulder"]
-		if shoulder then shoulder.Transform = CFrame.new(0, -armsStill, 0) end
+	-- the shoulders bend (rolling the upper arm about the body's front-back axis) so the elbow stays
+	-- at the same height as the body rises and sinks; the elbow turns back by as much, so the
+	-- forearm keeps pointing the same way
+	local shoulderTurn = {}
+	for side, arm in fe.arms do
+		local turn = CFrame.Angles(0, 0, -arm.sx * math.asin(math.clamp(armsStill / arm.reachOut, -0.9, 0.9)))
+		shoulderTurn[side] = turn
+		if j[side .. "Shoulder"] then j[side .. "Shoulder"].Transform = turn end
 	end
 	for side, cf in elbows do
-		if j[side .. "Elbow"] then j[side .. "Elbow"].Transform = cf end
+		if j[side .. "Elbow"] then j[side .. "Elbow"].Transform = (shoulderTurn[side] and shoulderTurn[side]:Inverse() or CFrame.identity) * cf end
 		if j[side .. "Wrist"] then j[side .. "Wrist"].Transform = wrists[side] or CFrame.Angles(arms[side].wrist, 0, 0) end
 	end
 
