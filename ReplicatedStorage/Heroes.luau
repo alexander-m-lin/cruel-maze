@@ -1,59 +1,38 @@
 -- THE HEROES: who each character is and what their abilities do, shared by the server (which
 -- carries abilities out and keeps cooldowns: Abilities) and players' computers (the ability bar,
--- the effects). Tune the numbers here.
+-- the effects).
 --
--- Survivors have three ability slots:
+-- Every hero, survivor or monster, has three ability slots:
 --   Primary   - right mouse button
 --   Secondary - Q
 --   Ultimate  - E
--- (left click stays each role's own action: collecting relics, or a monster's lunge)
+-- (left click stays each role's own action: collecting relics, or the stand-in monster's lunge)
 --
--- A player's hero is their "Hero" attribute (set by Match; for now every survivor is
--- Config.DEFAULT_SURVIVOR_HERO, until there's a character select).
+-- A player's hero is their "Hero" attribute (set by Match; until there's a character select,
+-- survivors are Config.DEFAULT_SURVIVOR_HERO and monsters Config.DEFAULT_MONSTER_HERO). A monster's
+-- body carries its hero in a "Hero" attribute too.
+--
+-- ADDING A HERO: one module per place, all named after the hero's id (e.g. "FearEater"):
+--   ReplicatedStorage.HeroData.<Id>          -- who they are and their numbers (tune here)
+--   ServerStorage.HeroAbilities.<Id>         -- what the abilities do (server)
+--   StarterPlayerScripts.HeroVisuals.<Id>    -- how they look and sound (players' computers);
+--                                               for a monster, also how its body moves
+-- then add the id to Heroes.ORDER below. A monster hero also names its body ("rig", a model in
+-- ServerStorage). See the README's "Heroes" section.
 
 local Heroes = {}
 
 Heroes.SLOTS = { "Primary", "Secondary", "Ultimate" }
 Heroes.KEYS = { Primary = "RMB", Secondary = "Q", Ultimate = "E" }
+Heroes.ORDER = { "Sara", "FearEater" }
 
-Heroes.list = {
-	Sara = {
-		name = "Sara",
-		title = "Cryptraider",
-		role = "Survivor",
-		abilities = {
-			-- Lash the whip out the way you face. The first thing it meets: a wall or a relic pulls
-			-- you to it; a teammate is pulled to you; a monster is pulled to you and stunned.
-			Primary = {
-				id = "Whip", name = "Whip", cooldown = 5,
-				missCooldown = 2,      -- hits nothing at all (a whiff): ready again sooner
-				range = 39,            -- studs
-				speed = 140,           -- studs per second the lash travels (out; it comes back faster)
-				pullSpeed = 70,        -- studs per second whoever's pulled travels
-				stun = 1,              -- seconds a monster is stunned (after the pull)
-				monsterHitRadius = 5,  -- how close to the lash (studs, either side) a monster must be to be hit...
-				allyHitRadius = 4,     -- ...a teammate...
-				relicHitRadius = 2.5,  -- ...or a relic (and nothing counts behind a wall)
-			},
-			-- Find the nearest relic your team hasn't spotted yet (real or false) within range:
-			-- it's spotted, as if you'd seen it.
-			Secondary = {
-				id = "TreasureHunt", name = "Treasure hunt", cooldown = 15,
-				range = 110,           -- studs, straight line
-				missCooldown = 3,      -- nothing in range: try again sooner
-			},
-			-- Spin the whip overhead, standing still (a ring on the floor shows its reach): partway
-			-- through, every monster within range is stunned. Caught before then: no stun.
-			Ultimate = {
-				id = "Flourish", name = "Flourish", cooldown = 60,
-				castTime = 1,          -- seconds she stands still, spinning
-				stunAt = 0.5,          -- seconds into that when the stun goes out
-				range = 20,            -- studs
-				stun = 3.5,            -- seconds
-			},
-		},
-	},
-}
+Heroes.list = {}
+local folder = script.Parent:WaitForChild("HeroData")
+for _, id in Heroes.ORDER do
+	local hero = require(folder:WaitForChild(id))
+	hero.id = id
+	Heroes.list[id] = hero
+end
 
 function Heroes.get(id)
 	return id and Heroes.list[id] or nil

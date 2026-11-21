@@ -1,8 +1,10 @@
 -- A monster played by a person.
 --
---   local monster = PlayerMonster.new(player, maze, { onCatch = fn(player, monster), startCell = {x, z} })
+--   local monster = PlayerMonster.new(player, maze, { onCatch = fn(player, monster), startCell = {x, z},
+--                                                     hero = heroId })
 --   monster:Step(dt, targets)   -- every frame, like MonsterAI (targets = survivors it may catch)
---   monster:Lunge()             -- the player clicked to lunge (checked here)
+--   monster:Lunge()             -- the player clicked to lunge (checked here; the stand-in only)
+--   monster:Devour(aim, distance, time, def)   -- Devour (from HeroAbilities.FearEater)
 --   monster:Stun(seconds)       -- can't move, lunge or catch for a while
 --   monster:Pull(to, speed)     -- their character dragged to `to` (Pull); -> seconds
 --   monster:Destroy()
@@ -13,10 +15,14 @@
 -- animates the body from that - the gait, the reaching arms, the kill. (On the player's own
 -- computer the body follows their character directly, so it never lags behind their controls.)
 --
--- CATCHING: by lunging. The player's computer crouches them for Config.LUNGE_WINDUP seconds, then
+-- CATCHING (a hero monster): with its abilities - Fear Eater's Devour is a dash much like the
+-- lunge below (its numbers in HeroData), sent to the player's computer as "DevourAt" etc. on the
+-- body, which carries them (MonsterControls) while the server checks for a catch.
+--
+-- CATCHING (the stand-in): by lunging. The player's computer crouches them for Config.LUNGE_WINDUP seconds, then
 -- carries them Config.LUNGE_DISTANCE studs forward; during that time any survivor within
 -- Config.LUNGE_REACH of them is caught (checked here, on the server). A miss means waiting
--- Config.LUNGE_COOLDOWN seconds to lunge again. A catch plays the kill (MonsterAI.KILL), during
+-- Config.LUNGE_COOLDOWN seconds to lunge again. A catch plays the kill (MonsterAI.killFor), during
 -- which the monster can't move (the player's "Killing" attribute; see Controls).
 
 local Players = game:GetService("Players")
@@ -26,8 +32,8 @@ local ServerStorage = game:GetService("ServerStorage")
 local Config = require(ReplicatedStorage.Config)
 local MonsterAI = require(ServerStorage.MonsterAI)
 local Pull = require(ServerStorage.Pull)
-
-local KILL = MonsterAI.KILL
+local SpeedCheck = require(ServerStorage.SpeedCheck)
+local Heroes = require(ReplicatedStorage.Heroes)
 local CATCH_GRACE = 4      -- seconds a just-caught survivor is ignored
 local LATENCY_SLACK = 0.3  -- the lunge's catch window stays open this much longer (positions arrive late)
 
@@ -40,7 +46,11 @@ function PlayerMonster.new(player, maze, options)
 	self.player = player
 	self.maze = maze
 	self.onCatch = options.onCatch or function() end
-	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody()
+	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody(options.hero)
+	self.hero = self.model:GetAttribute("Hero")
+	self.kill = MonsterAI.killFor(self.hero)
+	local heroDef = Heroes.get(self.hero)
+	self.canLunge = not (heroDef and heroDef.lunge == false)
 	self.model.Name = "Monster_" .. player.Name
 	self.model:SetAttribute("OwnerUserId", player.UserId)   -- whose body this is (MonsterAnimate, fog)
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
@@ -105,6 +115,7 @@ end
 
 function PlayerMonster:Stun(seconds)
 	if self:Killing() then return end
+	self.reach, self.reachForward, self.dashAim = nil, nil, nil
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	local untilServer = workspace:GetServerTimeNow() + (self.stunUntil - os.clock())
 	self.player:SetAttribute("StunnedUntil", untilServer)
@@ -120,13 +131,35 @@ end
 -- The player clicked to lunge. Returns true if it started.
 function PlayerMonster:Lunge()
 	local now = os.clock()
-	if not self.active or self.killUntil or now < self.cooldownUntil then return false end
+	if not self.canLunge or not self.active or self.killUntil or now < self.cooldownUntil then return false end
 	if now < (self.stunUntil or 0) then return false end
 	if not rootOf(self.player) then return false end
 	self.lungeHitFrom = now + Config.LUNGE_WINDUP
 	self.lungeUntil = self.lungeHitFrom + Config.LUNGE_TIME + LATENCY_SLACK
 	self.cooldownUntil = self.lungeUntil + Config.LUNGE_COOLDOWN
 	self.mode = "chase"           -- arms up and reaching
+	return true
+end
+
+-- DEVOUR (HeroAbilities.FearEater worked out where to): the player's computer holds them still for
+-- def.windup, then carries them `distance` studs along `aim` in `time` seconds; meanwhile the first
+-- survivor within def.reach of a point def.reachForward ahead of them is caught.
+function PlayerMonster:Devour(aim, distance, time, def)
+	local now = os.clock()
+	if not self.active or self.killUntil or now < (self.stunUntil or 0) then return false end
+	if not rootOf(self.player) then return false end
+	self.lungeHitFrom = now + def.windup
+	self.lungeUntil = self.lungeHitFrom + time + LATENCY_SLACK
+	self.reach, self.reachForward, self.dashAim = def.reach, def.reachForward, aim
+	self.facing = aim
+	self.mode = "chase"
+	SpeedCheck.grant(self.player, distance + 4)        -- their computer carries them this far
+	local model = self.model
+	model:SetAttribute("DevourAim", aim * distance)
+	model:SetAttribute("DevourWindup", def.windup)
+	model:SetAttribute("DevourTime", time)
+	model:SetAttribute("DevourAt", workspace:GetServerTimeNow())
+	self:publish()
 	return true
 end
 
@@ -155,16 +188,19 @@ function PlayerMonster:Step(dt, targets)
 
 	if self.lungeUntil and now > self.lungeUntil then
 		self.lungeUntil, self.lungeHitFrom = nil, nil
+		self.reach, self.reachForward, self.dashAim = nil, nil, nil
 		self.mode = "roam"
 	end
 
 	-- the lunge: catch the first survivor within reach
 	if self.active and root and self.lungeHitFrom and now >= self.lungeHitFrom then
+		-- (Devour reaches from a point ahead of them, where the hands are)
+		local reachAt = root.Position + (self.dashAim or Vector3.zero) * (self.reachForward or 0)
 		for _, player in targets do
 			local theirRoot = rootOf(player)
-			if theirRoot and (self.graceUntil[player] or 0) < now then
-				local flat = (theirRoot.Position - root.Position) * Vector3.new(1, 0, 1)
-				if flat.Magnitude < Config.LUNGE_REACH and not self:wallBetween(root.Position, theirRoot.Position) then
+			if theirRoot and (self.graceUntil[player] or 0) < now and not player:GetAttribute("Seized") then
+				local flat = (theirRoot.Position - reachAt) * Vector3.new(1, 0, 1)
+				if flat.Magnitude < (self.reach or Config.LUNGE_REACH) and not self:wallBetween(root.Position, theirRoot.Position) then
 					self:catch(player, flat, now)
 					break
 				end
@@ -190,10 +226,11 @@ end
 function PlayerMonster:catch(player, toThem, now)
 	self.graceUntil[player] = now + CATCH_GRACE
 	self.lungeUntil, self.lungeHitFrom = nil, nil
-	self.cooldownUntil = now + KILL.DONE
+	self.reach, self.reachForward, self.dashAim = nil, nil, nil
+	self.cooldownUntil = now + self.kill.DONE
 	if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
 	self.mode = "kill"
-	self.killUntil = now + KILL.DONE
+	self.killUntil = now + self.kill.DONE
 	self.player:SetAttribute("Killing", true)     -- holds the monster still (Controls)
 	self.model:SetAttribute("KillVictim", player.UserId)
 	self.model:SetAttribute("KillStart", workspace:GetServerTimeNow())

@@ -1,17 +1,28 @@
 -- HERO ABILITIES on the server: checking each use, keeping cooldowns, and carrying them out.
--- The heroes and their numbers are in ReplicatedStorage.Heroes.
+-- The heroes and their numbers are in ReplicatedStorage.Heroes (and HeroData); what each ability
+-- does is in ServerStorage.HeroAbilities.<hero>.
 --
 --   Abilities.start(match)   -- a match begins: match = { maze, objectives, monsters, survivors = fn,
---                            --   stun = fn(monster, seconds) }
+--                            --   stun = fn(monster, seconds), monsterOf = fn(player) -> monster }
 --   Abilities.stop()         -- the match is over
+--   Abilities.use(player, slot, aim)          -- a player (survivor or monster) uses an ability
+--   Abilities.useMonster(monster, slot, aim)  -- an AI monster does
+--   Abilities.ready(who, slot)                -- off cooldown? (who: a player or an AI monster)
 --
 -- A player's computer sends "UseAbility" (slot, aim): slot is "Primary" / "Secondary" / "Ultimate",
--- aim the flat direction they face. Checked here: a match is on, they're a survivor whose hero has
--- that slot, alive, not held or stunned or pulled, and the cooldown is over. Cooldowns are kept
--- here and published as "AbilityReady<Slot>" (server time) on the player, for the ability bar.
+-- aim the flat direction they face. Checked here: a match is on, their hero has that slot, they're
+-- alive and not held, stunned, pulled or in the middle of a kill, and the cooldown is over.
+-- Survivors and monsters (players or AI) all go through the same path. Cooldowns are kept here and
+-- published as "AbilityReady<Slot>" (server time) on the player, for the ability bar.
 --
--- Everyone's computer is told what happened ("AbilityFx": kind, the user's UserId, details) so it
--- can draw it (HeroEffects); Treasure hunt's find goes only to survivors.
+-- A handler is called as handler(ctx, cast):
+--   ctx  = { match, fx (the "AbilityFx" event), rayParams (the maze's walls), rootOf(who),
+--            wallBetween(a, b), stopOutsideSanctuaries(from, to) }
+--   cast = { user (the player, nil for an AI monster), monster (the monster using it, if one),
+--            root (the user's HumanoidRootPart, if they have a character), aim (flat, unit),
+--            def (the ability's numbers), hero }
+-- and returns ok, message. Everyone's computer is told what happened through "AbilityFx" (kind, the
+-- user's UserId, details) so it can draw it (HeroVisuals).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -21,17 +32,23 @@ local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
 local Heroes = require(ReplicatedStorage.Heroes)
 local Movement = require(ReplicatedStorage.Movement)
-local Pull = require(ServerStorage.Pull)
 
 local useEvent = Net.event("UseAbility")     -- player -> server: (slot, aim)
 local fxEvent = Net.event("AbilityFx")       -- server -> players: (kind, userId, ...)
+local resultEvent = Net.event("AbilityResult")   -- server -> player: (slot, message) when a use fails
 
 local Abilities = {}
 
-local match = nil          -- the current match's parts (see Abilities.start)
-local readyAt = {}         -- [player][slot] = os.clock() when it can be used again
+-- every hero's handlers, by ability id
+local handlers = {}
+for _, id in Heroes.ORDER do
+	local module = ServerStorage.HeroAbilities:FindFirstChild(id)
+	if module then
+		for abilityId, fn in require(module) do handlers[abilityId] = fn end
+	end
+end
 
-local EYE_HEIGHT = 3       -- the whip travels at this height above the floor
+local readyAt = {}         -- [player or AI monster][slot] = os.clock() when it can be used again
 
 local function rootOf(who)
 	local character = who.Character
@@ -41,31 +58,19 @@ local function rootOf(who)
 	return nil
 end
 
-function Abilities.start(parts)
-	match = parts
-	table.clear(readyAt)
-	match.rayParams = RaycastParams.new()
-	match.rayParams.FilterType = Enum.RaycastFilterType.Include
-	match.rayParams.FilterDescendantsInstances = { parts.maze.model }
-end
+local ctx = { fx = fxEvent, rootOf = rootOf }
 
-function Abilities.stop()
-	match = nil
-	for _, player in Players:GetPlayers() do
-		for _, slot in Heroes.SLOTS do player:SetAttribute("AbilityReady" .. slot, nil) end
-	end
-	table.clear(readyAt)
-end
-
-local function setCooldown(user, slot, seconds)
-	readyAt[user] = readyAt[user] or {}
-	readyAt[user][slot] = os.clock() + seconds
-	user:SetAttribute("AbilityReady" .. slot, workspace:GetServerTimeNow() + seconds)
+-- A wall between two points (at waist height)?
+function ctx.wallBetween(a, b)
+	local y = ctx.match.maze.floorY + 3
+	local from, to = Vector3.new(a.X, y, a.Z), Vector3.new(b.X, y, b.Z)
+	local hit = workspace:Raycast(from, to - from, ctx.rayParams)
+	return hit ~= nil and hit.Instance.CanCollide
 end
 
 -- Can't go into a sanctuary: a monster pulled toward someone inside one stops at the edge
-local function stopOutsideSanctuaries(from, to)
-	local objectives = match.objectives
+function ctx.stopOutsideSanctuaries(from, to)
+	local objectives = ctx.match.objectives
 	local steps = math.ceil((to - from).Magnitude / 1)
 	local last = from
 	for i = 1, steps do
@@ -76,135 +81,90 @@ local function stopOutsideSanctuaries(from, to)
 	return to
 end
 
----------------------------------------------------------------- Sara
-local handlers = {}
-
--- WHIP: the first thing along the lash, out to its range
-function handlers.Whip(user, root, aim, def)
-	local maze = match.maze
-	local origin = Vector3.new(root.Position.X, maze.floorY + EYE_HEIGHT, root.Position.Z)
-	local wall = workspace:Raycast(origin, aim * def.range, match.rayParams)
-	local reach = wall and wall.Distance or def.range
-	-- where along the lash something at `p` sits, if it's within `radius` of it with no wall
-	-- between (nil = not hit)
-	local function along(p, radius)
-		local offset = Vector3.new(p.X - origin.X, 0, p.Z - origin.Z)
-		local t = offset:Dot(aim)
-		if t <= 0.5 or t > reach then return nil end
-		local side = offset - aim * t
-		if side.Magnitude > radius then return nil end
-		if side.Magnitude > 0.5 and workspace:Raycast(origin + aim * t, side, match.rayParams) then return nil end
-		return t
-	end
-	local hit = { kind = wall and "wall" or "miss", t = reach }
-	local function consider(kind, t, thing)
-		if t and t < hit.t then hit = { kind = kind, t = t, thing = thing } end
-	end
-	for _, monster in match.monsters do
-		if monster.pos then consider("monster", along(monster.pos, def.monsterHitRadius), monster) end
-	end
-	for _, other in match.survivors() do
-		local otherRoot = other ~= user and not other:GetAttribute("Seized") and rootOf(other)
-		if otherRoot then consider("ally", along(otherRoot.Position, def.allyHitRadius), other) end
-	end
-	for _, relic in match.maze.relics do
-		if not relic.collected then consider("relic", along(relic.center, def.relicHitRadius), relic) end
-	end
-	for _, relic in match.objectives.fakes do
-		consider("relic", along(relic.center, def.relicHitRadius), relic)
-	end
-
-	local tip = origin + aim * hit.t
-	fxEvent:FireAllClients("Whip", user.UserId, Vector3.new(tip.X, maze.floorY, tip.Z), hit.kind)
-	-- what happens once the lash gets there
-	task.delay(hit.t / def.speed, function()
-		if not match or not rootOf(user) then return end
-		local here = rootOf(user).Position
-		if hit.kind == "wall" or hit.kind == "relic" then
-			-- you're pulled to it (stopping short of the wall, or beside the relic)
-			local stopShort = hit.kind == "wall" and 2.5 or 3.5
-			Pull.character(user, tip - aim * stopShort, def.pullSpeed, "slide")
-		elseif hit.kind == "ally" then
-			local ally = hit.thing
-			Pull.character(ally, here + aim * 3, def.pullSpeed)
-		elseif hit.kind == "monster" then
-			local monster = hit.thing
-			local to = stopOutsideSanctuaries(monster.pos, Vector3.new(here.X, maze.floorY, here.Z) + aim * 5)
-			local seconds = monster:Pull(to, def.pullSpeed) or 0
-			match.stun(monster, seconds + def.stun)        -- stunned while dragged, then for def.stun
-		end
-	end)
-	if hit.kind == "miss" then return false end   -- a whiff: def.missCooldown instead (no message)
-	return true
+function Abilities.start(parts)
+	ctx.match = parts
+	table.clear(readyAt)
+	ctx.rayParams = RaycastParams.new()
+	ctx.rayParams.FilterType = Enum.RaycastFilterType.Include
+	ctx.rayParams.FilterDescendantsInstances = { parts.maze.model }
 end
 
--- TREASURE HUNT: the nearest relic the survivors haven't spotted, within range
-function handlers.TreasureHunt(user, root, aim, def)
-	local best, bestDist
-	local function consider(relic)
-		if relic.collected or relic.discovered then return end
-		local d = ((relic.center - root.Position) * Vector3.new(1, 0, 1)).Magnitude
-		if d <= def.range and (not bestDist or d < bestDist) then best, bestDist = relic, d end
+function Abilities.stop()
+	ctx.match = nil
+	for _, player in Players:GetPlayers() do
+		for _, slot in Heroes.SLOTS do player:SetAttribute("AbilityReady" .. slot, nil) end
 	end
-	for _, relic in match.maze.relics do consider(relic) end
-	for _, relic in match.objectives.fakes do consider(relic) end
-	if not best then return false, "No hidden relics nearby" end
-	match.objectives:Discover(best)
-	for _, other in Players:GetPlayers() do
-		if other:GetAttribute("Role") == Config.Roles.Survivor then
-			fxEvent:FireClient(other, "TreasureHunt", user.UserId, best.center)
-		end
-	end
-	return true
+	table.clear(readyAt)
 end
 
--- FLOURISH: she stands still for castTime ("CastingUntil": Movement.held); stunAt seconds in,
--- every monster in range of her is stunned. Caught (or out of the match) before then: nothing.
-function handlers.Flourish(user, root, aim, def)
-	user:SetAttribute("CastingUntil", workspace:GetServerTimeNow() + def.castTime)
-	fxEvent:FireAllClients("Flourish", user.UserId)
-	local thisMatch = match
-	task.delay(def.castTime, function()
-		if (user:GetAttribute("CastingUntil") or 0) <= workspace:GetServerTimeNow() + 0.05 then user:SetAttribute("CastingUntil", nil) end
-	end)
-	task.delay(def.stunAt, function()
-		local now = rootOf(user)
-		if match ~= thisMatch or not now or user:GetAttribute("Seized") then return end
-		for _, monster in match.monsters do
-			if monster.pos and ((monster.pos - now.Position) * Vector3.new(1, 0, 1)).Magnitude <= def.range then
-				match.stun(monster, def.stun)
-			end
-		end
-	end)
-	return true
+local function setCooldown(who, slot, seconds)
+	readyAt[who] = readyAt[who] or {}
+	readyAt[who][slot] = os.clock() + seconds
+	if typeof(who) == "Instance" then
+		who:SetAttribute("AbilityReady" .. slot, workspace:GetServerTimeNow() + seconds)
+	end
 end
 
----------------------------------------------------------------- using one
-local resultEvent = Net.event("AbilityResult")   -- server -> player: (slot, message) when a use fails
+function Abilities.ready(who, slot)
+	return ctx.match ~= nil and os.clock() >= ((readyAt[who] or {})[slot] or 0)
+end
 
--- user: a player (or, later, a bot). Returns ok, message.
-function Abilities.use(user, slot, aim)
-	if not match then return false end
-	local hero = Heroes.get(user:GetAttribute("Hero"))
-	local def = hero and hero.abilities[slot]
-	local handler = def and handlers[def.id]
-	if not handler or user:GetAttribute("Role") ~= Config.Roles.Survivor then return false end
-	if user:GetAttribute("Seized") or Movement.held(user) then return false end
-	local root = rootOf(user)
-	if not root then return false end
-	if os.clock() < ((readyAt[user] or {})[slot] or 0) then return false end
-	-- aim: flat, unit length (the way they face if it's missing or odd)
-	if typeof(aim) ~= "Vector3" or aim ~= aim then aim = root.CFrame.LookVector end
+-- aim: flat, unit length (`fallback` if it's missing or odd)
+local function flatAim(aim, fallback)
+	if typeof(aim) ~= "Vector3" or aim ~= aim then aim = fallback end
 	aim = aim * Vector3.new(1, 0, 1)
-	if aim.Magnitude < 0.01 then aim = root.CFrame.LookVector * Vector3.new(1, 0, 1) end
-	aim = aim.Unit
-	local ok, message = handler(user, root, aim, def)
+	if aim.Magnitude < 0.01 then aim = fallback * Vector3.new(1, 0, 1) end
+	return aim.Magnitude > 0.01 and aim.Unit or Vector3.new(0, 0, -1)
+end
+
+-- Carry it out and start the cooldown. who: whose cooldown (the player, or the AI monster).
+local function cast(who, slot, c)
+	local handler = handlers[c.def.id]
+	if not handler then return false end         -- not built yet
+	if not Abilities.ready(who, slot) then return false end
+	local ok, message = handler(ctx, c)
 	if ok then
-		setCooldown(user, slot, def.cooldown)
-	elseif def.missCooldown then
-		setCooldown(user, slot, def.missCooldown)
+		setCooldown(who, slot, c.def.cooldown)
+	elseif c.def.missCooldown then
+		setCooldown(who, slot, c.def.missCooldown)
 	end
 	return ok, message
+end
+
+-- A monster in no state to act: in the middle of a kill, stunned or being dragged
+local function monsterBusy(monster)
+	if monster:Killing() then return true end
+	if (monster.stunUntil or 0) > os.clock() then return true end
+	return monster.pull ~= nil
+end
+
+-- user: a player (survivor or monster). Returns ok, message.
+function Abilities.use(user, slot, aim)
+	if not ctx.match then return false end
+	local hero = Heroes.get(user:GetAttribute("Hero"))
+	local def = hero and hero.abilities[slot]
+	if not def then return false end
+	local role = user:GetAttribute("Role")
+	local root = rootOf(user)
+	if not root or user:GetAttribute("Seized") or Movement.held(user) then return false end
+	local monster = nil
+	if role == Config.Roles.Monster then
+		monster = ctx.match.monsterOf and ctx.match.monsterOf(user)
+		if not monster or monsterBusy(monster) then return false end
+	elseif role ~= Config.Roles.Survivor then
+		return false
+	end
+	return cast(user, slot, { user = user, monster = monster, root = root, def = def, hero = hero,
+		aim = flatAim(aim, root.CFrame.LookVector) })
+end
+
+-- An AI monster uses an ability (its hero: monster.hero)
+function Abilities.useMonster(monster, slot, aim)
+	if not ctx.match or monsterBusy(monster) then return false end
+	local hero = Heroes.get(monster.hero)
+	local def = hero and hero.abilities[slot]
+	if not def then return false end
+	return cast(monster, slot, { monster = monster, def = def, hero = hero, aim = flatAim(aim, monster.facing) })
 end
 
 useEvent.OnServerEvent:Connect(function(player, slot, aim)

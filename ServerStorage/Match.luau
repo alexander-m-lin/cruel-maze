@@ -61,8 +61,7 @@ local SpeedCheck = require(ServerStorage.SpeedCheck)
 
 local States, Roles = Config.States, Config.Roles
 
-local KILL = MonsterAI.KILL
-local MIN_RESPAWN_DELAY = KILL.DONE + 0.5  -- seconds after being caught before you can come back
+local RESPAWN_AFTER_KILL = 0.5              -- seconds after the kill has played out before you can come back
 
 local Match = {}
 
@@ -113,7 +112,7 @@ local crushers = nil     -- this match's crushing walls (see Crushers)
 local wards = nil        -- the Maze Master's wards, floating eyes (see WardEyes)
 local mazeMasterTools = nil  -- the Maze Master's tools (see MazeMaster): a person's, or the AI's
 local mazeMasterAI = nil     -- the AI working them when nobody is the Maze Master (see MazeMasterAI)
-local caughtAt = {}      -- [player] = os.clock() when they were last caught
+local respawnFrom = {}   -- [player] = os.clock() from when they may come back (after being caught)
 
 -- Characters only appear when this script says so (so caught players can choose where to respawn)
 Players.CharacterAutoLoads = false
@@ -246,11 +245,13 @@ local function respawn(player)
 	end
 end
 
--- THE KILL (see MonsterAI.KILL for the timing): the monster lifts its victim overhead, holds them
--- struggling, then tears them apart. It's drawn on each player's computer (MonsterAnimate), where
--- the monster's hands are: the victim's body is shown in its grip, and at the rip a copy of it
--- comes apart in pieces. Here the victim is only frozen in place, then removed after the rip.
-local function playKill(player, character)
+-- THE KILL (timing: the monster's `kill`, MonsterAI.killFor): the stand-in lifts its victim
+-- overhead and tears them apart; Fear Eater devours them and drops the body. It's drawn on each
+-- player's computer (MonsterAnimate, HeroVisuals), where the monster's hands are: the victim's body
+-- is shown in its grip, and when it's let go of (kill.RELEASE) players' computers carry on with
+-- their own copy of it (the pieces, or the body on the floor). Here the victim is only frozen in
+-- place, then removed just after it's let go of.
+local function playKill(player, character, kill)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root) then return end
@@ -260,7 +261,7 @@ local function playKill(player, character)
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") then part.CanCollide = false end
 	end
-	task.delay(KILL.RIP + 0.3, function()
+	task.delay(kill.RELEASE + 0.3, function()
 		player:SetAttribute("Seized", nil)
 		if character.Parent then character:Destroy() end   -- the pieces are players' own copies by now
 	end)
@@ -287,20 +288,21 @@ end
 
 local function onCaught(player, monster)
 	if state ~= States.Playing then return end
-	caughtAt[player] = os.clock()
+	local killDone = monster and monster.kill.DONE or Config.CRUSHED_LINGER
+	respawnFrom[player] = os.clock() + killDone + RESPAWN_AFTER_KILL
 	local lives = math.max(0, (player:GetAttribute("Lives") or 1) - 1)
 	player:SetAttribute("Lives", lives)
 	if not isBot(player) then caughtEvent:FireClient(player, lives) end
 	local character = player.Character
 	if monster and character then
-		playKill(player, character)
+		playKill(player, character, monster.kill)
 	elseif character then
 		playCrushed(player, character)
 	end
 
 	-- Once the kill has played out: out of the match, or choose where to come back (if they
 	-- don't choose in time, their last sanctuary is used)
-	task.delay(monster and KILL.DONE or Config.CRUSHED_LINGER, function()
+	task.delay(killDone, function()
 		if state ~= States.Playing or not player.Parent then return end
 		if lives <= 0 then
 			player:SetAttribute("Out", true)    -- out for the rest of the match: watches teammates
@@ -435,7 +437,7 @@ chooseSpawnEvent.OnServerEvent:Connect(function(player, sanctuaryId)
 	if state ~= States.Playing or not player:GetAttribute("Respawning") then return end
 	if typeof(sanctuaryId) ~= "number" or not objectives or not objectives:CapturedSanctuary(sanctuaryId) then return end
 	player:SetAttribute("Sanctuary", sanctuaryId)
-	local wait = MIN_RESPAWN_DELAY - (os.clock() - (caughtAt[player] or 0))
+	local wait = (respawnFrom[player] or 0) - os.clock()
 	if wait > 0 then
 		task.delay(wait, function()
 			if state == States.Playing then respawn(player) end
@@ -463,7 +465,7 @@ local function cleanUp()
 	if mazeMasterTools then mazeMasterTools:Destroy() end
 	mazeMasterTools = nil
 	mazeMasterAI = nil
-	table.clear(caughtAt)
+	table.clear(respawnFrom)
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
 		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "Sanctuary", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
@@ -643,11 +645,13 @@ local function runCountdown()
 		local player = monsterPlayers[i]
 		local monster
 		if player then
-			monster = PlayerMonster.new(player, maze, { onCatch = onCaught, startCell = startCell })
+			monster = PlayerMonster.new(player, maze, { onCatch = onCaught, startCell = startCell,
+				hero = player:GetAttribute("Hero") or Config.DEFAULT_MONSTER_HERO })
 			playerMonsters[player] = monster
 		else
 			monster = MonsterAI.new(maze, {
 				onCatch = onCaught,
+				hero = Config.DEFAULT_MONSTER_HERO,
 				isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
 				startCell = startCell,
 				pack = monsters,                        -- they spread out from each other when roaming
@@ -705,7 +709,8 @@ local function runCountdown()
 		player:SetAttribute("Respawning", nil)
 		player:SetAttribute("Killing", nil)
 		player:SetAttribute("Sanctuary", role == Roles.Survivor and 1 or nil)
-		player:SetAttribute("Hero", role == Roles.Survivor and Config.DEFAULT_SURVIVOR_HERO or nil)
+		player:SetAttribute("Hero", (role == Roles.Survivor and Config.DEFAULT_SURVIVOR_HERO)
+			or (role == Roles.Monster and Config.DEFAULT_MONSTER_HERO) or nil)
 		if role == Roles.MazeMaster then
 			if player.Character then player.Character:Destroy() end   -- no body in the maze
 			player.Character = nil
@@ -739,7 +744,8 @@ local function runPlaying()
 	if mazeMasterTools then mazeMasterTools.active = true end
 	if mazeMasterAI then mazeMasterAI:Start() end
 	Abilities.start({ maze = maze, objectives = objectives, monsters = monsters, survivors = survivorsInMatch,
-		stun = function(monster, seconds) if monster.Stun then monster:Stun(seconds) end end })
+		stun = function(monster, seconds) if monster.Stun then monster:Stun(seconds) end end,
+		monsterOf = function(player) return playerMonsters[player] end })
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
 	local hadSurvivors = #survivorsInMatch() > 0
@@ -829,7 +835,7 @@ local function onPlayerAdded(player)
 end
 
 Players.PlayerRemoving:Connect(function(player)
-	caughtAt[player] = nil
+	respawnFrom[player] = nil
 end)
 
 ---------------------------------------------------------------- test hook (Studio only)
@@ -868,6 +874,12 @@ if RunService:IsStudio() then
 			a.Character:PivotTo(b)
 			SpeedCheck.moved(a)
 			return true
+		elseif action == "monsterAbility" and monsters[a] then   -- an AI monster (by number) uses an ability
+			local monster = monsters[a]
+			if monster.Devour and not playerMonsters[monster.player] then
+				return { Abilities.useMonster(monster, b, select(1, ...)) }
+			end
+			return { false, "not an AI monster" }
 		elseif action == "ability" then
 			for _, survivor in survivorsInMatch() do
 				if survivor.UserId == a then return { Abilities.use(survivor, b, select(1, ...)) } end

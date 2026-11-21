@@ -156,9 +156,10 @@ Config.DEV_USER_IDS = {}
 Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (SurvivorBot)
 
 -- Heroes (ReplicatedStorage.Heroes has their abilities). Until there's a character select, every
--- survivor plays this one. A STUNNED monster can't move, lunge or catch (abilities and crushing
+-- survivor plays the first one and every monster the second. A STUNNED monster can't move, lunge or catch (abilities and crushing
 -- walls stun).
 Config.DEFAULT_SURVIVOR_HERO = "Sara"
+Config.DEFAULT_MONSTER_HERO = "FearEater"   -- every monster, AI or player (nil or an unknown id: the stand-in)
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)

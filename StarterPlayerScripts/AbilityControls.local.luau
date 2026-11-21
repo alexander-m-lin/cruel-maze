@@ -1,4 +1,5 @@
--- Your HERO'S ABILITIES: the controls and the ability bar (survivors with a hero, during a match).
+-- Your HERO'S ABILITIES: the controls and the ability bar (survivors and monsters with a hero,
+-- during a match).
 --   right mouse button - Primary     Q - Secondary     E - Ultimate
 -- (on a touch screen or gamepad: the buttons on the bar, or the gamepad's shoulder buttons)
 -- Each ability aims the way you face. The server checks and carries it out (Abilities); the bar
@@ -26,14 +27,15 @@ local INPUTS = {
 local GOLD = Color3.fromRGB(235, 190, 90)
 
 local function myHero()
-	if player:GetAttribute("Role") ~= Config.Roles.Survivor then return nil end
+	local role = player:GetAttribute("Role")
+	if role ~= Config.Roles.Survivor and role ~= Config.Roles.Monster then return nil end
 	if match:GetAttribute("State") ~= Config.States.Playing then return nil end
 	return Heroes.get(player:GetAttribute("Hero"))
 end
 
 local function use(slot)
 	local hero = myHero()
-	if not (hero and hero.abilities[slot]) then return end
+	if not (hero and hero.abilities[slot]) or hero.abilities[slot].soon then return end
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 	useEvent:FireServer(slot, root.CFrame.LookVector)
@@ -118,6 +120,11 @@ RunService.RenderStepped:Connect(function()
 		local def = hero.abilities[slot]
 		b.button.Visible = def ~= nil
 		if not def then continue end
+		if def.soon then                           -- not built yet
+			b.button.Text = ("[%s]\n%s\n(soon)"):format(Heroes.KEYS[slot], def.name)
+			b.shade.Size = UDim2.fromScale(1, 1)
+			continue
+		end
 		local left = math.max(0, (player:GetAttribute("AbilityReady" .. slot) or 0) - now)
 		b.button.Text = ("[%s]\n%s%s"):format(Heroes.KEYS[slot], def.name, left > 0 and ("\n%ds"):format(math.ceil(left)) or "")
 		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))

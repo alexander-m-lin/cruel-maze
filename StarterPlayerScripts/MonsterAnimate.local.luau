@@ -2,6 +2,13 @@
 --
 -- (Monsters played by people get the same body and the same treatment: see PlayerMonster.)
 --
+-- A HERO monster (its body has a "Hero" attribute, e.g. Fear Eater) is moved here (1, below) but
+-- posed by its own module, StarterPlayerScripts.HeroVisuals.<hero>, which exports
+--   animate.setup(model, s)      -- once, when the body appears (s: this script's state for it)
+--   animate.pose(model, s, dt)   -- every frame: set the joints (s.targetSpeed, s.mode, s.killStart)
+--   animate.victim(model, s)     -- every frame, after it's in place: carry a victim
+-- Everything below about the gait and the kill is the stand-in monster's.
+--
 -- 1. SMOOTH MOVEMENT. The server publishes where the monster is in a "Pivot" attribute, about 30
 --    times a second. Jumping straight to each update would look jittery (the screen draws 60+
 --    times a second), so we show the monster slightly in the past - INTERP_DELAY seconds - and
@@ -24,6 +31,7 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Characters = require(game:GetService("ReplicatedStorage"):WaitForChild("Characters"))
+local heroVisuals = script.Parent:WaitForChild("HeroVisuals")
 
 ---------------------------------------------------------------- tuning
 local LIMP        = 0.35   -- 0 = even steps, higher = the right foot lifts less and drags its toes
@@ -82,6 +90,17 @@ local function track(model)
 	end
 	record()
 	model:GetAttributeChangedSignal("Pivot"):Connect(record)
+
+	-- A hero's body is posed by its own module
+	local heroId = model:GetAttribute("Hero")
+	local module = heroId and heroVisuals:FindFirstChild(heroId)
+	local visuals = module and require(module)
+	if visuals and visuals.animate then
+		s.animator = visuals.animate
+		s.animator.setup(model, s)
+		monsters[model] = s
+		return
+	end
 
 	-- Rigs get animated limbs; the fallback orb is only moved
 	local joints = findJoints(model)
@@ -471,13 +490,23 @@ RunService.RenderStepped:Connect(function(dt)
 			s.shown = cf
 			model:PivotTo(cf)
 		end
-		updateVictim(model, s)
+		if s.animator then
+			s.animator.victim(model, s)
+		else
+			updateVictim(model, s)
+		end
 	end
 end)
 
 -- Joint angles. PreSimulation runs after Roblox's own animation step, so they aren't overwritten.
 RunService.PreSimulation:Connect(function(dt)
 	for model, s in monsters do
+		if s.animator and model.Parent then
+			s.mode = model:GetAttribute("Mode")
+			s.killStart = model:GetAttribute("KillStart")
+			s.animator.pose(model, s, dt)
+			continue
+		end
 		if s.joints and model.Parent then
 			s.mode = model:GetAttribute("Mode")
 			s.killStart = model:GetAttribute("KillStart")

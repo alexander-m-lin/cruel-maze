@@ -40,8 +40,10 @@ starts another straight away, and "Doors" opens the doors panel.
   false relics (2, two a match: they look like relics, and a survivor who clicks one is revealed
   and slowed). Right-click or Esc cancels placing.
 
-**Heroes:** every survivor plays **Sara, the Cryptraider** for now (more heroes and a character
-select are coming). Abilities aim the way you face:
+**Heroes:** every survivor plays **Sara, the Cryptraider** and every monster **Fear Eater** for
+now (more heroes and a character select are coming). Abilities aim the way you face.
+
+Sara:
 - **Right mouse: Whip** (5 s; 2 s if it hits nothing). Lashes out 39 studs, catching monsters within 5 studs of it and
   teammates within 4. A wall or relic pulls you to it; a teammate is
   pulled to you; a monster is pulled to you and stunned for 1 second.
@@ -52,6 +54,16 @@ select are coming). Abilities aim the way you face:
   seconds. Caught before then: no stun.
 A stunned monster can't move, lunge or catch (stars circle its head). Crushing walls stun
 monsters caught between them too. A monster in the middle of a kill can't be stunned or pulled.
+
+Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching out of his
+sleeves; left click does nothing for him):
+- **Right mouse: Devour** (5 s). He gathers himself for a moment, then lunges 14 studs the way he
+  faces; the first survivor his hands reach is caught. He holds them up facing away, struggling,
+  winds his head back, lifts them flat and draws their head into his hood; the struggling stops
+  and he drops the body, which lies there for 4 seconds. Aimed at a *feared* survivor (within 20°
+  of where he faces, in a clear line), the lunge heads straight for them and reaches 35 studs.
+- **Q: Instill Fear** and **E: Living Nightmare**: coming next (shown greyed out on the bar).
+AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range.
 
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):
@@ -104,11 +116,15 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
-| `ReplicatedStorage/Heroes.luau` | ReplicatedStorage (ModuleScript) | The heroes and their abilities' numbers (Sara) |
-| `ServerStorage/Abilities.luau` | ServerStorage (ModuleScript) | Hero abilities on the server: checks, cooldowns, what each one does |
+| `ReplicatedStorage/Heroes.luau` | ReplicatedStorage (ModuleScript) | The list of heroes (loads each one's `HeroData`); how to add one |
+| `ReplicatedStorage/HeroData/<Hero>.luau` | ReplicatedStorage › HeroData (ModuleScripts) | One per hero: who they are and their abilities' numbers (Sara, FearEater) |
+| `ServerStorage/Abilities.luau` | ServerStorage (ModuleScript) | Hero abilities on the server, for survivors, monster players and AI monsters alike: checks, cooldowns, calling the hero's handlers |
+| `ServerStorage/HeroAbilities/<Hero>.luau` | ServerStorage › HeroAbilities (ModuleScripts) | One per hero: what each ability does (Sara's whip etc.; Fear Eater's Devour) |
+| `StarterPlayerScripts/HeroVisuals/<Hero>.luau` | StarterPlayerScripts › HeroVisuals (ModuleScripts) | One per hero: how they look on players' computers. FearEater: his floating, the Devour lunge and kill |
+| `StarterPlayerScripts/Victims.luau` | StarterPlayerScripts (ModuleScript) | Drawing a monster's victim: hiding, struggling, going limp, the body that drops |
 | `ServerStorage/Pull.luau` | ServerStorage (ModuleScript) | Pulling a player, bot or monster along a line (the whip) |
 | `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse, Q, E) and the ability bar |
-| `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | The whip, Flourish's spin, Treasure hunt's light, stun stars |
+| `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
@@ -125,9 +141,9 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `StarterPlayerScripts/Minimap.local.luau` | StarterPlayer › StarterPlayerScripts | Corner map: explored and in-view areas, and dots for you, teammates, spotted relics and a visible monster (M hides it) |
 | `StarterPlayerScripts/SpawnPicker.local.luau` | StarterPlayer › StarterPlayerScripts | The map for choosing a sanctuary after being caught |
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
-| `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
+| `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly; a hero monster is posed by its `HeroVisuals` module, the stand-in here (walk, chase, kill) |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
-| `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's lunge (left click, or a button on touch screens) |
+| `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's movement in a dash (Devour), and the stand-in's left-click lunge |
 | `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's controls: outlined targets (doors, crushing walls, survivors) to click, the hover name or cooldown clock, and the ward / false relic placement buttons |
 | `StarterPlayerScripts/CrusherView.local.luau` | StarterPlayer › StarterPlayerScripts | A crushing wall's warning: its walls shake and dust pours out |
 | `StarterPlayerScripts/FalseRelicMarks.local.luau` | StarterPlayer › StarterPlayerScripts | False relics glow red for the monster side (only they're told which are false) |
@@ -143,14 +159,37 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 Script Sync names files by script type: `.legacy.luau` = Script, `.local.luau` = LocalScript,
 `.luau` = ModuleScript.
 
-Also in the place file (not scripts): the monster's rigged body (`ServerStorage.MonsterRig`), the relic
+Also in the place file (not scripts): Fear Eater's body (`ServerStorage.FearEaterRig`; earlier
+drafts in `ServerStorage.FearEaterDrafts`), the stand-in monster's rigged body (`ServerStorage.MonsterRig`), the relic
 skull (`ServerStorage.SkullRelic`, Creator Store asset 98498294 by RoyalBoyMc), the
 wall and floor materials (`MaterialService`), and a few developer previews (`Workspace.WallPalette`,
 `Workspace.FloorPalette`, `SoundService.SoundBoard`).
 
+## Heroes
+
+Every hero, survivor or monster, is three modules named after the hero's id (e.g. `FearEater`):
+
+1. `ReplicatedStorage/HeroData/<Id>.luau`: name, role (`"Survivor"` or `"Monster"`) and the three
+   abilities (`Primary` = right mouse, `Secondary` = Q, `Ultimate` = E), each with an `id`, `name`,
+   `cooldown` and its own numbers. `soon = true` shows an ability greyed out until it's built. A
+   monster also gives its body (`rig`, a model in ServerStorage with a `HumanoidRootPart`, and a
+   `GroundOffset` attribute if it floats), `rigScale`, `lunge = false` if it has no left-click
+   lunge, and its `kill` timing (at least `RELEASE` and `DONE`, seconds from the catch).
+2. `ServerStorage/HeroAbilities/<Id>.luau`: returns `{ [abilityId] = function(ctx, cast) }`. The
+   server checks the use and the cooldown, then calls it; return true if it was used. `cast` has
+   the user (a player, or nil for an AI monster), the monster (for monsters), their root, the aim
+   and the ability's numbers; `ctx` has the match and helpers. See `Abilities.luau`.
+3. `StarterPlayerScripts/HeroVisuals/<Id>.luau`: how it looks. A monster's module exports
+   `animate = { setup, pose, victim }`, which MonsterAnimate calls for any body whose `Hero`
+   attribute names it.
+
+Then add the id to `Heroes.ORDER`. Until there's a character select, `Config.DEFAULT_SURVIVOR_HERO`
+and `Config.DEFAULT_MONSTER_HERO` pick who everyone plays.
+
 Other folders:
-- `assets/textures/`: the wall and floor texture images and how they were made.
-- `tools/textures/`: Python scripts that made them (tileable variations, toning a texture down).
+- `assets/textures/`: the wall and floor texture images, Fear Eater's textures, and how they were made.
+- `tools/textures/`: Python scripts that made them (tileable variations, toning a texture down,
+  and `receive.py`, which saves images sent from Studio and serves them for uploading).
 - `docs/roadmap.md`: the implementation plan.
 
 ## History

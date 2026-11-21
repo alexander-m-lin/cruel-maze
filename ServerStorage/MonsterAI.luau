@@ -31,6 +31,8 @@
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 local Config = require(game:GetService("ReplicatedStorage").Config)
+local Heroes = require(game:GetService("ReplicatedStorage").Heroes)
+local Abilities = require(ServerStorage.Abilities)
 
 local ROAM_SPEED   = 15     -- studs per second (players walk at Config.PLAYER_SPEED)
 local SEARCH_SPEED = 18
@@ -51,14 +53,17 @@ local RIG_SCALE    = 1.8    -- the rig is scaled up by this much (bigger = longe
 local TURN_SPEED   = 8      -- how quickly it turns to face where it's going
 local ROAM_CHOICES = 12     -- when roaming with other monsters, how many random cells it weighs up
 
--- THE KILL: when it catches someone it stops, lifts them over its head, and tears them apart.
--- Times in seconds from the catch. MonsterAnimate draws it on players' computers (arms, victim
--- and pieces); Match freezes the victim and decides what happens to them afterwards.
+-- THE KILL (the stand-in monster): when it catches someone it stops, lifts them over its head, and
+-- tears them apart. Times in seconds from the catch. MonsterAnimate draws it on players' computers
+-- (arms, victim and pieces); Match freezes the victim and decides what happens to them afterwards.
+-- A hero monster has its own kill (its HeroData's "kill", e.g. Fear Eater's Devour), with at
+-- least DONE (it moves again) and RELEASE (the victim's body is let go of).
 local KILL = {
 	LIFT = 0.7,   -- raising them overhead
 	RIP  = 1.7,   -- the moment they're torn apart
 	DONE = 2.6,   -- it starts moving again
 }
+KILL.RELEASE = KILL.RIP
 
 local DIRS = { {0, -1, "N"}, {1, 0, "E"}, {0, 1, "S"}, {-1, 0, "W"} }
 
@@ -76,16 +81,18 @@ local function finishBody(model)
 	return model
 end
 
--- A copy of ServerStorage.MonsterRig (the generated creature). Its HumanoidRootPart stays anchored;
--- the other body parts hang off it on joints that MonsterAnimate bends.
--- Returns model, groundOffset (how far its pivot sits above its feet), or nil if the rig is unusable.
-local function buildFromRig(template)
+-- A copy of a monster rig: ServerStorage.MonsterRig (the stand-in creature), or a hero's own body
+-- (its HeroData's "rig"). Its HumanoidRootPart stays anchored; the other body parts hang off it on
+-- joints that MonsterAnimate (or the hero's HeroVisuals module) bends. A rig that floats says how
+-- high in a "GroundOffset" attribute (studs from the floor to its root, before scaling).
+-- Returns model, groundOffset (how far its pivot sits above the floor), or nil if the rig is unusable.
+local function buildFromRig(template, scale)
 	local model = template:Clone()
-	model:ScaleTo(model:GetScale() * RIG_SCALE)
+	model:ScaleTo(model:GetScale() * scale)
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root) then
-		warn("MonsterRig needs a Humanoid and a HumanoidRootPart; using the orb instead")
+	if not root then
+		warn(template.Name .. " needs a HumanoidRootPart; using the orb instead")
 		model:Destroy()
 		return nil
 	end
@@ -100,12 +107,19 @@ local function buildFromRig(template)
 			d:Destroy()            -- e.g. a default "Animate" script; MonsterAnimate does the animating
 		end
 	end
-	humanoid.EvaluateStateMachine = false     -- no physics/falling logic: we position it ourselves
-	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None   -- no name or health bar
-	humanoid.BreakJointsOnDeath = false
+	if humanoid then
+		humanoid.EvaluateStateMachine = false     -- no physics/falling logic: we position it ourselves
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None   -- no name or health bar
+		humanoid.BreakJointsOnDeath = false
+	end
 
-	local cf, size = model:GetBoundingBox()
-	local groundOffset = model:GetPivot().Position.Y - (cf.Position.Y - size.Y / 2)
+	local groundOffset = model:GetAttribute("GroundOffset")
+	if groundOffset then
+		groundOffset *= scale
+	else
+		local cf, size = model:GetBoundingBox()
+		groundOffset = model:GetPivot().Position.Y - (cf.Position.Y - size.Y / 2)
+	end
 
 	local glow = Instance.new("PointLight")  -- a faint red glow
 	glow.Color = Color3.fromRGB(255, 40, 40)
@@ -148,15 +162,33 @@ local function buildOrb()
 	return finishBody(model)
 end
 
--- A monster's body (the rig, or the orb if the rig is missing), placed in the workspace and tagged
--- for the animate, ping and fog scripts. Also used for monsters played by people (PlayerMonster).
--- Returns model, groundOffset (how far its pivot sits above its feet), isRig
-function MonsterAI.buildBody()
-	local template = ServerStorage:FindFirstChild("MonsterRig")
+-- A monster's body (its hero's rig, the stand-in rig, or the orb if neither is there), placed in
+-- the workspace and tagged for the animate, ping and fog scripts. Its hero's id is in its "Hero"
+-- attribute. Also used for monsters played by people (PlayerMonster).
+-- Returns model, groundOffset (how far its pivot sits above the floor), isRig
+function MonsterAI.buildBody(heroId)
+	local hero = Heroes.get(heroId)
+	local template = hero and hero.rig and ServerStorage:FindFirstChild(hero.rig)
+	local scale = hero and hero.rigScale or 1
+	if not template then
+		template, scale = ServerStorage:FindFirstChild("MonsterRig"), RIG_SCALE
+		hero = nil                                 -- (the stand-in body moves like the stand-in)
+	end
 	local model, groundOffset
-	if template then model, groundOffset = buildFromRig(template) end
+	if template then
+		local clone = template:Clone()             -- (the attribute has to be there before it's in the workspace)
+		clone:SetAttribute("Hero", hero and hero.id or nil)
+		model, groundOffset = buildFromRig(clone, scale)
+		clone:Destroy()
+	end
 	if model then return model, groundOffset, true end
 	return buildOrb(), 0, false
+end
+
+-- The kill timing for a monster of this hero (its own, or the stand-in's)
+function MonsterAI.killFor(heroId)
+	local hero = Heroes.get(heroId)
+	return hero and hero.kill or KILL
 end
 MonsterAI.HOVER = HOVER
 
@@ -172,12 +204,15 @@ end
 ---------------------------------------------------------------- construction
 -- maze: the table MazeBuilder.build returns.
 -- options.onCatch(player, monster): called when it catches someone (default: knock them out).
---   The monster then stands still for KILL.DONE seconds while the kill plays out.
+--   The monster then stands still while the kill plays out (its kill's DONE seconds).
 -- options.isBlocked(x, z): true for cells it may not enter (sanctuaries, protected relic rooms).
 -- options.startCell = {x, z}: where it appears.
 -- options.pack: a list of all the match's monsters (this one included), to spread out from.
 -- options.spottedBySide(player): true if the monster side can see them right now (another
 -- monster, a ward, a relic's ring...): it goes after them as if it saw them itself, when near.
+-- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is Devour catches
+-- only with Devour (it dashes at you once you're in range); otherwise it catches anyone who gets
+-- within CATCH_DIST, like the stand-in.
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
@@ -194,7 +229,12 @@ function MonsterAI.new(maze, options)
 	self.rayParams.FilterType = Enum.RaycastFilterType.Include
 	self.rayParams.FilterDescendantsInstances = { maze.model }
 
-	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody()
+	self.hero = options.hero
+	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody(self.hero)
+	self.kill = MonsterAI.killFor(self.model:GetAttribute("Hero"))
+	local heroDef = Heroes.get(self.model:GetAttribute("Hero"))
+	local primary = heroDef and heroDef.abilities.Primary
+	self.devourDef = primary and primary.id == "Devour" and primary or nil
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])
@@ -272,6 +312,7 @@ end
 
 function MonsterAI:Stun(seconds)
 	if self:Killing() then return end
+	self.dash = nil
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	if self.model then
 		self.model:SetAttribute("StunnedUntil", workspace:GetServerTimeNow() + (self.stunUntil - os.clock()))
@@ -283,6 +324,7 @@ function MonsterAI:Pull(to, speed)
 	local target = Vector3.new(to.X, self.pos.Y, to.Z)
 	local distance = (target - self.pos).Magnitude
 	if distance < 0.5 then return 0 end
+	self.dash = nil
 	self.pull = { from = self.pos, to = target, startedAt = os.clock(), time = distance / speed }
 	if self.model then   -- (players' computers draw the drag: dust and a scrape)
 		self.model:SetAttribute("PullAt", workspace:GetServerTimeNow())
@@ -392,6 +434,12 @@ function MonsterAI:Step(dt, targets)
 		self.mode = "roam"
 		self.model:SetAttribute("KillVictim", nil)
 		self.model:SetAttribute("KillStart", nil)
+	end
+	-- Mid-Devour: the dash, nothing else
+	if self.dash then
+		self:stepDash(now, targets)
+		self:publish(now)
+		return
 	end
 	-- Being pulled (a whip): dragged along, nothing else
 	if self.pull then
@@ -520,26 +568,104 @@ function MonsterAI:Step(dt, targets)
 
 	self:publish(now)
 
-	-- 4. CATCH anyone close enough
+	-- 4. CATCH: Devour at the one it's chasing once they're in range (a Devour hero), or anyone
+	-- close enough (the stand-in)
+	if self.devourDef then
+		self:tryDevour(targets)
+		return
+	end
 	for _, player in targets do
 		local root = rootOf(player)
 		if root and (self.graceUntil[player] or 0) < now then
 			local flat = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z).Magnitude
 			if flat < CATCH_DIST then
-				self.graceUntil[player] = now + CATCH_GRACE
-				self.chaseTarget, self.path = nil, {}
-				-- turn to face them, and start the kill (players' computers animate it from these)
-				local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)
-				if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
-				self.mode = "kill"
-				self.killUntil = now + KILL.DONE
-				self.model:SetAttribute("KillVictim", player.UserId)
-				self.model:SetAttribute("KillStart", workspace:GetServerTimeNow())
-				self:publish(now)
-				self.onCatch(player, self)
+				self:catch(player, root, now)
 				break                                  -- one at a time
 			end
 		end
+	end
+end
+
+-- Caught someone: turn to face them and start the kill (players' computers animate it from these)
+function MonsterAI:catch(player, root, now)
+	self.graceUntil[player] = now + CATCH_GRACE
+	self.chaseTarget, self.path, self.dash = nil, {}, nil
+	local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)
+	if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
+	self.mode = "kill"
+	self.killUntil = now + self.kill.DONE
+	self.model:SetAttribute("KillVictim", player.UserId)
+	self.model:SetAttribute("KillStart", workspace:GetServerTimeNow())
+	self:publish(now)
+	self.onCatch(player, self)
+end
+
+---------------------------------------------------------------- Devour
+-- Chasing someone within Devour's reach (or a feared survivor within its feared reach), in a clear
+-- line, with Devour ready: dash at them, aiming a little ahead of where they're running.
+function MonsterAI:tryDevour(targets)
+	local def = self.devourDef
+	if self.mode ~= "chase" or not self.chaseTarget or not Abilities.ready(self, "Primary") then return end
+	local root = rootOf(self.chaseTarget)
+	if not root then return end
+	local feared = (self.chaseTarget:GetAttribute("FearedUntil") or 0) > workspace:GetServerTimeNow()
+	local target = Vector3.new(root.Position.X, self.pos.Y, root.Position.Z)
+	local d = (target - self.pos).Magnitude
+	if d > (feared and def.fearedRange or def.range) or not self:canPass(self.pos, target) then return end
+	local lead = root.AssemblyLinearVelocity * Vector3.new(1, 0, 1) * (def.windup + def.dashTime * 0.5)
+	local aim = (target + lead - self.pos) * Vector3.new(1, 0, 1)
+	if aim.Magnitude < 0.1 then aim = target - self.pos end
+	if aim.Magnitude < 0.1 then aim = self.facing end
+	Abilities.useMonster(self, "Primary", aim.Unit)
+end
+
+-- Start a Devour dash (called by HeroAbilities.FearEater): stands still for def.windup, then dashes
+-- `distance` studs along `aim` in `time` seconds, stopping at walls; the first survivor within
+-- def.reach of its reach point is caught. Players' computers draw it from "DevourAt" (server time),
+-- "DevourAim" (the dash: direction times distance), "DevourWindup" and "DevourTime".
+function MonsterAI:Devour(aim, distance, time, def)
+	if not self.active or self.killUntil or self.pull or os.clock() < (self.stunUntil or 0) then return false end
+	local now = os.clock()
+	self.facing = aim
+	self.path = {}
+	self.dash = { aim = aim, distance = distance, def = def, from = self.pos,
+		start = now + def.windup, stop = now + def.windup + time, time = time }
+	self.mode = "chase"
+	self.model:SetAttribute("DevourAim", aim * distance)
+	self.model:SetAttribute("DevourWindup", def.windup)
+	self.model:SetAttribute("DevourTime", time)
+	self.model:SetAttribute("DevourAt", workspace:GetServerTimeNow())
+	self:publish(now)
+	return true
+end
+
+function MonsterAI:stepDash(now, targets)
+	local dash = self.dash
+	if now < dash.start then return end                         -- gathering itself
+	local k = math.clamp((now - dash.start) / dash.time, 0, 1)
+	local want = dash.from + dash.aim * dash.distance * k
+	if (want - self.pos).Magnitude > 0.01 then
+		if self:canPass(self.pos, want) then
+			self.pos = want
+		else
+			k = 1                                                -- hit a wall: the dash ends here
+		end
+	end
+	-- anyone within reach of its hands
+	local reachAt = self.pos + dash.aim * dash.def.reachForward
+	for _, player in targets do
+		local root = rootOf(player)
+		if root and (self.graceUntil[player] or 0) < now and not player:GetAttribute("Seized") then
+			local flat = Vector3.new(root.Position.X - reachAt.X, 0, root.Position.Z - reachAt.Z).Magnitude
+			if flat < dash.def.reach then
+				self:catch(player, root, now)
+				return
+			end
+		end
+	end
+	if k >= 1 then
+		self.dash = nil
+		self.path = {}                                           -- re-plan from wherever it ended up
 	end
 end
 
