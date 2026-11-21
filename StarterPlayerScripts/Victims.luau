@@ -5,7 +5,8 @@
 --   Victims.hide(character, hidden)          -- hide (or show again) a body
 --   Victims.joints(character)                -- its limb joints by name (for flail / limp)
 --   Victims.flail(joints, k, power)          -- thrash (k: seconds, for the rhythm; power 0..1)
---   Victims.limp(joints, amount)             -- hang limp (amount 0..1)
+--   Victims.limp(joints, amount, faceUp)     -- hang limp (amount 0..1); faceUp: held lying on
+--                                             -- their back, so arms, legs and head droop that way
 --   Victims.corpse(character, copy, lifetime) -- `copy` (a clone made earlier) takes the body's
 --                                             -- place, posed the same, and falls loose; it fades
 --                                             -- after `lifetime` seconds
@@ -53,9 +54,24 @@ function Victims.flail(j, k, power)
 	set("Neck", CFrame.Angles(0, wave(22, 0) * 0.7 * power, 0))
 end
 
--- Hanging limp: arms dangle a little out, knees slightly bent, head lolling forward
-function Victims.limp(j, amount)
+-- Hanging limp. Upright: arms dangle a little out, knees slightly bent, head lolling forward.
+-- Lying on their back (faceUp): everything droops toward the floor behind them - arms swung back
+-- and out, thighs sagging, knees bent, head hanging back.
+-- (Joint angles: about X swings a limb forward (+) or back (-); a knee bends with -.)
+function Victims.limp(j, amount, faceUp)
 	local function set(name, cf) if j[name] then j[name].Transform = j[name].Transform:Lerp(cf, amount) end end
+	if faceUp then
+		set("LeftShoulder", CFrame.Angles(-1.1, 0, -0.45))
+		set("RightShoulder", CFrame.Angles(-1.0, 0, 0.5))
+		set("LeftElbow", CFrame.Angles(0.35, 0, 0))
+		set("RightElbow", CFrame.Angles(0.25, 0, 0))
+		set("LeftHip", CFrame.Angles(-0.5, 0, -0.1))
+		set("RightHip", CFrame.Angles(-0.35, 0, 0.12))
+		set("LeftKnee", CFrame.Angles(-1.0, 0, 0))
+		set("RightKnee", CFrame.Angles(-0.8, 0, 0))
+		set("Neck", CFrame.Angles(-0.9, 0.25, 0.1))
+		return
+	end
 	set("LeftShoulder", CFrame.Angles(0.15, 0, -0.12))
 	set("RightShoulder", CFrame.Angles(0.1, 0, 0.12))
 	set("LeftElbow", CFrame.Angles(0.25, 0, 0))
@@ -70,7 +86,8 @@ end
 -- THE BODY: the copy is posed exactly like the victim, its joints swapped for loose ball-and-socket
 -- joints (so it stays in one piece but flops), and dropped. The Humanoid stays (it's what shows
 -- their clothes), but it stops arms and legs colliding, so each piece gets an invisible solid box
--- of its own, welded on; boxes joined to each other don't collide (they'd shove each other apart).
+-- of its own, welded on. The boxes only collide with the world, not each other (they'd shove each
+-- other apart and the body would jitter and hold its shape).
 function Victims.corpse(character, copy, lifetime)
 	for _, part in copy:GetDescendants() do
 		if part:IsA("BasePart") then
@@ -102,9 +119,9 @@ function Victims.corpse(character, copy, lifetime)
 				local socket = Instance.new("BallSocketConstraint")
 				socket.Attachment0, socket.Attachment1 = a0, a1
 				socket.LimitsEnabled = true
-				socket.UpperAngle = 50
+				socket.UpperAngle = 75
 				socket.TwistLimitsEnabled = true
-				socket.TwistLowerAngle, socket.TwistUpperAngle = -30, 30
+				socket.TwistLowerAngle, socket.TwistUpperAngle = -45, 45
 				socket.Parent = p0
 				table.insert(sockets, { p0, p1 })
 			end
@@ -143,20 +160,22 @@ function Victims.corpse(character, copy, lifetime)
 			boxes[part] = box
 		end
 	end
-	for _, pair in sockets do
-		local a, b = boxes[pair[1]], boxes[pair[2]]
-		if a and b then
+	local boxList = {}
+	for _, box in boxes do table.insert(boxList, box) end
+	for i = 1, #boxList do
+		for k = i + 1, #boxList do
 			local nc = Instance.new("NoCollisionConstraint")
-			nc.Part0, nc.Part1 = a, b
-			nc.Parent = a
+			nc.Part0, nc.Part1 = boxList[i], boxList[k]
+			nc.Parent = boxList[i]
 		end
 	end
 	copy.Name = "Corpse"
 	copy.Parent = workspace
 	Victims.hide(character)
+	-- dropped: each piece starts a little differently, so it flops rather than landing as one
 	for _, part in parts do
-		part.AssemblyLinearVelocity = Vector3.new(0, -2, 0)
-		part.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 2
+		part.AssemblyLinearVelocity = Vector3.new((math.random() - 0.5) * 2, -2 - math.random() * 2, (math.random() - 0.5) * 2)
+		part.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 4
 	end
 
 	-- after `lifetime`: fade out over a second, then gone

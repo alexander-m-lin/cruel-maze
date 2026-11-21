@@ -233,7 +233,15 @@ function animate.pose(model, s, dt)
 		local power = smooth(k / 0.3) * (1 - dying)
 		power *= 1 + 0.4 * smooth((k - K.WIND) / (K.ENGULF - K.WIND))
 		Victims.flail(v.joints, k, math.min(power, 1.3))
-		Victims.limp(v.joints, dying)
+		Victims.limp(v.joints, dying, true)
+		-- dead weight: as he draws them out of the hood the limp arms, legs and head swing
+		local swing = math.sin(math.pi * math.clamp((k - K.OUT) / 0.7, 0, 1))
+		if swing > 0 then
+			for name, phase in { LeftShoulder = 0, RightShoulder = 1.3, LeftHip = 0.6, RightHip = 2.0, Neck = 0.9 } do
+				local joint = v.joints[name]
+				if joint then joint.Transform *= CFrame.Angles(math.sin(k * 7 + phase) * 0.25 * swing, 0, 0) end
+			end
+		end
 	end
 end
 
