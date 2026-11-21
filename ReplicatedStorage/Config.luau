@@ -92,7 +92,7 @@ Config.FALSE_RELIC_BLINK_TIME = 0.15    -- ...for this long
 -- stays shown to them. A survivor can destroy one by standing next to it and holding, like
 -- collecting a relic (the monster side is told where).
 Config.WARDS_MAX = 4                    -- at a time: placing another fades the oldest
-Config.WARD_VISION_RADIUS = 22          -- studs (a survivor sees 80 in a cone, 12 all round)
+Config.WARD_VISION_RADIUS = 50          -- studs, line of sight (walls block; about 2.5 cells down a corridor; was 22). A survivor sees 80 in a cone, 12 all round
 Config.WARD_HEIGHT = 4.5                -- studs above the floor the eye floats
 Config.WARD_REACH = 8                   -- a survivor this close (studs, flat) can destroy it...
 Config.WARD_DESTROY_TIME = 3            -- ...by staying close this long (a bar shows how far along)
