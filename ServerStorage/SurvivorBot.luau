@@ -14,7 +14,9 @@
 -- THE BRAIN (a few times a second):
 --   FLEE    - sees a monster (within FLEE_SIGHT studs, in line of sight): runs to the nearest
 --             sanctuary (monsters can't follow) and waits there until none has been seen for
---             SAFE_AFTER seconds
+--             SAFE_AFTER (+ up to SAFE_JITTER) seconds. It then leaves by an exit picked with
+--             some randomness, favouring ones far from the monster it fled and not the one it
+--             last left by (so it doesn't walk back out into the same monster again and again)
 --   COLLECT - sees a relic nobody has collected: goes to it and collects it (it can be fooled by a
 --             false relic, like anyone)
 --   ROAM    - otherwise wanders, preferring cells it hasn't been to
@@ -32,7 +34,9 @@ local Movement = require(ReplicatedStorage.Movement)   -- the same speed rules a
 local THINK_EVERY = 0.2
 local REPLAN_EVERY = 3        -- seconds: re-plan the route (doors change)
 local FLEE_SIGHT = 50         -- studs: sees a monster this far, in line of sight
-local SAFE_AFTER = 4          -- seconds without seeing a monster before leaving a sanctuary
+local SAFE_AFTER = 4          -- seconds without seeing a monster before leaving a sanctuary...
+local SAFE_JITTER = 4         -- ...plus up to this many more (so it doesn't come out on a beat)
+local EXIT_NOISE = 60         -- studs of randomness when choosing which exit to leave by
 local EYE = 3
 local DIRS = { {0, -1, "N"}, {1, 0, "E"}, {0, 1, "S"}, {-1, 0, "W"} }
 
@@ -284,15 +288,43 @@ function SurvivorBot:Step(dt, monsters)
 	end
 end
 
+-- the sanctuary that cell (x, z) is in, or nil
+function SurvivorBot:sanctuaryAt(x, z)
+	for _, sanctuary in self.maze.sanctuaries do
+		if sanctuary.cells[x * 1000 + z] then return sanctuary end
+	end
+	return nil
+end
+
+-- Which exit to leave a sanctuary by: each scores how far its outside cell is from the monster it
+-- last fled (if that was recent), plus random noise, minus a lot for the exit it last left by.
+function SurvivorBot:pickExit(sanctuary, now)
+	local best, bestScore
+	local threat = now - (self.lastThreatAt or -math.huge) < 30 and self.lastThreatPos or nil
+	for _, exit in sanctuary.exits or {} do
+		if not exit.out then continue end
+		local at = self:centerOf(exit.out[1], exit.out[2])
+		local score = math.random() * EXIT_NOISE
+		if threat then score += ((at - threat) * Vector3.new(1, 0, 1)).Magnitude end
+		if exit == self.lastExit then score -= EXIT_NOISE end
+		if not bestScore or score > bestScore then best, bestScore = exit, score end
+	end
+	return best
+end
+
 function SurvivorBot:think(root, cx, cz, monsters, now)
 	local eye = Vector3.new(root.Position.X, self.maze.floorY + EYE, root.Position.Z)
 	local objectives = self.objectives
 
 	-- 1. FLEE from any monster it sees, to the nearest sanctuary
 	local threat = self:seeMonster(eye, monsters)
-	if threat then self.lastThreatAt = now end
+	if threat then
+		if now - (self.lastThreatAt or -math.huge) > 1 then self.waitFor = SAFE_AFTER + math.random() * SAFE_JITTER end
+		self.lastThreatAt = now
+		self.lastThreatPos = threat.pos
+	end
 	local safe = objectives:IsSafe(root.Position)
-	if threat or (self.mode == "flee" and now - self.lastThreatAt < SAFE_AFTER) then
+	if threat or (self.mode == "flee" and now - self.lastThreatAt < (self.waitFor or SAFE_AFTER)) then
 		if self.mode ~= "flee" or now >= self.replanAt then
 			self.mode = "flee"
 			self.replanAt = now + 1
@@ -325,7 +357,23 @@ function SurvivorBot:think(root, cx, cz, monsters, now)
 	end
 	if self.mode == "collect" and self.relic and not self.relic.collected and self.relic.model.Parent then return end
 
-	-- 3. ROAM: head for the nearest cell it hasn't visited (or anywhere, once it's seen it all)
+	-- 3. LEAVE a sanctuary it's sheltering in by a well-picked exit (see FLEE above)
+	if safe and self.mode == "flee" then
+		local sanctuary = self:sanctuaryAt(cx, cz)
+		local exit = sanctuary and self:pickExit(sanctuary, now)
+		if exit then
+			self.mode = "leave"
+			self.lastExit = exit
+			self.replanAt = now + REPLAN_EVERY * 2
+			self.path = self:search(cx, cz, function(x, z) return x == exit.out[1] and z == exit.out[2] end) or {}
+			local last = self.path[#self.path]
+			self.goalPoint = last and self:centerOf(last[1], last[2]) or nil
+			return
+		end
+	end
+	if self.mode == "leave" and #self.path > 0 and now < self.replanAt then return end
+
+	-- 4. ROAM: head for the nearest cell it hasn't visited (or anywhere, once it's seen it all)
 	if self.mode ~= "roam" or #self.path == 0 or now >= self.replanAt then
 		self.mode = "roam"
 		self.relic = nil

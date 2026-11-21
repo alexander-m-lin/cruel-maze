@@ -427,7 +427,7 @@ function MazeBuilder.build(options)
 			table.insert(wards, ward(e[1], e[2], e[3], SANCTUARY_WARD_COLOR, folder))
 		end
 		table.insert(sanctuaries, { id = plan.id, x = plan.x, z = plan.z, size = plan.size, cells = plan.cells, center = center,
-			floor = floor, wards = wards })
+			floor = floor, wards = wards, exits = plan.exits })
 	end
 
 	-- RELICS: a relic on a pedestal (see MazeBuilder.buildRelic)

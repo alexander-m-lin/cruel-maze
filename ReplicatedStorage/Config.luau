@@ -122,7 +122,7 @@ Config.HAUNT_SLOW = 0.7              -- a haunted survivor moves at this fractio
 -- Master sets off. They rumble, slam together (killing survivors between), then slide back.
 Config.CRUSHERS = 6                     -- how many per maze
 Config.CRUSHER_SPACING = 3              -- at least this many cells apart (and from doors)
-Config.CRUSHER_WARNING = 1              -- seconds of rumbling
+Config.CRUSHER_WARNING = 1.5              -- seconds of rumbling
 Config.CRUSHER_SLAM_TIME = 0.3
 Config.CRUSHER_HOLD_TIME = 0.4          -- seconds they stay shut
 Config.CRUSHER_RETURN_TIME = 1
