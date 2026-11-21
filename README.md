@@ -61,7 +61,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 - An AI **monster** roams the maze, and chases you when it sees or hears you. If it catches you,
   you lose one of your **3 lives**.
 - **Wards** (floating purple eyes) let the monster side see 50 studs around them, in line of sight. Once your team spots
-  one it stays shown; stand next to one and left-click, then stay close for 3 seconds (a bar
+  one it stays shown; stand next to one and left-click, then stay close for 2 seconds (a bar
   fills), to destroy it (the monster side sees where). Anything that reveals you (a false relic,
   a haunt) also lights up a small ring round you for the monster side. AI monsters come for you,
   even through walls, whenever you're within 120 studs and the monster side can see you

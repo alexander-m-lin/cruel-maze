@@ -6,7 +6,7 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 
 ## Working on this project
 
-**Status (2026-11-20):** Phases 0-3 are done (Phase 3 merged with its full six-human match still to be played). Phase 4 (heroes and abilities) is next. Don't start it until the user says to. The game is published privately as "Cruel Maze 0.1"; once Studio has it open from Roblox, saves go there, so use File > Save to File over `CruelMaze.rbxl` before committing (the user works from the local file). The README has how to play and what every script does.
+**Status (2026-11-21):** Phases 0-3 are done (Phase 3 merged with its full six-human match still to be played). Phase 4 (heroes and abilities) is in progress on the `phase-4` branch: Sara is built, plus many balance and Maze Master changes from playtesting (see the roadmap's Phase 4 notes). Not merged yet; its "done when" (more heroes, character select) isn't met. The game is published privately as "Cruel Maze 0.1"; once Studio has it open from Roblox, saves go there, so use File > Save to File over `CruelMaze.rbxl` before committing (the user works from the local file). The README has how to play and what every script does.
 
 **Files and Studio**
 - The place is `CruelMaze.rbxl` (renamed from `Place2.rbxl`). Scripts are mirrored between Studio and the repo folders by Studio's **Script Sync**: `.legacy.luau` = Script, `.local.luau` = LocalScript, `.luau` = ModuleScript. In Script Sync, each service (ServerScriptService, ServerStorage, ReplicatedStorage, StarterPlayerScripts, StarterGui › MazeHUD) is linked at the **repo root**. Linking a service to its own folder nests a duplicate folder inside it.
@@ -23,6 +23,8 @@ The implementation plan, with phases, estimates and progress checkboxes, is in [
 - The server's speed check (`SpeedCheck`) pulls back characters moved from the client. Teleport a player in tests with `ServerStorage.MatchTest:Invoke("teleport", player, cframe)` from the Server.
 - Scripted `Humanoid:Move()` gets overridden by the default controls. Use `user_keyboard_input` and `user_mouse_input` for real input.
 - The client in playtests often runs at about 15 fps, so time-sensitive measurements are noisy.
+- `user_mouse_input` coordinates are below the top bar: aim at `WorldToViewportPoint(...)` minus the GUI inset (58 px here). The real cursor can also drift the mouse between calls, so check `GetMouseLocation` or take the screenshot straight after moving.
+- Maze layout tables are `walls[x][z][side]` with sides "N"/"E"/"S"/"W" (MazeLayout.DIRS: `{dx, dz, side, opposite}`), not numbers. Use `MazeLayout.DIRS` in tests that walk the maze, or every wall reads as open.
 - Modules required from `execute_luau` are fresh copies, not the running game's. Reach live state through instances: attributes, or Studio-only hooks like `ServerStorage.DoorsTest` (a BindableFunction). On the client, door ghosts carry `Seen`/`RememberedShut` attributes, and the dev panel's `DevDoors` remote can be fired.
 - The isometric camera sits 210 studs away, so sounds are heard from the camera's focus (see `SoundEffects`), not the camera.
 - Player avatars here use AnimationConstraints and BallSocketConstraints rather than Motor6Ds. A Humanoid forces limbs to be non-colliding.
