@@ -59,8 +59,9 @@ Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching
 sleeves; left click does nothing for him):
 - **Right mouse: Devour** (5 s). He gathers himself for a moment, then lunges 14 studs the way he
   faces; the first survivor his hands reach is caught. He holds them up facing away, struggling,
-  winds his head back, lifts them flat and draws their head into his hood; the struggling stops
-  and he drops the body, which lies there for 4 seconds. Aimed at a *feared* survivor (within 20°
+  winds his head back, lifts them flat and draws their head into his hood, where they keep
+  struggling until it dies away; then he draws them back out and drops the body, which lies there
+  for 4 seconds. Aimed at a *feared* survivor (within 20°
   of where he faces, in a clear line), the lunge heads straight for them and reaches 35 studs.
 - **Q: Instill Fear** and **E: Living Nightmare**: coming next (shown greyed out on the bar).
 AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range.

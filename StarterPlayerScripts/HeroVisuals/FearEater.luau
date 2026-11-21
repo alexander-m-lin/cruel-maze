@@ -2,16 +2,17 @@
 -- calls `animate` here every frame). Everything is procedural (no animation files): each frame
 -- works out the joints' Transforms. His numbers and the kill's timing are in HeroData.FearEater.
 --
---   FLOATING - he hovers, rising and sinking slowly; moving, he bobs a little with each "stride"
---              (by distance travelled, so it keeps pace with his speed), sways side to side and
---              tips forward the faster he goes. The forearms drift and the claws flex.
---   HUNTING  - while chasing he raises his hands, spread a little, claws working.
+--   FLOATING - he hovers, rising and sinking slowly; moving, he glides level, sways side to side
+--              and tips forward the faster he goes. The forearms drift and the claws flex.
+--   HUNTING  - while chasing he raises his hands, spread a little, claws working, and bobs with
+--              each "stride" (by distance travelled, so it keeps pace with his speed).
 --   DEVOUR   - gathers himself (leans back, arms drawn back), then throws himself forward with
 --              both hands thrust out ("DevourAt" etc. on the body, from the server).
 --   THE KILL - ("KillStart"/"KillVictim") his hands close on the victim, held off their feet in
 --              front of him facing away, flailing. He winds his head back, lifting them, then
---              brings their head up into his hood and tips forward over them; the struggling dies
---              away; he lets go and the body drops to the floor, lies there a few seconds, fades.
+--              brings their head up into his hood and tips forward over them, laid flat; they keep
+--              struggling in there until it dies away; he draws them back out and lets go, and the
+--              body drops to the floor, lies there a few seconds, fades.
 --
 -- Joints (ServerStorage.FearEaterRig): Root (the root to the cloak), Left/Right Shoulder, Elbow,
 -- Wrist, all Motor6Ds whose frames are lined up with the body, so Transform angles are in body
@@ -31,7 +32,7 @@ local K = HERO.kill
 ---------------------------------------------------------------- tuning
 local HOVER_BOB    = 0.25    -- studs he rises and sinks while hovering in place...
 local HOVER_RATE   = 0.45    -- ...cycles per second
-local MOVE_BOB     = 0.2     -- studs of bob while moving...
+local MOVE_BOB     = 0.2     -- studs of bob while chasing (none while just moving)...
 local MOVE_STRIDE  = 9       -- ...once every this many studs travelled
 local FULL_SPEED   = 24      -- speed that counts as "full speed" for leaning
 local LEAN         = 0.16    -- radians he tips forward at full speed
@@ -116,15 +117,17 @@ function animate.pose(model, s, dt)
 	fe.stride = (fe.stride + dt * speed / MOVE_STRIDE) % 1
 	fe.sway = (fe.sway + dt * speed / (MOVE_STRIDE * 2)) % 1
 
-	-- FLOATING: hover bob, blending into a stride bob as he moves; tipping forward with speed
+	-- FLOATING: hover bob standing still; moving, level (or a stride bob while chasing); tipping
+	-- forward with speed
+	fe.reach += ((s.mode == "chase" and 1 or 0) - fe.reach) * math.min(1, dt * REACH_EASE)
 	local hover = math.sin(fe.t * math.pi * 2 * HOVER_RATE) * HOVER_BOB
-	local bob = lerp(hover, math.sin(fe.stride * math.pi * 2) * MOVE_BOB + hover * 0.4, move)
+	local strideBob = (math.sin(fe.stride * math.pi * 2) * MOVE_BOB + hover * 0.4) * fe.reach
+	local bob = lerp(hover, strideBob, move)
 	local pitch = -LEAN * run
 	local roll = math.sin(fe.sway * math.pi * 2) * SWAY * move
 	local yaw = math.sin(fe.sway * math.pi * 2 + 0.6) * 0.04 * move
 
 	-- ARMS. elbowPitch > 0 raises the hands; elbowIn > 0 brings them together; wrist < 0 curls the claws
-	fe.reach += ((s.mode == "chase" and 1 or 0) - fe.reach) * math.min(1, dt * REACH_EASE)
 	local reach = fe.reach
 	local arms = {}
 	for side, arm in fe.arms do
@@ -174,7 +177,8 @@ function animate.pose(model, s, dt)
 		local wind = smooth((k - K.WIND) / (K.ENGULF - K.WIND))
 		local engulf = smooth((k - K.ENGULF) / 0.3)
 		local w = grab * settle
-		local killPitch = wind * WIND_BACK * (1 - engulf) + engulf * ENGULF_TIP
+		local out = smooth((k - K.OUT) / 0.4)
+		local killPitch = (wind * WIND_BACK * (1 - engulf) + engulf * ENGULF_TIP) * (1 - out * 0.7)
 		pitch = lerp(pitch, killPitch, w)
 		bob = lerp(bob, 0.3 + math.sin(k * 3) * 0.05, w)
 		roll = lerp(roll, 0, w)
@@ -187,7 +191,7 @@ function animate.pose(model, s, dt)
 			local target = v and v.local_ and (v.local_ * Vector3.new(arm.sx * grip.X, grip.Y, grip.Z)) or nil
 			local held = target and aimAt(fe, side, target) or elbows[side]
 			-- a shudder while they struggle
-			local struggle = math.clamp(1 - smooth((k - K.ENGULF) / (K.STILL - K.ENGULF)), 0, 1)
+			local struggle = 1 - smooth((k - K.FADE) / (K.STILL - K.FADE))
 			held = held * CFrame.Angles(math.sin(k * 31 + arm.sx) * 0.03 * struggle, 0, 0)
 			local released = CFrame.Angles(0.2, -0.35 * arm.sx, 0)
 			elbows[side] = elbows[side]:Lerp(held:Lerp(released, open), w)
@@ -201,12 +205,14 @@ function animate.pose(model, s, dt)
 		if j[side .. "Wrist"] then j[side .. "Wrist"].Transform = CFrame.Angles(arms[side].wrist, 0, 0) end
 	end
 
-	-- the victim struggling in his grip, weaker once their head's in the hood, then still
+	-- the victim struggling in his grip, wilder as they're lifted to the hood and inside it, until
+	-- it dies away and they hang still
 	if v and v.joints and v.character.Parent and k and k < K.RELEASE then
-		local power = smooth(k / 0.3) * (1 - smooth((k - K.ENGULF) / (K.STILL - K.ENGULF)))
-		power *= 1 + 0.4 * smooth((k - K.WIND) / (K.ENGULF - K.WIND))      -- wilder as they're lifted to the hood
+		local dying = smooth((k - K.FADE) / (K.STILL - K.FADE))
+		local power = smooth(k / 0.3) * (1 - dying)
+		power *= 1 + 0.4 * smooth((k - K.WIND) / (K.ENGULF - K.WIND))
 		Victims.flail(v.joints, k, math.min(power, 1.3))
-		Victims.limp(v.joints, smooth((k - K.ENGULF) / (K.STILL - K.ENGULF)))
+		Victims.limp(v.joints, dying)
 	end
 end
 
@@ -218,9 +224,12 @@ local function heldAt(fe, v, k)
 	-- head in the hood: their head where the hood is, leaning back toward him
 	local engulf = CFrame.new(fe.hood + HEAD_IN) * CFrame.Angles(HEAD_TILT, 0, 0)
 		* CFrame.new(-v.headOffset)
+	-- drawn back out: still flat, lower and further out in front
+	local out = CFrame.new(0, -0.9, -1.8) * engulf
 	local cf = v.from:Lerp(hold, smooth(k / K.GRAB))
 	cf = cf:Lerp(raise, smooth((k - K.WIND) / (K.ENGULF - K.WIND)))
-	return cf:Lerp(engulf, smooth((k - K.ENGULF) / 0.3))
+	cf = cf:Lerp(engulf, smooth((k - K.ENGULF) / 0.3))
+	return cf:Lerp(out, smooth((k - K.OUT) / 0.4))
 end
 
 -- Every frame, after his body is in place: carry the victim in his hands, and at the release
@@ -273,10 +282,12 @@ function animate.victim(model, s)
 		if not v.from then v.from = frame:ToObjectSpace(v.root.CFrame) end   -- where they were, in his space
 		v.local_ = heldAt(fe, v, k)
 		v.root.CFrame = frame * v.local_
-		-- head swallowed by the hood
-		if k > K.ENGULF + 0.2 then
-			for _, part in v.headParts do part.LocalTransparencyModifier = 1 end
+		-- head swallowed by the hood (until it's drawn back out)
+		local swallowed = k > K.ENGULF + 0.2 and k < K.OUT + 0.15
+		if swallowed or v.swallowed then
+			for _, part in v.headParts do part.LocalTransparencyModifier = (swallowed or monsterHidden) and 1 or 0 end
 		end
+		v.swallowed = swallowed
 		return
 	end
 	-- the release

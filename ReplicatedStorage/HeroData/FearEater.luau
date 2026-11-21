@@ -18,10 +18,12 @@ return {
 	kill = {
 		GRAB = 0.25,     -- hands close on them, lifted off their feet, facing away from him
 		WIND = 1.0,      -- he winds his head back, lifting them higher
-		ENGULF = 1.45,   -- ...and brings their head up into his hood
-		STILL = 2.2,     -- their struggling has died away by now
-		RELEASE = 2.6,   -- he lets go: the body drops to the floor
-		DONE = 3.0,      -- he moves again
+		ENGULF = 1.45,   -- ...and brings their head up into his hood, where they keep struggling...
+		FADE = 2.5,      -- ...until it starts to die away...
+		STILL = 3.0,     -- ...and they're still
+		OUT = 3.1,       -- he draws them back out of the hood (taking 0.4 s)...
+		RELEASE = 3.6,   -- ...and lets go: the body drops to the floor
+		DONE = 4.0,      -- he moves again
 	},
 	CORPSE_TIME = 4,           -- seconds the body lies there before it fades
 
