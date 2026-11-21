@@ -45,12 +45,13 @@ local HEAD_TILT    = 1.35    -- radians the victim is tipped back once their hea
 local HEAD_IN      = Vector3.new(0, -0.1, 0.25)   -- ...their head this far inside the hood's opening
 local WIND_BACK    = 0.35    -- radians he tips back, winding his head back
 local ENGULF_TIP   = -0.22   -- ...then forward, over them
-local GRIP_SIDE    = 1.6     -- his hands close this far either side of the victim's middle...
-local GRIP_UP      = 0.6     -- ...this high up their body...
-local GRIP_BACK    = 0.4     -- ...and this far behind it (so the fingers wrap round to the front)
--- once they're laid flat with their head in the hood, he holds them from underneath, at the hips
-local GRIP_FLAT    = Vector3.new(1.9, -0.7, 1.0)   -- (side, along their body, below their back)
-local GRIP_CURL    = -0.7    -- radians his claws curl round them while he holds them
+-- THE GRIP: each palm on the side of the victim's chest, from grab to drop. The elbow and wrist
+-- bend together (two-joint "inverse kinematics") so the palm lands there with the wrist behind
+-- and outside them, and the claws wrap round to their front.
+local GRIP_OUT     = 0.15    -- studs out from the side of their chest
+local GRIP_UP      = 0.1     -- studs up from its middle
+local WRIST_BACK   = 1.0     -- the wrist sits this much behind them...
+local WRIST_OUT    = 0.6     -- ...and out to the side, so the hand comes round
 
 local function lerp(a, b, t) return a + (b - a) * t end
 local function smooth(x) x = math.clamp(x, 0, 1) return x * x * (3 - 2 * x) end
@@ -70,8 +71,8 @@ local animate = {}
 FearEater.animate = animate
 
 ---------------------------------------------------------------- setup
--- Measured in the rest pose (before any Transform): where the hood and the elbows are, and where
--- each hand's grip points from its elbow, in his own space (relative to his root).
+-- Measured in the rest pose (before any Transform): where the hood, elbows and wrists are, and
+-- where each hand's grip is, in his own space (relative to his root).
 function animate.setup(model, s)
 	local fe = { joints = {}, t = math.random() * 10, stride = 0, sway = 0, reach = 0, arms = {} }
 	for _, d in model:GetDescendants() do
@@ -83,25 +84,40 @@ function animate.setup(model, s)
 	fe.hood = hood and pivot:PointToObjectSpace(hood.WorldPosition) or Vector3.new(0, 3.7, -0.3)
 	fe.floor = -(model:GetAttribute("GroundOffset") or 4)
 	for _, side in { "Left", "Right" } do
-		local elbow = fe.joints[side .. "Elbow"]
+		local elbow, wrist = fe.joints[side .. "Elbow"], fe.joints[side .. "Wrist"]
 		local hand = model:FindFirstChild(side .. "Hand")
 		local grip = hand and hand:FindFirstChild("Grip")
-		if elbow and grip then
-			local at = pivot:PointToObjectSpace((elbow.Part0.CFrame * elbow.C0).Position)
-			fe.arms[side] = { elbow = at, rest = pivot:PointToObjectSpace(grip.WorldPosition) - at,
-				sx = side == "Left" and -1 or 1 }
+		if elbow and wrist and grip then
+			local e = pivot:PointToObjectSpace((elbow.Part0.CFrame * elbow.C0).Position)
+			local w = pivot:PointToObjectSpace((wrist.Part0.CFrame * wrist.C0).Position)
+			local g = pivot:PointToObjectSpace(grip.WorldPosition)
+			fe.arms[side] = { elbow = e, forearm = w - e, hand = g - w, sx = side == "Left" and -1 or 1 }
 		end
 	end
 	s.fe = fe
 end
 
--- The elbow rotation that points the hand's grip at `target` (his own space)
-local function aimAt(fe, side, target)
+-- Elbow and wrist rotations that put the hand's grip on `target`, with the wrist bent out toward
+-- `pole` (both in his own space). Forearm and hand are two straight pieces: the triangle they make
+-- with the line to the target gives the forearm's angle off that line (the law of cosines).
+local function grip(fe, side, target, pole)
 	local arm = fe.arms[side]
-	if not arm then return CFrame.identity end
-	local want = target - arm.elbow
-	if want.Magnitude < 0.1 then return CFrame.identity end
-	return CFrame.fromRotationBetweenVectors(arm.rest, want)
+	local L1, L2 = arm.forearm.Magnitude, arm.hand.Magnitude
+	local toTarget = target - arm.elbow
+	if toTarget.Magnitude < 0.1 then return CFrame.identity, CFrame.identity end
+	local u = toTarget.Unit
+	local d = math.clamp(toTarget.Magnitude, math.abs(L1 - L2) + 0.05, L1 + L2 - 0.05)
+	local a = math.acos(math.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1))
+	local p = pole - u * pole:Dot(u)
+	if p.Magnitude < 0.01 then p = Vector3.yAxis - u * u.Y end
+	p = p.Unit
+	local forearm = u * math.cos(a) + p * math.sin(a)
+	local elbowRot = CFrame.fromRotationBetweenVectors(arm.forearm, forearm)
+	local wristAt = arm.elbow + forearm * L1
+	-- the wrist's frame turns with the forearm, so the hand's direction is worked out in that frame
+	local handDir = elbowRot:VectorToObjectSpace(target - wristAt)
+	if handDir.Magnitude < 0.01 then return elbowRot, CFrame.identity end
+	return elbowRot, CFrame.fromRotationBetweenVectors(arm.hand, handDir)
 end
 
 ---------------------------------------------------------------- the pose, every frame
@@ -162,7 +178,7 @@ function animate.pose(model, s, dt)
 		end
 	end
 
-	local elbows = {}
+	local elbows, wrists = {}, {}
 	for side, a in arms do
 		local arm = fe.arms[side]
 		elbows[side] = CFrame.Angles(a.pitch, a.inward * arm.sx, 0)
@@ -183,26 +199,31 @@ function animate.pose(model, s, dt)
 		bob = lerp(bob, 0.3 + math.sin(k * 3) * 0.05, w)
 		roll = lerp(roll, 0, w)
 		yaw = lerp(yaw, 0, w)
-		-- hands on the victim (aimed at their sides, wherever they're being held), letting go and
+		-- hands gripping the sides of their chest, wherever they're being held; letting go and
 		-- opening at the release
 		local open = smooth((k - K.RELEASE) / 0.25)
 		for side, arm in fe.arms do
-			local grip = Vector3.new(GRIP_SIDE, GRIP_UP, GRIP_BACK):Lerp(GRIP_FLAT, engulf)
-			local target = v and v.local_ and (v.local_ * Vector3.new(arm.sx * grip.X, grip.Y, grip.Z)) or nil
-			local held = target and aimAt(fe, side, target) or elbows[side]
+			local heldElbow, heldWrist = elbows[side], CFrame.Angles(arms[side].wrist, 0, 0)
+			if v and v.local_ then
+				-- their chest's frame, in his space: x their right, z their back
+				local chest = v.local_ * CFrame.new(v.chest)
+				local target = chest * Vector3.new(arm.sx * (v.chestHalf + GRIP_OUT), GRIP_UP, 0)
+				local pole = chest:VectorToWorldSpace(Vector3.new(arm.sx * WRIST_OUT, 0, WRIST_BACK))
+				heldElbow, heldWrist = grip(fe, side, target, pole)
+			end
 			-- a shudder while they struggle
 			local struggle = 1 - smooth((k - K.FADE) / (K.STILL - K.FADE))
-			held = held * CFrame.Angles(math.sin(k * 31 + arm.sx) * 0.03 * struggle, 0, 0)
+			heldElbow = heldElbow * CFrame.Angles(math.sin(k * 31 + arm.sx) * 0.03 * struggle, 0, 0)
 			local released = CFrame.Angles(0.2, -0.35 * arm.sx, 0)
-			elbows[side] = elbows[side]:Lerp(held:Lerp(released, open), w)
-			arms[side].wrist = lerp(arms[side].wrist, lerp(GRIP_CURL, 0.3, open), w)
+			elbows[side] = elbows[side]:Lerp(heldElbow:Lerp(released, open), w)
+			wrists[side] = CFrame.Angles(arms[side].wrist, 0, 0):Lerp(heldWrist:Lerp(CFrame.Angles(0.3, 0, 0), open), w)
 		end
 	end
 
 	j.Root.Transform = CFrame.new(0, bob, 0) * CFrame.Angles(pitch, yaw, roll)
 	for side, cf in elbows do
 		if j[side .. "Elbow"] then j[side .. "Elbow"].Transform = cf end
-		if j[side .. "Wrist"] then j[side .. "Wrist"].Transform = CFrame.Angles(arms[side].wrist, 0, 0) end
+		if j[side .. "Wrist"] then j[side .. "Wrist"].Transform = wrists[side] or CFrame.Angles(arms[side].wrist, 0, 0) end
 	end
 
 	-- the victim struggling in his grip, wilder as they're lifted to the hood and inside it, until
@@ -260,8 +281,11 @@ function animate.victim(model, s)
 					if d:IsA("Decal") then table.insert(headParts, d) end
 				end
 			end
+			-- their chest: where it is from their root, and half its width (for the grip)
+			local chest = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or root
 			fe.victim = {
 				character = character, root = root, start = killStart, copy = character:Clone(), headParts = headParts,
+				chest = root.CFrame:PointToObjectSpace(chest.Position), chestHalf = chest.Size.X / 2,
 				joints = Victims.joints(character),
 				headOffset = head and root.CFrame:PointToObjectSpace(head.Position) or Vector3.new(0, 1.6, 0),
 				standHeight = (humanoid and humanoid.HipHeight or 2) + root.Size.Y / 2,
