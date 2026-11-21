@@ -2,8 +2,9 @@
 -- calls `animate` here every frame). Everything is procedural (no animation files): each frame
 -- works out the joints' Transforms. His numbers and the kill's timing are in HeroData.FearEater.
 --
---   FLOATING - he hovers, rising and sinking slowly; moving, he glides level, sways side to side
---              and tips forward the faster he goes. The forearms drift and the claws flex.
+--   FLOATING - his body rises and sinks slowly as he hovers, and bobs gently with each "stride"
+--              as he moves, while his arms stay put (so they shift against the hood); he tips
+--              forward the faster he goes. The forearms drift and the claws flex.
 --   HUNTING  - while chasing he raises his hands, spread a little, claws working, and bobs with
 --              each "stride" (by distance travelled, so it keeps pace with his speed).
 --   DEVOUR   - gathers himself (leans back, arms drawn back), then throws himself forward with
@@ -38,11 +39,12 @@ local K = HERO.kill
 ---------------------------------------------------------------- tuning
 local HOVER_BOB    = 0.25    -- studs he rises and sinks while hovering in place...
 local HOVER_RATE   = 0.45    -- ...cycles per second
-local MOVE_BOB     = 0.2     -- studs of bob while chasing (none while just moving)...
+local MOVE_BOB     = 0.2     -- studs of bob while chasing (arms and all)...
+local WALK_BOB     = 0.18    -- studs his body bobs while just moving (his arms don't)
 local MOVE_STRIDE  = 9       -- ...once every this many studs travelled
 local FULL_SPEED   = 24      -- speed that counts as "full speed" for leaning
 local LEAN         = 0.16    -- radians he tips forward at full speed
-local SWAY         = 0.05    -- radians he rolls side to side while moving
+local SWAY         = 0.05    -- radians he rolls side to side while chasing
 local REACH_EASE   = 4       -- how quickly his hands rise/fall when a chase starts/ends
 -- the kill: where the victim is held (studs, from his root: x right, y up, z back)
 local HOLD_AT      = Vector3.new(0, -0.1, -3.5)    -- in front of him, feet just off the floor
@@ -139,15 +141,19 @@ function animate.pose(model, s, dt)
 	fe.stride = (fe.stride + dt * speed / MOVE_STRIDE) % 1
 	fe.sway = (fe.sway + dt * speed / (MOVE_STRIDE * 2)) % 1
 
-	-- FLOATING: hover bob standing still; moving, level (or a stride bob while chasing); tipping
-	-- forward with speed
+	-- FLOATING: the body hovers up and down standing still, or bobs gently with each stride when
+	-- moving, leaving the arms where they are (the shoulders move the other way: armsStill).
+	-- While chasing, everything bobs together, arms and all, with a sway. Tipping forward with speed.
 	fe.reach += ((s.mode == "chase" and 1 or 0) - fe.reach) * math.min(1, dt * REACH_EASE)
 	local hover = math.sin(fe.t * math.pi * 2 * HOVER_RATE) * HOVER_BOB
-	local strideBob = (math.sin(fe.stride * math.pi * 2) * MOVE_BOB + hover * 0.4) * fe.reach
-	local bob = lerp(hover, strideBob, move)
+	local stride = math.sin(fe.stride * math.pi * 2)
+	local bodyOnly = lerp(hover, stride * WALK_BOB, move)                  -- (arms held still)
+	local whole = lerp(hover, stride * MOVE_BOB + hover * 0.4, move)       -- (chasing: arms too)
+	local bob = lerp(bodyOnly, whole, fe.reach)
+	local armsStill = bodyOnly * (1 - fe.reach)
 	local pitch = -LEAN * run
-	local roll = math.sin(fe.sway * math.pi * 2) * SWAY * move
-	local yaw = math.sin(fe.sway * math.pi * 2 + 0.6) * 0.04 * move
+	local roll = math.sin(fe.sway * math.pi * 2) * SWAY * move * fe.reach
+	local yaw = math.sin(fe.sway * math.pi * 2 + 0.6) * 0.04 * move * fe.reach
 
 	-- ARMS. elbowPitch > 0 raises the hands; elbowIn > 0 brings them together; wrist < 0 curls the claws
 	local reach = fe.reach
@@ -176,6 +182,7 @@ function animate.pose(model, s, dt)
 		if d < windup + dashTime + 0.6 then
 			pitch = lerp(lerp(pitch, 0.18, gather), -0.38, thrust)
 			bob = lerp(bob, 0.3, thrust)
+			armsStill = lerp(armsStill, 0, math.max(gather, thrust))
 			for _, a in arms do
 				a.pitch = lerp(lerp(a.pitch, 0.3, gather), 0.45, thrust)
 				a.inward = lerp(lerp(a.inward, -0.25, gather), 0.12, thrust)
@@ -193,6 +200,7 @@ function animate.pose(model, s, dt)
 			local up = smooth(c / 0.2) * (1 - smooth((c - 0.6) / 0.4))
 			pitch = lerp(pitch, 0.25, up)
 			bob = lerp(bob, 0.6, up)
+			armsStill = lerp(armsStill, 0, up)
 			for _, a in arms do
 				a.pitch = lerp(a.pitch, 0.9, up)
 				a.inward = lerp(a.inward, -0.5, up)
@@ -202,6 +210,7 @@ function animate.pose(model, s, dt)
 			local hunch = smooth(c / 0.15) * (1 - smooth((c - 0.35) / 0.4))
 			pitch = lerp(pitch, -0.45, hunch)
 			bob = lerp(bob, -0.6, hunch)
+			armsStill = lerp(armsStill, 0, hunch)
 			for _, a in arms do
 				a.pitch = lerp(a.pitch, -0.2, hunch)
 				a.inward = lerp(a.inward, 0.3, hunch)
@@ -225,6 +234,7 @@ function animate.pose(model, s, dt)
 		local wind = smooth((k - K.WIND) / (K.ENGULF - K.WIND))
 		local engulf = smooth((k - K.ENGULF) / 0.3)
 		local w = grab * settle
+		armsStill = lerp(armsStill, 0, w)
 		local out = smooth((k - K.OUT) / 0.4)
 		local killPitch = (wind * WIND_BACK * (1 - engulf) + engulf * ENGULF_TIP) * (1 - out * 0.7)
 		pitch = lerp(pitch, killPitch, w)
@@ -253,6 +263,10 @@ function animate.pose(model, s, dt)
 	end
 
 	j.Root.Transform = CFrame.new(0, bob, 0) * CFrame.Angles(pitch, yaw, roll)
+	for _, side in { "Left", "Right" } do
+		local shoulder = j[side .. "Shoulder"]
+		if shoulder then shoulder.Transform = CFrame.new(0, -armsStill, 0) end
+	end
 	for side, cf in elbows do
 		if j[side .. "Elbow"] then j[side .. "Elbow"].Transform = cf end
 		if j[side .. "Wrist"] then j[side .. "Wrist"].Transform = wrists[side] or CFrame.Angles(arms[side].wrist, 0, 0) end
