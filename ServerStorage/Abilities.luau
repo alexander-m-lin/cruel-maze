@@ -134,6 +134,7 @@ function handlers.Whip(user, root, aim, def)
 			match.stun(monster, seconds + def.stun)        -- stunned while dragged, then for def.stun
 		end
 	end)
+	if hit.kind == "miss" then return false end   -- a whiff: def.missCooldown instead (no message)
 	return true
 end
 

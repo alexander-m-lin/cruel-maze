@@ -26,6 +26,7 @@ Heroes.list = {
 			-- you to it; a teammate is pulled to you; a monster is pulled to you and stunned.
 			Primary = {
 				id = "Whip", name = "Whip", cooldown = 5,
+				missCooldown = 2,      -- hits nothing at all (a whiff): ready again sooner
 				range = 39,            -- studs
 				speed = 140,           -- studs per second the lash travels (out; it comes back faster)
 				pullSpeed = 70,        -- studs per second whoever's pulled travels

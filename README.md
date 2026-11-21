@@ -38,7 +38,7 @@ starts another straight away, and "Doors" opens the doors panel.
 
 **Heroes:** every survivor plays **Sara, the Cryptraider** for now (more heroes and a character
 select are coming). Abilities aim the way you face:
-- **Right mouse: Whip** (5 s). Lashes out 39 studs, catching monsters within 5 studs of it and
+- **Right mouse: Whip** (5 s; 2 s if it hits nothing). Lashes out 39 studs, catching monsters within 5 studs of it and
   teammates within 4. A wall or relic pulls you to it; a teammate is
   pulled to you; a monster is pulled to you and stunned for 1 second.
 - **Q: Treasure hunt** (15 s). The nearest relic your team hasn't spotted (real or false) within
@@ -111,7 +111,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `ReplicatedStorage/Net.luau` | ReplicatedStorage (ModuleScript) | Creates/finds the remote events used to message between server and players |
 | `StarterGui/MazeHUD/HUD.local.luau` | StarterGui › MazeHUD | Timer, relics and lives, announcements, relic progress bars |
 | `StarterPlayerScripts/Controls.local.luau` | StarterPlayer › StarterPlayerScripts | Facing the mouse, speed by direction, backwards running, facing a relic while collecting it |
-| `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera; watches a teammate when you have no character |
+| `StarterPlayerScripts/IsometricCamera.local.luau` | StarterPlayer › StarterPlayerScripts | Fixed isometric camera; watches a teammate (a player, or a survivor bot) when you have no character |
 | `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight, shared with teammates, plus the vision around spotted relics |
 | `StarterPlayerScripts/FogState.luau` | StarterPlayer › StarterPlayerScripts (ModuleScript) | What the fog knows (seen, in view), shared with the minimap |
 | `StarterPlayerScripts/Minimap.local.luau` | StarterPlayer › StarterPlayerScripts | Corner map: explored and in-view areas, and dots for you, teammates, spotted relics and a visible monster (M hides it) |

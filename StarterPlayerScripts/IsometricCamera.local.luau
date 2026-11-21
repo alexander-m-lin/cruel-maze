@@ -2,6 +2,7 @@
 -- Runs on each player's own computer (LocalScript), because the camera is client-side.
 
 local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -59,18 +60,28 @@ local function aliveRoot(character)
 end
 
 -- Who to watch when you have no character (choosing a spawn room, or out of lives):
--- a teammate who's still alive, sticking with the same one while they are
-local watching = nil
+-- a teammate who's still alive (a player, or a survivor bot), sticking with the same one while
+-- they are. People first, then bots.
+local watching = nil   -- the character being watched
 local function teammateRoot()
 	local myRole = player:GetAttribute("Role")
-	if watching and watching.Parent and aliveRoot(watching.Character) then
-		return aliveRoot(watching.Character), watching.Character
+	if watching and watching.Parent and aliveRoot(watching) then
+		return aliveRoot(watching), watching
 	end
 	watching = nil
+	if not myRole then return nil end
 	for _, other in Players:GetPlayers() do
-		if other ~= player and myRole and other:GetAttribute("Role") == myRole and aliveRoot(other.Character) then
-			watching = other
-			return aliveRoot(other.Character), other.Character
+		if other ~= player and other:GetAttribute("Role") == myRole and aliveRoot(other.Character) then
+			watching = other.Character
+			return aliveRoot(watching), watching
+		end
+	end
+	if myRole == Config.Roles.Survivor then
+		for _, bot in CollectionService:GetTagged("SurvivorBot") do
+			if bot:IsDescendantOf(workspace) and aliveRoot(bot) then
+				watching = bot
+				return aliveRoot(bot), bot
+			end
 		end
 	end
 	return nil
