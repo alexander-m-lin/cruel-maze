@@ -63,8 +63,16 @@ sleeves; left click does nothing for him):
   struggling until it dies away; then he draws them back out and drops the body, which lies there
   for 4 seconds. Aimed at a *feared* survivor (within 20°
   of where he faces, in a clear line), the lunge heads straight for them and reaches 35 studs.
-- **Q: Instill Fear** and **E: Living Nightmare**: coming next (shown greyed out on the bar).
-AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range.
+- **Q: Instill Fear** (25 s). He rears up, arms flung wide, and a dark ring sweeps out from him.
+  Every survivor outside a sanctuary, wherever they are, feels **dread**: a 5-second countdown to
+  reach a sanctuary or get within 10 studs of another survivor (bots count). Anyone who doesn't
+  is **feared** for 5 seconds: revealed to the monster side and slowed to 80%.
+- **E: Living Nightmare** (60 s). For 7 seconds he goes half see-through, trailing dark mist, and
+  passes through the maze's inner walls and doors (not the outer wall, and never into a
+  sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
+  them). Ending inside a wall pushes him out into the middle of that cell.
+AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range (they
+don't use Q or E yet). The cast animations are simple stand-ins for now.
 
 **How a match goes (as a survivor):**
 - Find and collect **6 of the 9 relics** within **4 minutes**. Standing on a relic shows a prompt (a mouse with its left button lit):
@@ -151,6 +159,7 @@ AI monsters are Fear Eater too: they Devour whoever they're chasing once they're
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/HauntAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The purple screen edge and whisper when you're haunted |
+| `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |

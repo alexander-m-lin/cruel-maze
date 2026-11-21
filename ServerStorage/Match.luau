@@ -89,15 +89,24 @@ PhysicsService:RegisterCollisionGroup("Survivors")
 PhysicsService:RegisterCollisionGroup("MonsterPlayers")
 PhysicsService:RegisterCollisionGroup("Wards")
 PhysicsService:RegisterCollisionGroup("Crushers")
+-- Fear Eater's Living Nightmare: his character ("Nightmare") passes through the maze's inner walls
+-- and doors ("MazeInner"; the outer wall and sanctuaries' walls stay ordinary), and otherwise
+-- collides like any monster player
+PhysicsService:RegisterCollisionGroup("MazeInner")
+PhysicsService:RegisterCollisionGroup("Nightmare")
 PhysicsService:CollisionGroupSetCollidable("Crushers", "MonsterPlayers", false)
 PhysicsService:CollisionGroupSetCollidable("Survivors", "MonsterPlayers", false)
+PhysicsService:CollisionGroupSetCollidable("Crushers", "Nightmare", false)
+PhysicsService:CollisionGroupSetCollidable("Survivors", "Nightmare", false)
+PhysicsService:CollisionGroupSetCollidable("MazeInner", "Nightmare", false)
 for _, group in PhysicsService:GetRegisteredCollisionGroups() do
-	if group.name ~= "MonsterPlayers" and group.name ~= "Wards" then
+	if group.name ~= "MonsterPlayers" and group.name ~= "Nightmare" and group.name ~= "Wards" then
 		PhysicsService:CollisionGroupSetCollidable("Wards", group.name, false)
 	end
 end
 PhysicsService:CollisionGroupSetCollidable("Wards", "Wards", false)
 PhysicsService:CollisionGroupSetCollidable("Wards", "MonsterPlayers", true)
+PhysicsService:CollisionGroupSetCollidable("Wards", "Nightmare", true)
 
 local state = nil
 local maze = nil         -- this match's maze (see MazeBuilder.build)

@@ -163,6 +163,38 @@ function PlayerMonster:Devour(aim, distance, time, def)
 	return true
 end
 
+-- LIVING NIGHTMARE (HeroAbilities.FearEater): for def.duration seconds their character is in the
+-- "Nightmare" collision group (through inner walls and doors) and sped toward feared survivors
+-- ("NightmareUntil"/"NightmareBoost", read by Movement and SpeedCheck). The body shows it too.
+-- onEnd(character) runs when it wears off (pushing them out of a wall they ended inside).
+function PlayerMonster:Nightmare(def, onEnd)
+	if not self.active or self.killUntil or os.clock() < (self.stunUntil or 0) then return false end
+	local character = self.player.Character
+	if not rootOf(self.player) then return false end
+	local untilServer = workspace:GetServerTimeNow() + def.duration
+	local function setGroup(group)
+		for _, d in character:GetDescendants() do
+			if d:IsA("BasePart") then d.CollisionGroup = group end
+		end
+	end
+	setGroup("Nightmare")
+	self.player:SetAttribute("NightmareBoost", def.speedBoost)
+	self.player:SetAttribute("NightmareUntil", untilServer)
+	self.model:SetAttribute("NightmareUntil", untilServer)
+	self.model:SetAttribute("CastKind", "LivingNightmare")
+	self.model:SetAttribute("CastAt", workspace:GetServerTimeNow())
+	task.delay(def.duration, function()
+		if (self.player:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow() + 0.05 then return end  -- cast again since
+		self.player:SetAttribute("NightmareUntil", nil)
+		if self.model then self.model:SetAttribute("NightmareUntil", nil) end
+		if character.Parent then
+			setGroup("MonsterPlayers")
+			onEnd(character)
+		end
+	end)
+	return true
+end
+
 function PlayerMonster:Step(dt, targets)
 	if not self.model then return end
 	local now = os.clock()

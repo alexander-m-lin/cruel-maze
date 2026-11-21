@@ -8,6 +8,11 @@
 --              each "stride" (by distance travelled, so it keeps pace with his speed).
 --   DEVOUR   - gathers himself (leans back, arms drawn back), then throws himself forward with
 --              both hands thrust out ("DevourAt" etc. on the body, from the server).
+--   INSTILL FEAR - ("CastKind"/"CastAt") he rears up, arms flung wide, and a dark ring sweeps
+--              out across the floor from him.
+--   LIVING NIGHTMARE - he hunches in on himself, then for its duration ("NightmareUntil") turns
+--              half see-through, trailing dark mist.
+--   (These two are stand-ins, to be replaced by full animations.)
 --   THE KILL - ("KillStart"/"KillVictim") his hands close on the victim, held off their feet in
 --              front of him facing away, flailing. He winds his head back, lifting them, then
 --              brings their head up into his hood and tips forward over them, laid flat; they keep
@@ -21,6 +26,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
 local Characters = require(ReplicatedStorage:WaitForChild("Characters"))
@@ -178,6 +184,32 @@ function animate.pose(model, s, dt)
 		end
 	end
 
+	-- CASTS: Instill Fear (rearing up, arms flung wide) and Living Nightmare (hunching in)
+	local castAt = model:GetAttribute("CastAt")
+	if castAt and not s.killStart then
+		local c = clock(castAt, "CastPreviewAt")
+		local kind = model:GetAttribute("CastKind")
+		if kind == "InstillFear" and c < 1.2 then
+			local up = smooth(c / 0.2) * (1 - smooth((c - 0.6) / 0.4))
+			pitch = lerp(pitch, 0.25, up)
+			bob = lerp(bob, 0.6, up)
+			for _, a in arms do
+				a.pitch = lerp(a.pitch, 0.9, up)
+				a.inward = lerp(a.inward, -0.5, up)
+				a.wrist = lerp(a.wrist, 0.5, up)
+			end
+		elseif kind == "LivingNightmare" and c < 1 then
+			local hunch = smooth(c / 0.15) * (1 - smooth((c - 0.35) / 0.4))
+			pitch = lerp(pitch, -0.45, hunch)
+			bob = lerp(bob, -0.6, hunch)
+			for _, a in arms do
+				a.pitch = lerp(a.pitch, -0.2, hunch)
+				a.inward = lerp(a.inward, 0.3, hunch)
+				a.wrist = lerp(a.wrist, -0.6, hunch)
+			end
+		end
+	end
+
 	local elbows, wrists = {}, {}
 	for side, a in arms do
 		local arm = fe.arms[side]
@@ -263,8 +295,80 @@ end
 
 -- Every frame, after his body is in place: carry the victim in his hands, and at the release
 -- swap them for a body that drops (or nothing, if he's hidden in the fog)
+---------------------------------------------------------------- casts' effects
+-- Instill Fear: a dark ring sweeping out across the floor from him
+local function fearRing(model, fe)
+	local floorAt = model:GetPivot().Position + Vector3.new(0, fe.floor + 0.25, 0)
+	local ring = Instance.new("Part")
+	ring.Name = "FearRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored, ring.CanCollide, ring.CanQuery, ring.CanTouch = true, false, false, false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = Color3.fromRGB(70, 20, 110)
+	ring.Transparency = 0.25
+	ring.Size = Vector3.new(0.2, 4, 4)
+	ring.CFrame = CFrame.new(floorAt) * CFrame.Angles(0, 0, math.pi / 2)   -- (a cylinder's axis is X: stood on end)
+	ring.Parent = workspace
+	local tween = TweenService:Create(ring, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = Vector3.new(0.2, 140, 140), Transparency = 1 })
+	tween:Play()
+	tween.Completed:Connect(function() ring:Destroy() end)
+end
+
+-- Living Nightmare: half see-through, trailing dark mist, while it lasts
+local function setGhost(model, fe, on)
+	if (fe.ghost or false) == on then return end
+	fe.ghost = on
+	if on then
+		fe.solid = {}
+		for _, part in model:GetDescendants() do
+			if part:IsA("BasePart") and part.Transparency < 1 then
+				fe.solid[part] = part.Transparency
+				part.Transparency = 0.55
+			end
+		end
+		local root = model:FindFirstChild("HumanoidRootPart")
+		if root then
+			local mist = Instance.new("ParticleEmitter")
+			mist.Name = "NightmareMist"
+			mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
+			mist.Color = ColorSequence.new(Color3.fromRGB(25, 10, 35))
+			mist.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1) })
+			mist.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 3), NumberSequenceKeypoint.new(1, 7) })
+			mist.Lifetime = NumberRange.new(0.8, 1.3)
+			mist.Rate = 30
+			mist.Speed = NumberRange.new(0.5, 1.5)
+			mist.SpreadAngle = Vector2.new(180, 180)
+			mist.LightEmission = 0
+			mist.Parent = root
+			fe.mist = mist
+		end
+	else
+		for part, t in fe.solid or {} do
+			if part.Parent then part.Transparency = t end
+		end
+		fe.solid = nil
+		if fe.mist then fe.mist:Destroy() fe.mist = nil end
+	end
+end
+
+local function effects(model, fe)
+	local castAt = model:GetAttribute("CastAt")
+	if castAt and castAt ~= fe.castSeen then
+		fe.castSeen = castAt
+		local fresh = workspace:GetServerTimeNow() - castAt < 1
+		if fresh and model:GetAttribute("CastKind") == "InstillFear" and model:GetAttribute("FogState") ~= "hidden" then
+			fearRing(model, fe)
+		end
+	end
+	setGhost(model, fe, (model:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow())
+	if fe.mist then fe.mist.Enabled = model:GetAttribute("FogState") ~= "hidden" end   -- (no giving him away through the fog)
+end
+
 function animate.victim(model, s)
 	local fe = s.fe
+	effects(model, fe)
 	local killStart = model:GetAttribute("KillStart")
 	if killStart and killStart ~= fe.killSeen then
 		fe.killSeen = killStart

@@ -38,7 +38,12 @@ local function rootOf(character)
 end
 
 local function maxSpeed(player)
-	return math.max(MIN_SPEED, player:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED) * SLACK
+	local speed = math.max(MIN_SPEED, player:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED) * SLACK
+	-- Fear Eater's Living Nightmare: up to this much faster (toward feared survivors)
+	if (player:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow() then
+		speed *= 1 + (player:GetAttribute("NightmareBoost") or 0)
+	end
+	return speed
 end
 
 local function cap(player)

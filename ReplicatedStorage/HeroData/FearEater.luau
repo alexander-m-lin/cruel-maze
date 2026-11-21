@@ -42,15 +42,23 @@ return {
 			reach = 4.5,            -- a survivor this close to his hands' reach point is caught (studs)...
 			reachForward = 2.5,     -- ...which is this far in front of his middle
 		},
+		-- Every survivor in the maze, wherever they are, is filled with DREAD: within dreadTime they
+		-- must reach a sanctuary or get within nearAlly studs of another survivor (bots count).
+		-- Those who don't are FEARED for fearTime: revealed to the monster side and slowed - and
+		-- Devour and Living Nightmare reach them more easily. (Already in a sanctuary: untouched.)
 		Secondary = {
-			id = "InstillFear", name = "Instill Fear", cooldown = 25, soon = true,
+			id = "InstillFear", name = "Instill Fear", cooldown = 25,
 			dreadTime = 5,          -- seconds survivors have to reach a sanctuary or a teammate
 			nearAlly = 10,          -- studs that count as near another survivor
 			fearTime = 5,           -- seconds the fear lasts (revealed and slowed)
 			fearSlow = 0.8,         -- feared survivors move at this fraction of their speed
+			castTime = 0.6,         -- seconds he stands still, arms spread, casting it
 		},
+		-- For `duration` seconds he passes through the maze's inner walls and doors (not the outer
+		-- wall, nor into sanctuaries), and moves much faster toward feared survivors. Ending inside
+		-- a wall, he's pushed out into the middle of the cell he's in.
 		Ultimate = {
-			id = "LivingNightmare", name = "Living Nightmare", cooldown = 60, soon = true,
+			id = "LivingNightmare", name = "Living Nightmare", cooldown = 60,
 			duration = 7,           -- seconds he passes through inner walls and doors
 			speedBoost = 0.6,       -- +60% speed while moving toward a feared survivor
 		},

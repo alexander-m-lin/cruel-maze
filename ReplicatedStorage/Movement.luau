@@ -6,11 +6,13 @@
 --   Movement.setRunBackwards(humanoid, angle > Movement.BACKWARDS_FROM)
 --
 -- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil, HauntedUntil,
---   StunnedUntil, PullAt/PullTime)
+--   StunnedUntil, PullAt/PullTime, FearedUntil + FearSlow, NightmareUntil + NightmareBoost)
 -- options.aiming: true when facing comes from aiming (the mouse) rather than from moving, so moving
 --   away from where you face is slower (Config.FACING_*). A bot faces the way it walks.
 -- options.collecting: true while collecting a relic (you face it, and move at the backwards speed)
 
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 local Config = require(script.Parent:WaitForChild("Config"))
 
 local Movement = {}
@@ -39,6 +41,33 @@ function Movement.held(who)
 	if (who:GetAttribute("CastingUntil") or 0) > now then return true end      -- winding up an ability (Flourish)
 	local pullAt = who:GetAttribute("PullAt")
 	return pullAt ~= nil and now < pullAt + (who:GetAttribute("PullTime") or 0)
+end
+
+-- Survivors (players and bots) who are feared right now: their HumanoidRootParts
+local NIGHTMARE_CONE = 60      -- degrees either side of straight at a feared survivor that count as "toward"
+function Movement.fearedRoots()
+	local now = workspace:GetServerTimeNow()
+	local roots = {}
+	local function consider(holder, character)
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and (holder:GetAttribute("FearedUntil") or 0) > now then table.insert(roots, root) end
+	end
+	for _, player in Players:GetPlayers() do
+		if player:GetAttribute("Role") == Config.Roles.Survivor then consider(player, player.Character) end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do consider(bot, bot) end   -- (a bot's attributes are on its body)
+	return roots
+end
+
+-- Moving (flat direction `move`) from `at` toward a feared survivor?
+function Movement.towardFeared(at, move)
+	if move.Magnitude < 0.1 then return false end
+	local cos = math.cos(math.rad(NIGHTMARE_CONE))
+	for _, root in Movement.fearedRoots() do
+		local to = (root.Position - at) * Vector3.new(1, 0, 1)
+		if to.Magnitude > 0.5 and to.Unit:Dot(move.Unit) >= cos then return true end
+	end
+	return false
 end
 
 -- Returns the walk speed, and the angle (degrees) between moving and facing
@@ -72,6 +101,14 @@ function Movement.walkSpeed(who, humanoid, root, options)
 	-- haunted by the Maze Master: slowed while it lasts
 	if (who:GetAttribute("HauntedUntil") or 0) > workspace:GetServerTimeNow() then
 		multiplier *= Config.HAUNT_SLOW
+	end
+	-- feared (Fear Eater's Instill Fear): slowed while it lasts
+	if (who:GetAttribute("FearedUntil") or 0) > workspace:GetServerTimeNow() then
+		multiplier *= who:GetAttribute("FearSlow") or 1
+	end
+	-- Fear Eater in his Living Nightmare: much faster while moving toward a feared survivor
+	if (who:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow() and Movement.towardFeared(root.Position, move) then
+		multiplier *= 1 + (who:GetAttribute("NightmareBoost") or 0)
 	end
 	return base * multiplier, angle
 end
