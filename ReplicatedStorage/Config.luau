@@ -154,7 +154,8 @@ Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for
 Config.LUNGE_WINDUP = 0.15        -- seconds crouched before the lunge (you can't move)
 Config.LUNGE_DISTANCE = 12        -- studs the lunge carries you
 Config.LUNGE_TIME = 0.25          -- seconds the lunge takes
-Config.LUNGE_REACH = 5            -- a survivor this close to you during the lunge is caught (studs)
+Config.LUNGE_REACH = 9            -- a survivor this close to you during the lunge is caught (studs;
+                                  -- generous for testing while the monster is a stand-in; was 5)
 Config.LUNGE_COOLDOWN = 1.2       -- seconds before you can lunge again after a miss
 
 return Config

@@ -29,7 +29,7 @@ local Pull = require(ServerStorage.Pull)
 
 local KILL = MonsterAI.KILL
 local CATCH_GRACE = 4      -- seconds a just-caught survivor is ignored
-local LATENCY_SLACK = 0.15 -- the lunge's catch window stays open this much longer (positions arrive late)
+local LATENCY_SLACK = 0.3  -- the lunge's catch window stays open this much longer (positions arrive late)
 
 local PlayerMonster = {}
 PlayerMonster.__index = PlayerMonster
@@ -164,7 +164,7 @@ function PlayerMonster:Step(dt, targets)
 			local theirRoot = rootOf(player)
 			if theirRoot and (self.graceUntil[player] or 0) < now then
 				local flat = (theirRoot.Position - root.Position) * Vector3.new(1, 0, 1)
-				if flat.Magnitude < Config.LUNGE_REACH then
+				if flat.Magnitude < Config.LUNGE_REACH and not self:wallBetween(root.Position, theirRoot.Position) then
 					self:catch(player, flat, now)
 					break
 				end
@@ -172,6 +172,19 @@ function PlayerMonster:Step(dt, targets)
 		end
 	end
 	self:publish()
+end
+
+-- A wall between two points (at waist height)? The lunge can't catch through one.
+function PlayerMonster:wallBetween(a, b)
+	if not self.rayParams then
+		self.rayParams = RaycastParams.new()
+		self.rayParams.FilterType = Enum.RaycastFilterType.Include
+		self.rayParams.FilterDescendantsInstances = { self.maze.model }
+	end
+	local y = self.maze.floorY + 3
+	local from, to = Vector3.new(a.X, y, a.Z), Vector3.new(b.X, y, b.Z)
+	local hit = workspace:Raycast(from, to - from, self.rayParams)
+	return hit ~= nil and hit.Instance.CanCollide
 end
 
 function PlayerMonster:catch(player, toThem, now)
