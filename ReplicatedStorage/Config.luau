@@ -74,14 +74,15 @@ Config.DARK_MANA_ENABLED = false  -- off for now: cooldowns only (the mana code 
 Config.MAZE_MASTER_AI = true
 Config.DARK_MANA_MAX = 100
 Config.DARK_MANA_REGEN = 5        -- per second
-Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds
-	Door       = { cost = 10, cooldown = 1 },    -- open or shut a door (plus DOOR_COOLDOWN on that door)
+Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds (shared by the whole tool)
+	Door       = { cost = 10, cooldown = 0 },    -- open or shut a door (each door then rests DOOR_COOLDOWN)
 	Ward       = { cost = 15, cooldown = 4 },    -- place a ward (a floating eye that watches around it)
 	Haunt      = { cost = 20, cooldown = 15 },   -- haunt a survivor the monster side can see
-	FalseRelic = { cost = 30, cooldown = 5 },    -- place a false relic
-	Crusher    = { cost = 50, cooldown = 10 },   -- set off a crushing wall
+	FalseRelic = { cost = 30, cooldown = 0 },    -- place a false relic (limited: FALSE_RELICS_PER_MATCH)
+	Crusher    = { cost = 50, cooldown = 0 },    -- set off a crushing wall (each then rests CRUSHER_COOLDOWN)
 }
 Config.MAZE_MASTER_DOOR_COOLDOWN = 20   -- a door the Maze Master changed can't be changed again for this long
+Config.MAZE_MASTER_CRUSHER_COOLDOWN = 10   -- a crushing wall the Maze Master set off rests this long
 
 -- False relics: look like relics (but their eyes go out for a moment now and then). A survivor
 -- near one is revealed to the monster side; one who clicks it is revealed and slowed.

@@ -274,15 +274,16 @@ local function crushersList()
 		for _, c in maze:GetChildren() do
 			local id, home = c:GetAttribute("Id"), c:GetAttribute("Home")
 			if c.Name == "Crusher" and id and home then
-				sums[id] = sums[id] or { p = Vector3.zero, n = 0, slab = c }
+				sums[id] = sums[id] or { p = Vector3.zero, n = 0, slab = c, slabs = {} }
 				sums[id].p += home.Position
 				sums[id].n += 1
+				table.insert(sums[id].slabs, c)
 			end
 		end
 		local floorY = maze:GetAttribute("FloorY") or 0
 		for id, sum in sums do
 			local p = sum.p / sum.n
-			list[id] = { center = Vector3.new(p.X, floorY, p.Z), slab = sum.slab }
+			list[id] = { center = Vector3.new(p.X, floorY, p.Z), slab = sum.slab, slabs = sum.slabs }
 		end
 	end
 	return list
@@ -293,20 +294,19 @@ local function visibleSurvivors()
 	local list = {}
 	for _, other in Players:GetPlayers() do
 		local character = other.Character
-		if character and other:GetAttribute("Role") == Config.Roles.Survivor and character:GetAttribute("VisibleToMe") then
+		if character and other:GetAttribute("Role") == Config.Roles.Survivor and character:GetAttribute("VisibleToMe")
+			and not other:GetAttribute("Seized") then
 			list[character] = other.UserId
 		end
 	end
 	for _, bot in CollectionService:GetTagged("SurvivorBot") do
-		if bot:GetAttribute("VisibleToMe") then list[bot] = bot:GetAttribute("BotUserId") end
+		if bot:GetAttribute("VisibleToMe") and not bot:GetAttribute("Seized") then list[bot] = bot:GetAttribute("BotUserId") end
 	end
 	return list
 end
 
--- Outlines: one SelectionBox per door ghost or crusher marker, reused
+-- Outlines: one SelectionBox per door ghost, crushing-wall slab or survivor, reused
 local outlines = {}      -- [object] = SelectionBox
-local markers = {}       -- [crusher id] = a flat part marking its cell
-local markerFolder = nil
 
 local function outline(adornee, color, thick)
 	local box = outlines[adornee]
@@ -321,27 +321,6 @@ local function outline(adornee, color, thick)
 	box.LineThickness = thick and 0.35 or 0.15
 	box.Visible = true
 	return box
-end
-
-local function crusherMarker(id, center)
-	if not markerFolder or not markerFolder.Parent then
-		markerFolder = Instance.new("Folder")
-		markerFolder.Name = "MazeMasterMarkers"
-		markerFolder.Parent = workspace
-		table.clear(markers)
-	end
-	local m = markers[id]
-	if not m then
-		m = Instance.new("Part")
-		m.Anchored = true
-		m.CanCollide, m.CanQuery, m.CanTouch = false, false, false
-		m.Transparency = 1
-		m.Size = Vector3.new(14, 0.2, 14)
-		m.Parent = markerFolder
-		markers[id] = m
-	end
-	m.CFrame = CFrame.new(center + Vector3.new(0, 0.15, 0))
-	return m
 end
 
 -- FALSE RELIC PLACEMENT: the same rule the server uses (Objectives:CanPlaceFalseRelic): 2-3 ways
@@ -438,7 +417,7 @@ end
 
 ---------------------------------------------------------------- targets
 -- Everything you can click to use an ability on, with whether it's ready:
--- { tool, adornee (to outline), at (floor point), use = args for the server, left, total, busy, name }
+-- { tool, adornees (to outline), at (floor point), use = args for the server, left, total, busy, name }
 local function targetsNow(now)
 	local list = {}
 	local function toolLeft(id)
@@ -453,20 +432,24 @@ local function targetsNow(now)
 		local rest = math.max(0, (part:GetAttribute("RestUntil") or 0) - now)
 		if rest > left then left, total = rest, Config.MAZE_MASTER_DOOR_COOLDOWN end
 		local state = part:GetAttribute("State")
-		table.insert(list, { tool = "Door", adornee = ghost, at = (part:GetAttribute("ClosedCFrame") or part.CFrame).Position,
+		table.insert(list, { tool = "Door", adornees = { ghost }, at = (part:GetAttribute("ClosedCFrame") or part.CFrame).Position,
 			use = { "Door", part:GetAttribute("Id") }, left = left, total = total,
 			busy = state == "warning" or state == "moving",
 			name = part:GetAttribute("Open") and "Shut door" or "Open door" })
 	end
+	-- crushing walls: the tool's cooldown, and each wall's own rest after being set off
 	local crushLeft, crushTotal = toolLeft("Crusher")
 	for id, c in crushersList() do
-		table.insert(list, { tool = "Crusher", adornee = crusherMarker(id, c.center), at = c.center,
-			use = { "Crusher", id }, left = crushLeft, total = crushTotal,
+		local left, total = crushLeft, crushTotal
+		local rest = math.max(0, (c.slab:GetAttribute("RestUntil") or 0) - now)
+		if rest > left then left, total = rest, Config.MAZE_MASTER_CRUSHER_COOLDOWN end
+		table.insert(list, { tool = "Crusher", adornees = c.slabs, at = c.center,
+			use = { "Crusher", id }, left = left, total = total,
 			busy = c.slab:GetAttribute("State") ~= "idle", name = TARGET_TOOLS.Crusher })
 	end
 	local hauntLeft, hauntTotal = toolLeft("Haunt")
 	for character, userId in visibleSurvivors() do
-		table.insert(list, { tool = "Haunt", adornee = character, at = character:GetPivot().Position,
+		table.insert(list, { tool = "Haunt", adornees = { character }, at = character:GetPivot().Position,
 			use = { "Haunt", userId }, left = hauntLeft, total = hauntTotal, name = TARGET_TOOLS.Haunt,
 			survivor = true })
 	end
@@ -519,12 +502,12 @@ end)
 RunService.RenderStepped:Connect(function()
 	local active = isMazeMaster()
 	gui.Enabled = active
-	for _, box in outlines do box.Visible = false end
-	if placeMarker then placeMarker.Transparency = 1 end
-	if not active then
-		if markerFolder then markerFolder:Destroy() markerFolder = nil end
-		return
+	for adornee, box in outlines do
+		box.Visible = false
+		if not adornee.Parent then box:Destroy() outlines[adornee] = nil end   -- gone (an old match, a body)
 	end
+	if placeMarker then placeMarker.Transparency = 1 end
+	if not active then return end
 	local now = workspace:GetServerTimeNow()
 
 	-- the bar (dark mana switched off: no bar, and nothing costs anything)
@@ -545,7 +528,7 @@ RunService.RenderStepped:Connect(function()
 		b.button.Text = ("[%d] %s%s%s%s"):format(table.find(TOOLS, b.tool), b.tool.name,
 			manaOn and ("\n%d mana"):format(def.cost) or "", extra,
 			left > 0 and ("  ·  %ds"):format(math.ceil(left)) or "")
-		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))
+		b.shade.Size = UDim2.fromScale(1, def.cooldown > 0 and math.clamp(left / def.cooldown, 0, 1) or 0)
 		b.stroke.Transparency = placing == id and 0 or 1
 		b.button.TextTransparency = mana < def.cost and 0.45 or 0
 	end
@@ -563,7 +546,9 @@ RunService.RenderStepped:Connect(function()
 	local hover = point and targetAt(list, point)
 	for _, t in list do
 		local ready = t.left <= 0 and not t.busy and mana >= Config.MAZE_MASTER_TOOLS[t.tool].cost
-		outline(t.adornee, not ready and GREY or (t == hover and PURPLE_BRIGHT or PURPLE), t == hover)
+		for _, adornee in t.adornees do
+			outline(adornee, not ready and GREY or (t == hover and PURPLE_BRIGHT or PURPLE), t == hover)
+		end
 	end
 	if hover then
 		showTip(mouse, hover.name, hover.left, hover.total)

@@ -16,7 +16,8 @@
 --
 -- The Maze Master's computer follows along through attributes on the player: DarkMana,
 -- ToolReady<Tool> (server time each tool is ready again), FalseRelicsLeft.
--- Doors get a "RestUntil" attribute (server time) when the Maze Master changes them.
+-- Doors get a "RestUntil" attribute (server time) when the Maze Master changes them, and so do a
+-- crushing wall's slabs when it's set off (MAZE_MASTER_CRUSHER_COOLDOWN).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -34,6 +35,7 @@ function MazeMaster.new(player, parts)
 	self.maze, self.doors, self.crushers, self.objectives = parts.maze, parts.doors, parts.crushers, parts.objectives
 	self.wards, self.haunt = parts.wards, parts.haunt
 	self.mana = Config.DARK_MANA_MAX
+	self.crusherRest = {}        -- [crusher id] = os.clock() when it can be set off again
 	self.readyAt = {}            -- [tool] = os.clock() when it can be used again
 	self.falseRelicsLeft = Config.FALSE_RELICS_PER_MATCH
 	self.active = false          -- the countdown: no tools yet
@@ -104,8 +106,19 @@ function MazeMaster:Use(tool, target)
 			message = "Can't place one there"
 		end
 	elseif tool == "Crusher" then
-		ok = typeof(target) == "number" and self.crushers:Trigger(target)
-		if not ok then message = "That crushing wall is busy" end
+		if typeof(target) ~= "number" then return false, "" end
+		if os.clock() < (self.crusherRest[target] or 0) then return false, "That crushing wall is resting" end
+		ok = self.crushers:Trigger(target)
+		if ok then
+			-- that wall rests (each on its own; the others can still be used)
+			self.crusherRest[target] = os.clock() + Config.MAZE_MASTER_CRUSHER_COOLDOWN
+			local crusher = self.crushers.list[target]
+			for _, slab in crusher and crusher.slabs or {} do
+				slab:SetAttribute("RestUntil", workspace:GetServerTimeNow() + Config.MAZE_MASTER_CRUSHER_COOLDOWN)
+			end
+		else
+			message = "That crushing wall is busy"
+		end
 	end
 
 	if ok then

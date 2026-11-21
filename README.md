@@ -31,7 +31,8 @@ starts another straight away, and "Doors" opens the doors panel.
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
   red for you and the monsters. You see what the monsters see, all round every relic, and each
   crushing wall's stretch of corridor. Every door, crushing wall and survivor you can see is
-  outlined (purple = ready, grey = not yet): click one to use it. A door opens or shuts; a
+  outlined (purple = ready, grey = not yet): click one to use it. Each door rests 20 s after you
+  change it and each crushing wall 10 s after it slams; the others stay ready. A door opens or shuts; a
   crushing wall (hidden in the maze) slams together, crushing survivors between them; a survivor
   is haunted (for 5 seconds your side sees them and what they see, and they're slowed to 70%).
   Hovering one shows the ability's name, or a clock while it recharges. Two buttons place things:

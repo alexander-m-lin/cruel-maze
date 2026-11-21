@@ -186,7 +186,7 @@ function MazeMasterAI:crush(seen)
 	local S = self.maze.S
 	local lead = Config.CRUSHER_WARNING + Config.CRUSHER_SLAM_TIME * 0.6
 	for id, crusher in self.crushers.list do
-		if crusher.state ~= "idle" then continue end
+		if crusher.state ~= "idle" or os.clock() < (self.tools.crusherRest[id] or 0) then continue end
 		for _, s in seen do
 			local velocity = s.root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)
 			local function between(p)
