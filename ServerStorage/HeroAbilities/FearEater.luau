@@ -16,6 +16,7 @@
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local SpeedCheck = require(ServerStorage.SpeedCheck)
+local DevourAim = require(game:GetService("ReplicatedStorage").DevourAim)
 
 local handlers = {}
 
@@ -25,30 +26,17 @@ local function flat(v) return v * Vector3.new(1, 0, 1) end
 function handlers.Devour(ctx, cast)
 	local monster, def = cast.monster, cast.def
 	if not (monster and monster.Devour and monster.pos) then return false end
-	local from = monster.pos
-	local aim = cast.aim
-	local distance, time = def.range, def.dashTime
-
-	-- the feared survivor closest to where he's aiming, in range and in a clear line
+	-- straight ahead, or at a feared survivor (DevourAim: the same choice the player's computer
+	-- previews while the button is held)
 	local now = workspace:GetServerTimeNow()
-	local best, bestAngle
+	local feared = {}
 	for _, survivor in ctx.match.survivors() do
-		if (survivor:GetAttribute("FearedUntil") or 0) <= now or survivor:GetAttribute("Seized") then continue end
 		local root = ctx.rootOf(survivor)
-		if not root then continue end
-		local offset = flat(root.Position - from)
-		local d = offset.Magnitude
-		if d < 0.5 or d > def.fearedRange then continue end
-		local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(aim), -1, 1)))
-		if angle > def.fearedCone / 2 then continue end
-		if ctx.wallBetween(from, root.Position) then continue end
-		if not bestAngle or angle < bestAngle then best, bestAngle = { offset = offset, d = d }, angle end
+		if root and (survivor:GetAttribute("FearedUntil") or 0) > now and not survivor:GetAttribute("Seized") then
+			table.insert(feared, root)
+		end
 	end
-	if best then
-		aim = best.offset.Unit
-		distance = math.min(best.d + 1, def.fearedRange)
-		time = distance / def.fearedSpeed
-	end
+	local aim, distance, time = DevourAim.pick(monster.pos, cast.aim, def, feared, ctx.wallBetween)
 	if not monster:Devour(aim, distance, time, def) then return false end
 	-- in his Living Nightmare it recharges much faster
 	local nightmare = cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow()

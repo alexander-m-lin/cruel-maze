@@ -4,6 +4,11 @@
 -- (on a touch screen or gamepad: the buttons on the bar, or the gamepad's shoulder buttons)
 -- Each ability aims the way you face. The server checks and carries it out (Abilities); the bar
 -- shows each one's key, name and cooldown (the "AbilityReady<Slot>" attributes it publishes).
+--
+-- HOLD TO AIM: if the hero's HeroVisuals module has an `aim[slot]` (e.g. Fear Eater's Devour), the
+-- key shows a preview while held (aim.update(player, def), every frame) and the ability goes off
+-- when it's let go (aim.hide() then). Others go off as the key goes down. (The on-screen buttons
+-- always go off at once.)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -31,6 +36,15 @@ local function myHero()
 	if role ~= Config.Roles.Survivor and role ~= Config.Roles.Monster then return nil end
 	if match:GetAttribute("State") ~= Config.States.Playing then return nil end
 	return Heroes.get(player:GetAttribute("Hero"))
+end
+
+local heroVisuals = script.Parent:WaitForChild("HeroVisuals")
+
+-- The hero's hold-to-aim preview for this slot, if it has one
+local function aimerFor(hero, slot)
+	local module = hero and heroVisuals:FindFirstChild(hero.id)
+	local visuals = module and require(module)
+	return visuals and visuals.aim and visuals.aim[slot] or nil
 end
 
 local function use(slot)
@@ -132,11 +146,40 @@ RunService.RenderStepped:Connect(function()
 end)
 
 ---------------------------------------------------------------- the keys
+local aiming = {}   -- [slot] = the aimer while its key is held
 for slot, inputs in INPUTS do
 	ContextActionService:BindAction("Ability" .. slot, function(_, state)
-		if state ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Pass end
-		if not myHero() then return Enum.ContextActionResult.Pass end
-		use(slot)
-		return Enum.ContextActionResult.Sink
+		if state == Enum.UserInputState.Begin then
+			local hero = myHero()
+			if not hero then return Enum.ContextActionResult.Pass end
+			local def = hero.abilities[slot]
+			local aimer = def and aimerFor(hero, slot)
+			if aimer then
+				aiming[slot] = { aimer = aimer, def = def }
+			else
+				use(slot)
+			end
+			return Enum.ContextActionResult.Sink
+		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			local held = aiming[slot]
+			if not held then return Enum.ContextActionResult.Pass end
+			aiming[slot] = nil
+			held.aimer.hide()
+			if state == Enum.UserInputState.End and myHero() then use(slot) end
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
 	end, false, table.unpack(inputs))
 end
+
+-- previews follow you while their keys are held (and go away if the match ends meanwhile)
+RunService.RenderStepped:Connect(function()
+	for slot, held in aiming do
+		if myHero() then
+			held.aimer.update(player, held.def)
+		else
+			held.aimer.hide()
+			aiming[slot] = nil
+		end
+	end
+end)

@@ -14,6 +14,9 @@
 --   LIVING NIGHTMARE - he hunches in on himself, then for its duration ("NightmareUntil") turns
 --              half see-through, trailing dark mist.
 --   (These two are stand-ins, to be replaced by full animations.)
+--   AIMING DEVOUR - while right click is held (AbilityControls), the area the dash would catch in
+--              is painted blue on the floor: his reach swept along the dash, stopping at the first
+--              wall he can't pass, and swung onto a feared survivor it would lock on to (brighter).
 --   THE KILL - ("KillStart"/"KillVictim") his hands close on the victim, held off their feet in
 --              front of him facing away, flailing. He winds his head back, lifting them, then
 --              brings their head up into his hood and tips forward over them, laid flat; they keep
@@ -32,6 +35,8 @@ local TweenService = game:GetService("TweenService")
 local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
 local Characters = require(ReplicatedStorage:WaitForChild("Characters"))
 local Victims = require(script.Parent.Parent:WaitForChild("Victims"))
+local DevourAim = require(ReplicatedStorage:WaitForChild("DevourAim"))
+local Movement = require(ReplicatedStorage:WaitForChild("Movement"))
 
 local HERO = Heroes.list.FearEater
 local K = HERO.kill
@@ -459,5 +464,80 @@ function animate.victim(model, s)
 	end
 	fe.victim = nil
 end
+
+---------------------------------------------------------------- aiming Devour
+-- The area: a "stadium" as wide as his reach, from where the catch starts to where the dash ends,
+-- painted bright see-through blue on the floor: a strip with a round disc at each end.
+local AIM_COLOR = Color3.fromRGB(40, 150, 255)
+local AIM_LOCKED = Color3.fromRGB(120, 225, 255)   -- locked on to a feared survivor
+local AIM_TRANSPARENCY = 0.35
+local preview = nil
+
+local function previewParts()
+	if preview and preview.model.Parent then return preview end
+	local model = Instance.new("Model")
+	model.Name = "DevourAim"
+	local function piece(name, shape)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Shape = shape
+		p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch = true, false, false, false
+		p.CastShadow = false
+		p.Material = Enum.Material.Neon
+		p.Transparency = AIM_TRANSPARENCY
+		p.Parent = model
+		return p
+	end
+	preview = { model = model, strip = piece("Strip", Enum.PartType.Block), from = piece("From", Enum.PartType.Cylinder),
+		to = piece("To", Enum.PartType.Cylinder) }
+	model.Parent = workspace
+	return preview
+end
+
+local function hideAim()
+	if preview then preview.model:Destroy() preview = nil end
+end
+
+local function updateAim(player, def)
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local maze = workspace:FindFirstChild("Maze")
+	if not (root and maze) then hideAim() return end
+	local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	if look.Magnitude < 0.01 then return end
+	-- walls between him and a feared survivor: the server's check (every wall counts)
+	local walls = RaycastParams.new()
+	walls.FilterType = Enum.RaycastFilterType.Include
+	walls.FilterDescendantsInstances = { maze }
+	local function blocked(a, b)
+		local from, to = Vector3.new(a.X, root.Position.Y, a.Z), Vector3.new(b.X, root.Position.Y, b.Z)
+		local hit = workspace:Raycast(from, to - from, walls)
+		return hit ~= nil and hit.Instance.CanCollide
+	end
+	local dir, distance, _, target = DevourAim.pick(root.Position, look.Unit, def, Movement.fearedRoots(), blocked)
+	-- the dash itself stops at the first wall he can't pass (in Living Nightmare: not inner ones)
+	local solid = RaycastParams.new()
+	solid.FilterType = Enum.RaycastFilterType.Include
+	solid.FilterDescendantsInstances = { maze }
+	solid.CollisionGroup = root.CollisionGroup
+	local hit = workspace:Raycast(root.Position, dir * (distance + 1.5), solid)
+	if hit then distance = math.max(0, hit.Distance - 1.5) end
+	local down = workspace:Raycast(root.Position, Vector3.new(0, -20, 0), walls)
+	local y = (down and down.Position.Y or root.Position.Y - 3) + 0.15
+
+	local p = previewParts()
+	local r = def.reach
+	local start = Vector3.new(root.Position.X, y, root.Position.Z) + dir * def.reachForward
+	local finish = start + dir * distance
+	local disc = CFrame.Angles(0, 0, math.pi / 2)      -- (a cylinder's axis is X: lay it flat)
+	-- (the discs sit a hair below the strip, so where they overlap it the strip is what shows)
+	p.from.Size, p.from.CFrame = Vector3.new(0.1, r * 2, r * 2), CFrame.new(start - Vector3.new(0, 0.02, 0)) * disc
+	p.to.Size, p.to.CFrame = Vector3.new(0.1, r * 2, r * 2), CFrame.new(finish - Vector3.new(0, 0.02, 0)) * disc
+	p.strip.Size = Vector3.new(r * 2, 0.1, math.max(0.05, distance))
+	p.strip.CFrame = CFrame.lookAt((start + finish) / 2, (start + finish) / 2 + dir)
+	local color = target and AIM_LOCKED or AIM_COLOR
+	p.from.Color, p.to.Color, p.strip.Color = color, color, color
+end
+
+FearEater.aim = { Primary = { update = updateAim, hide = hideAim } }
 
 return FearEater

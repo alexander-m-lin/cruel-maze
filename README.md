@@ -57,7 +57,8 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 
 Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching out of his
 sleeves; left click does nothing for him):
-- **Right mouse: Devour** (5 s). He gathers himself for a moment, then lunges 14 studs the way he
+- **Right mouse: Devour** (5 s). Hold right click to aim: the area it would catch in is painted
+  blue on the floor (brighter when it would lock on to a feared survivor); let go to Devour. He gathers himself for a moment, then lunges 14 studs the way he
   faces; the first survivor his hands reach is caught (within 9 studs ahead, 7 to the sides). He holds them up facing away, struggling,
   winds his head back, lifts them flat and draws their head into his hood, where they keep
   struggling until it dies away; then he draws them back out and drops the body, which lies there
@@ -133,7 +134,8 @@ don't use Q or E yet). The cast animations are simple stand-ins for now.
 | `StarterPlayerScripts/HeroVisuals/<Hero>.luau` | StarterPlayerScripts › HeroVisuals (ModuleScripts) | One per hero: how they look on players' computers. FearEater: his floating, the Devour lunge and kill |
 | `StarterPlayerScripts/Victims.luau` | StarterPlayerScripts (ModuleScript) | Drawing a monster's victim: hiding, struggling, going limp, the body that drops |
 | `ServerStorage/Pull.luau` | ServerStorage (ModuleScript) | Pulling a player, bot or monster along a line (the whip) |
-| `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse, Q, E) and the ability bar |
+| `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse, Q, E) and the ability bar; hold-to-aim previews (a hero's `aim[slot]`) |
+| `ReplicatedStorage/DevourAim.luau` | ReplicatedStorage (ModuleScript) | Where Fear Eater's Devour goes (straight on, or locked on to a feared survivor): the server and the aiming preview share it |
 | `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
@@ -192,7 +194,8 @@ Every hero, survivor or monster, is three modules named after the hero's id (e.g
    and the ability's numbers; `ctx` has the match and helpers. See `Abilities.luau`.
 3. `StarterPlayerScripts/HeroVisuals/<Id>.luau`: how it looks. A monster's module exports
    `animate = { setup, pose, victim }`, which MonsterAnimate calls for any body whose `Hero`
-   attribute names it.
+   attribute names it. Any hero's module can also export `aim = { [slot] = { update, hide } }`:
+   that ability's key then shows the preview while held and fires on release.
 
 Then add the id to `Heroes.ORDER`. Until there's a character select, `Config.DEFAULT_SURVIVOR_HERO`
 and `Config.DEFAULT_MONSTER_HERO` pick who everyone plays.
