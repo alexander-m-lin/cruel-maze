@@ -173,7 +173,7 @@ end
 -- maze: the table MazeBuilder.build returns.
 -- options.onCatch(player, monster): called when it catches someone (default: knock them out).
 --   The monster then stands still for KILL.DONE seconds while the kill plays out.
--- options.isBlocked(x, z): true for cells it may not enter (spawn rooms, protected relic rooms).
+-- options.isBlocked(x, z): true for cells it may not enter (sanctuaries, protected relic rooms).
 -- options.startCell = {x, z}: where it appears.
 -- options.pack: a list of all the match's monsters (this one included), to spread out from.
 -- options.spottedBySide(player): true if the monster side can see them right now (another

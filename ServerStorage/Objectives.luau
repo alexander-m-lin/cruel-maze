@@ -1,6 +1,6 @@
--- The things survivors go after in a match: RELICS and SPAWN ROOMS (built by MazeBuilder).
+-- The things survivors go after in a match: RELICS and SANCTUARIES (built by MazeBuilder).
 --
---   local objectives = Objectives.new(maze, { onRelic = fn(player, relic), onCapture = fn(player, room) })
+--   local objectives = Objectives.new(maze, { onRelic = fn(player, relic), onCapture = fn(player, sanctuary) })
 --   objectives:Update(survivors)   -- a few times a second: spotting, collecting, captures
 --   objectives:UpdateMonsterSight(monsters)  -- relics the monster side has seen (monsters' pos/facing)
 --   objectives:StartCollecting(player, relicId)  -- they clicked to collect a relic (checked here)
@@ -20,12 +20,12 @@
 --   collecting, and staying in the cell for Config.RELIC_COLLECT_TIME seconds collects it.
 --   Leaving the cell or being caught resets it (click again to restart); nothing else interrupts
 --   it, not even the monster turning up.
--- Spawn rooms: monsters can never enter one. The start room is yours from the beginning; walking
+-- Sanctuaries: monsters can never enter one. The start sanctuary is yours from the beginning; walking
 --   into another captures it for your team, and you can respawn there.
 --
 -- Players' computers follow along through ReplicatedStorage.Match:
 --   attributes RelicsCollected, RelicsNeeded, RelicsTotal
---   a "SpawnRooms" folder with one Configuration per room: attributes Id, Center (Vector3), Captured
+--   a "Sanctuaries" folder with one Configuration per sanctuary: attributes Id, Center (Vector3), Min and Max (its corners), Captured
 --   a "Relics" folder with one Configuration per relic: attributes Id, Center, Discovered (by the
 --   survivors), MonsterDiscovered (by the monster side; the Maze Master knows them all), Collected,
 --   CollectSince (server time collecting started; nil when nobody is collecting), Collector (the
@@ -57,10 +57,10 @@ function Objectives.new(maze, callbacks)
 	self.maze = maze
 	self.callbacks = callbacks or {}
 	self.collected = 0
-	self.blocked = {}            -- [cell key] = true: monsters can't enter (spawn rooms)
+	self.blocked = {}            -- [cell key] = true: monsters can't enter (sanctuaries)
 	self.relicAt = {}            -- [cell key] = relic (false relics too)
 	self.fakes = {}              -- false relics still standing
-	self.roomAt = {}             -- [cell key] = room
+	self.sanctuaryAt = {}             -- [cell key] = sanctuary
 	self.lastUpdate = os.clock()
 
 	-- sight lines (for spotting relics) are only blocked by the maze
@@ -68,11 +68,11 @@ function Objectives.new(maze, callbacks)
 	self.rayParams.FilterType = Enum.RaycastFilterType.Include
 	self.rayParams.FilterDescendantsInstances = { maze.model }
 
-	for _, room in maze.rooms do
-		room.captured = room.id == 1                -- your team starts with the start room
-		for k in room.cells do
+	for _, sanctuary in maze.sanctuaries do
+		sanctuary.captured = sanctuary.id == 1                -- your team starts with the start sanctuary
+		for k in sanctuary.cells do
 			self.blocked[k] = true
-			self.roomAt[k] = room
+			self.sanctuaryAt[k] = sanctuary
 		end
 	end
 	for _, relic in maze.relics do
@@ -88,18 +88,22 @@ function Objectives.new(maze, callbacks)
 	self.status:SetAttribute("RelicsNeeded", Config.RELICS_NEEDED)
 	self.status:SetAttribute("RelicsTotal", #maze.relics)
 
-	self.roomFolder = publishFolder(self.status, "SpawnRooms")
-	for _, room in maze.rooms do
+	self.sanctuaryFolder = publishFolder(self.status, "Sanctuaries")
+	for _, sanctuary in maze.sanctuaries do
 		local info = Instance.new("Configuration")
-		info.Name = "Room" .. room.id
-		info:SetAttribute("Id", room.id)
-		info:SetAttribute("Center", room.center)
-		info:SetAttribute("Captured", room.captured)
-		info.Parent = self.roomFolder
-		room.info = info
-		if room.captured then room.floor.Color = MazeBuilder.ROOM_CAPTURED_COLOR end
+		info.Name = "Sanctuary" .. sanctuary.id
+		info:SetAttribute("Id", sanctuary.id)
+		info:SetAttribute("Center", sanctuary.center)
+		-- its floor's corners (X and Z), so players' computers can tell who's inside
+		local S = maze.S
+		info:SetAttribute("Min", Vector3.new((sanctuary.x - 1) * S - maze.half, 0, (sanctuary.z - 1) * S - maze.half))
+		info:SetAttribute("Max", Vector3.new((sanctuary.x - 1 + sanctuary.size) * S - maze.half, 0, (sanctuary.z - 1 + sanctuary.size) * S - maze.half))
+		info:SetAttribute("Captured", sanctuary.captured)
+		info.Parent = self.sanctuaryFolder
+		sanctuary.info = info
+		if sanctuary.captured then sanctuary.floor.Color = MazeBuilder.SANCTUARY_CAPTURED_COLOR end
 	end
-	self.roomFolder.Parent = self.status
+	self.sanctuaryFolder.Parent = self.status
 
 	self.relicFolder = publishFolder(self.status, "Relics")
 	for _, relic in maze.relics do
@@ -117,7 +121,7 @@ function Objectives.new(maze, callbacks)
 end
 
 function Objectives:Destroy()
-	if self.roomFolder then self.roomFolder:Destroy() end
+	if self.sanctuaryFolder then self.sanctuaryFolder:Destroy() end
 	if self.relicFolder then self.relicFolder:Destroy() end
 	self.destroyed = true
 end
@@ -136,15 +140,15 @@ function Objectives:IsBlocked(x, z)
 	return self.blocked[key(x, z)] == true
 end
 
--- Is a survivor at `position` protected (inside a spawn room)?
+-- Is a survivor at `position` protected (inside a sanctuary)?
 function Objectives:IsSafe(position)
 	local x, z = self:CellOf(position)
 	return x ~= nil and self:IsBlocked(x, z)
 end
 
-function Objectives:CapturedRoom(id)
-	for _, room in self.maze.rooms do
-		if room.id == id and room.captured then return room end
+function Objectives:CapturedSanctuary(id)
+	for _, sanctuary in self.maze.sanctuaries do
+		if sanctuary.id == id and sanctuary.captured then return sanctuary end
 	end
 	return nil
 end
@@ -172,11 +176,11 @@ local function collect(self, relic, player)
 	if self.callbacks.onRelic then self.callbacks.onRelic(player, relic) end
 end
 
-local function capture(self, room, player)
-	room.captured = true
-	room.info:SetAttribute("Captured", true)
-	room.floor.Color = MazeBuilder.ROOM_CAPTURED_COLOR
-	if self.callbacks.onCapture then self.callbacks.onCapture(player, room) end
+local function capture(self, sanctuary, player)
+	sanctuary.captured = true
+	sanctuary.info:SetAttribute("Captured", true)
+	sanctuary.floor.Color = MazeBuilder.SANCTUARY_CAPTURED_COLOR
+	if self.callbacks.onCapture then self.callbacks.onCapture(player, sanctuary) end
 end
 
 -- Can someone at `position`, facing `look`, see this relic? Same rules as the fog: within view
@@ -248,8 +252,8 @@ function Objectives:Update(survivors)
 		local k = key(x, z)
 		local relic = self.relicAt[k]
 		if relic and not relic.collected then onRelic[player] = relic end
-		local room = self.roomAt[k]
-		if room and not room.captured then capture(self, room, player) end
+		local sanctuary = self.sanctuaryAt[k]
+		if sanctuary and not sanctuary.captured then capture(self, sanctuary, player) end
 	end
 
 	-- Collecting: progress builds while the player who started it stays on the relic, and resets
@@ -287,14 +291,14 @@ end
 
 ---------------------------------------------------------------- false relics
 -- Where the Maze Master may put one: a cell with 2-3 openings (like a real relic's), not in or next
--- to a spawn room, and not within a cell of a relic (real or false).
+-- to a sanctuary, and not within a cell of a relic (real or false).
 function Objectives:CanPlaceFalseRelic(x, z)
 	local maze = self.maze
 	if not x or x < 1 or z < 1 or x > maze.n or z > maze.n then return false end
 	local sides = MazeLayout.openSides(maze.walls, x, z)
 	if sides < 2 or sides > 3 then return false end
-	for _, room in maze.rooms do
-		if x >= room.x - 1 and x <= room.x + 2 and z >= room.z - 1 and z <= room.z + 2 then return false end
+	for _, sanctuary in maze.sanctuaries do
+		if MazeLayout.nearSanctuary(sanctuary, x, z, 1) then return false end
 	end
 	for _, relic in maze.relics do
 		if not relic.collected and math.max(math.abs(relic.x - x), math.abs(relic.z - z)) <= 1 then return false end

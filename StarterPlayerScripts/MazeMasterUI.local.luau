@@ -310,7 +310,7 @@ local function crusherMarker(id, center)
 end
 
 -- FALSE RELIC PLACEMENT: the same rule the server uses (Objectives:CanPlaceFalseRelic): 2-3 ways
--- out of the cell, not in or next to a spawn room, not next to another relic. Ways out are found
+-- out of the cell, not in or next to a sanctuary, not next to another relic. Ways out are found
 -- with short rays from the cell's middle, so a shut door counts as a wall, as on the server.
 local GREEN, RED, AMBER = Color3.fromRGB(80, 230, 120), Color3.fromRGB(235, 60, 50), Color3.fromRGB(240, 180, 60)
 local wallRays = RaycastParams.new()
@@ -336,8 +336,8 @@ local function canPlaceAt(center, S, maze)
 	local function near(p, reach)
 		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
 	end
-	local rooms = match:FindFirstChild("SpawnRooms")
-	for _, info in rooms and rooms:GetChildren() or {} do
+	local sanctuaries = match:FindFirstChild("Sanctuaries")
+	for _, info in sanctuaries and sanctuaries:GetChildren() or {} do
 		if near(info:GetAttribute("Center"), 1.5 * S + 0.1) then return false end
 	end
 	local relics = match:FindFirstChild("Relics")
@@ -347,15 +347,15 @@ local function canPlaceAt(center, S, maze)
 	return true
 end
 
--- WARD PLACEMENT: the server's rule (WardEyes:CanPlace): not in a spawn room, not on a relic's
+-- WARD PLACEMENT: the server's rule (WardEyes:CanPlace): not in a sanctuary, not on a relic's
 -- (or false relic's) cell, not where a ward already is
 local function canPlaceWardAt(center, S)
 	local function same(p, reach)
 		return math.max(math.abs(p.X - center.X), math.abs(p.Z - center.Z)) <= reach
 	end
-	local rooms = match:FindFirstChild("SpawnRooms")
-	for _, info in rooms and rooms:GetChildren() or {} do
-		if same(info:GetAttribute("Center"), S) then return false end   -- (a room is 2x2 cells round its centre)
+	local sanctuaries = match:FindFirstChild("Sanctuaries")
+	for _, info in sanctuaries and sanctuaries:GetChildren() or {} do
+		if same(info:GetAttribute("Center"), S) then return false end   -- (a sanctuary is 2x2 cells round its centre)
 	end
 	for _, name in { "Relics", "WardEyes" } do
 		local folder = match:FindFirstChild(name)

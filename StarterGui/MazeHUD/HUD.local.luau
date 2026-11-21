@@ -1,7 +1,7 @@
 -- The on-screen HUD:
 --   top:     the countdown / time left in the match
 --   below:   relics collected and your lives
---   below:   messages (match results, relic found, caught, choosing a spawn room...)
+--   below:   messages (match results, relic found, caught, choosing a sanctuary...)
 -- Follows the match through attributes on ReplicatedStorage.Match and on your player
 -- (see ServerStorage.Match and ServerStorage.Objectives).
 local RunService = game:GetService("RunService")
@@ -91,7 +91,7 @@ RunService.RenderStepped:Connect(function()
 	local text = match:GetAttribute("Message") or ""
 	if player:GetAttribute("Respawning") then
 		local by = player:GetAttribute("RespawnBy")
-		text = ("Choose a spawn room on the map  (%ds)"):format(by and math.max(0, math.ceil(by - now)) or 0)
+		text = ("Choose a sanctuary on the map  (%ds)"):format(by and math.max(0, math.ceil(by - now)) or 0)
 	elseif player:GetAttribute("Out") and state == States.Playing then
 		text = "You're out of lives - watching your team."
 	end

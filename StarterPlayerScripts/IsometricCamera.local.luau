@@ -59,7 +59,7 @@ local function aliveRoot(character)
 	return nil
 end
 
--- Who to watch when you have no character (choosing a spawn room, or out of lives):
+-- Who to watch when you have no character (choosing a sanctuary, or out of lives):
 -- a teammate who's still alive (a player, or a survivor bot), sticking with the same one while
 -- they are. People first, then bots.
 local watching = nil   -- the character being watched

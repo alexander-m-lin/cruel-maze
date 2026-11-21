@@ -41,7 +41,7 @@ local WARD_SPACING = 3       -- cells between wards
 local WARD_MOVE_IF_UNWATCHED = 3   -- with every ward out, move one if survivors were seen this many cells from any ward...
 local WARD_MOVE_EVERY = 8    -- ...at most this often (seconds)
 local WARD_REPLACE_AFTER = 10   -- no new ward where a survivor destroyed one for this long (so they can tell it worked)
-local FAKE_ROOM_GAP = 6      -- false relics go at least this many cells (walking the grid) from any spawn room
+local FAKE_SANCTUARY_GAP = 6      -- false relics go at least this many cells (walking the grid) from any sanctuary
 
 local MazeMasterAI = {}
 MazeMasterAI.__index = MazeMasterAI
@@ -120,9 +120,9 @@ function MazeMasterAI:Start()
 	self:placeFalseRelics()
 end
 
--- Every false relic at once: well away from the spawn rooms (or survivors spot it from the start
+-- Every false relic at once: well away from the sanctuaries (or survivors spot it from the start
 -- and spring it on a whim), and spread out from the real relics and each other (up to a point:
--- real relics avoid the start room's quarter, so "as far from them as possible" would mean
+-- real relics avoid the start sanctuary's quarter, so "as far from them as possible" would mean
 -- next to the start)
 function MazeMasterAI:placeFalseRelics()
 	local maze = self.maze
@@ -131,11 +131,11 @@ function MazeMasterAI:placeFalseRelics()
 		for x = 1, maze.n do
 			for z = 1, maze.n do
 				if not self.objectives:CanPlaceFalseRelic(x, z) then continue end
-				local fromRooms = math.huge
-				for _, room in maze.rooms do
-					fromRooms = math.min(fromRooms, math.abs(room.x - x) + math.abs(room.z - z))
+				local fromSanctuaries = math.huge
+				for _, sanctuary in maze.sanctuaries do
+					fromSanctuaries = math.min(fromSanctuaries, math.abs(sanctuary.x - x) + math.abs(sanctuary.z - z))
 				end
-				if fromRooms < FAKE_ROOM_GAP then continue end
+				if fromSanctuaries < FAKE_SANCTUARY_GAP then continue end
 				local fromRelics = math.huge
 				for _, relic in maze.relics do
 					if not relic.collected then fromRelics = math.min(fromRelics, math.abs(relic.x - x) + math.abs(relic.z - z)) end

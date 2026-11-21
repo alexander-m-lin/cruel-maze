@@ -4,7 +4,7 @@
 --
 --   relic being collected  - a hum from the relic, rising in pitch as the bar fills
 --   relic collected        - a chime (everyone)
---   spawn room captured    - a chime (everyone)
+--   sanctuary captured    - a chime (everyone)
 --   monster starts a chase - a roar from the monster
 --   monster kill           - a roar as it lifts its victim, their scream, then cracking bones at the rip
 --   door about to move     - a rumble from the door, and a faint one for everyone anywhere
@@ -69,13 +69,13 @@ local function playAt(def, position)
 	s.Destroying:Once(function() a:Destroy() end)
 end
 
----------------------------------------------------------------- relics and spawn rooms
+---------------------------------------------------------------- relics and sanctuaries
 local hums = {}        -- [relic info] = looping Sound while someone collects it
 local seen = {}        -- [info] = last known Collected/Captured, so we only react to changes
 
 local function updateObjectives()
 	local relics = match:FindFirstChild("Relics")
-	local rooms = match:FindFirstChild("SpawnRooms")
+	local sanctuaries = match:FindFirstChild("Sanctuaries")
 	local maze = workspace:FindFirstChild("Maze")
 	local now = workspace:GetServerTimeNow()
 
@@ -105,10 +105,10 @@ local function updateObjectives()
 			seen[info] = collected
 		end
 	end
-	if rooms then
-		for _, info in rooms:GetChildren() do
+	if sanctuaries then
+		for _, info in sanctuaries:GetChildren() do
 			local captured = info:GetAttribute("Captured") == true
-			if seen[info] == false and captured then play2D(Sounds.RoomCaptured) end
+			if seen[info] == false and captured then play2D(Sounds.SanctuaryCaptured) end
 			seen[info] = captured
 		end
 	end

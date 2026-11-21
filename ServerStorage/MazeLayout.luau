@@ -1,8 +1,9 @@
--- Plans the special places in a maze: SPAWN ROOMS and RELIC ROOMS. Works only on the layout table
+-- Plans the special places in a maze: SANCTUARIES and RELIC ROOMS. Works only on the layout table
 -- (walls[x][z] = {N, E, S, W}), so it can be tested on its own without building anything.
 --
--- Spawn room: a 2x2 block of cells with the walls inside it knocked down, and 2-3 exits to the rest
---   of the maze. Monsters can never enter one. The first room is the start, in the corner.
+-- Sanctuary: a square block of cells (2x2; the start one 3x3) with the walls inside it knocked down,
+--   and 2-3 exits, spread apart, to the rest of the maze. Monsters can never enter one, and the
+--   monster side can't see survivors inside. The first sanctuary is the start, in the corner.
 -- Relic room: a single junction cell with 2-3 openings holding a relic. Monsters can't enter it
 --   until shortly after its relic is collected.
 --
@@ -69,7 +70,7 @@ local function components(walls, n, blocked)
 end
 
 -- Knock down walls between unblocked cells until all unblocked cells are one connected region.
--- Never touches walls next to a blocked cell (so rooms keep exactly the exits they were given).
+-- Never touches walls next to a blocked cell (so sanctuaries keep exactly the exits they were given).
 function MazeLayout.connect(walls, n, blocked)
 	while true do
 		local comp, count = components(walls, n, blocked)
@@ -103,59 +104,71 @@ function MazeLayout.quadrant(x, z, n)
 end
 local quadrant = MazeLayout.quadrant
 
----------------------------------------------------------------- spawn rooms
--- Carves `count` 2x2 rooms. The first is always the start room at cells (1,1)-(2,2). The others
--- are placed at random, each wholly inside a quarter of the maze that no other room is in (while
--- there are free quarters left), and at least `spacing` cells (Chebyshev distance) from every
--- other room.
--- Returns a list of rooms: { id, x, z (top-left cell), cells = {[key]=true}, exits = {...} }
-function MazeLayout.carveRooms(walls, n, count, spacing)
-	local rooms = {}
+---------------------------------------------------------------- sanctuaries
+-- Is cell (x, z) in sanctuary `s`, or within `margin` cells of it?
+function MazeLayout.nearSanctuary(s, x, z, margin)
+	margin = margin or 0
+	return x >= s.x - margin and x <= s.x + s.size - 1 + margin and z >= s.z - margin and z <= s.z + s.size - 1 + margin
+end
+
+-- Carves `count` sanctuaries. The first is always the start sanctuary, startSize x startSize cells
+-- in the corner from (1,1); the others are size x size, placed at random, each wholly inside a
+-- quarter of the maze that no other sanctuary is in (while there are free quarters left), and at
+-- least `spacing` cells (Chebyshev distance, between their corners) from every other.
+-- Each gets 2-3 exits, spread out: the cells just outside any two exits are at least exitSpacing
+-- apart (Manhattan distance), so nobody standing at one exit is also at another. (A sanctuary in
+-- a corner may only fit 2.)
+-- Returns a list of sanctuaries: { id, x, z (top-left cell), size, cells = {[key]=true}, exits = {...} }
+function MazeLayout.carveSanctuaries(walls, n, count, spacing, options)
+	options = options or {}
+	local startSize, size = options.startSize or 2, options.size or 2
+	local exitSpacing = options.exitSpacing or 0
+	local sanctuaries = {}
 	local usedQuadrants = {}
 	local function fits(x, z)
-		if x < 1 or z < 1 or x + 1 > n or z + 1 > n then return false end
+		if x < 1 or z < 1 or x + size - 1 > n or z + size - 1 > n then return false end
 		local q = quadrant(x, z, n)
-		if quadrant(x + 1, z + 1, n) ~= q then return false end      -- straddles the middle
-		if usedQuadrants[q] and #rooms < 4 then return false end
-		for _, r in rooms do
-			if math.max(math.abs(r.x - x), math.abs(r.z - z)) < spacing then return false end
+		if quadrant(x + size - 1, z + size - 1, n) ~= q then return false end      -- straddles the middle
+		if usedQuadrants[q] and #sanctuaries < 4 then return false end
+		for _, r in sanctuaries do
+			if math.max(math.abs(r.x - x), math.abs(r.z - z)) < spacing + (r.size - 2) then return false end
 		end
 		return true
 	end
-	local function addRoom(x, z)
-		local room = { id = #rooms + 1, x = x, z = z, cells = {}, exits = {} }
-		for dx = 0, 1 do
-			for dz = 0, 1 do room.cells[key(x + dx, z + dz)] = true end
+	local function addSanctuary(x, z, s)
+		local sanctuary = { id = #sanctuaries + 1, x = x, z = z, size = s, cells = {}, exits = {} }
+		for dx = 0, s - 1 do
+			for dz = 0, s - 1 do
+				sanctuary.cells[key(x + dx, z + dz)] = true
+				-- knock down the walls inside it
+				if dx < s - 1 then setWall(walls, x + dx, z + dz, DIRS[2], false) end   -- east side
+				if dz < s - 1 then setWall(walls, x + dx, z + dz, DIRS[3], false) end   -- south side
+			end
 		end
-		-- knock down the walls inside the room
-		setWall(walls, x, z, DIRS[2], false)       -- (x,z)   | (x+1,z)
-		setWall(walls, x, z + 1, DIRS[2], false)   -- (x,z+1) | (x+1,z+1)
-		setWall(walls, x, z, DIRS[3], false)       -- (x,z)   / (x,z+1)
-		setWall(walls, x + 1, z, DIRS[3], false)   -- (x+1,z) / (x+1,z+1)
-		table.insert(rooms, room)
+		table.insert(sanctuaries, sanctuary)
 		usedQuadrants[quadrant(x, z, n)] = true
 	end
 
-	addRoom(1, 1)   -- the start room
+	addSanctuary(1, 1, startSize)   -- the start sanctuary
 	local candidates = {}
 	for x = 1, n - 1 do
 		for z = 1, n - 1 do table.insert(candidates, { x, z }) end
 	end
 	shuffle(candidates)
 	for _, c in candidates do
-		if #rooms >= count then break end
-		if fits(c[1], c[2]) then addRoom(c[1], c[2]) end
+		if #sanctuaries >= count then break end
+		if fits(c[1], c[2]) then addSanctuary(c[1], c[2], size) end
 	end
 
-	-- Give each room 2-3 exits: keep some of its existing openings, open or close the rest
-	for _, room in rooms do
+	-- Give each 2-3 exits: keep some of its existing openings (else open new ones), spread apart
+	for _, sanctuary in sanctuaries do
 		local edges, open = {}, {}
-		for k in room.cells do
+		for k in sanctuary.cells do
 			local x, z = k // 1000, k % 1000
 			for _, d in DIRS do
 				local nx, nz = x + d[1], z + d[2]
-				if nx >= 1 and nx <= n and nz >= 1 and nz <= n and not room.cells[key(nx, nz)] then
-					local edge = { x, z, d }
+				if nx >= 1 and nx <= n and nz >= 1 and nz <= n and not sanctuary.cells[key(nx, nz)] then
+					local edge = { x, z, d, out = { nx, nz } }
 					table.insert(edges, edge)
 					if not walls[x][z][d[3]] then table.insert(open, edge) end
 				end
@@ -165,52 +178,59 @@ function MazeLayout.carveRooms(walls, n, count, spacing)
 		shuffle(open)
 		shuffle(edges)
 		local exits = {}
-		for i = 1, math.min(want, #open) do table.insert(exits, open[i]) end
-		for _, e in edges do                        -- not enough openings: make more
-			if #exits >= want then break end
-			if not table.find(exits, e) then table.insert(exits, e) end
+		local function apart(e)
+			for _, other in exits do
+				if math.abs(e.out[1] - other.out[1]) + math.abs(e.out[2] - other.out[2]) < exitSpacing then return false end
+			end
+			return true
+		end
+		for _, list in { open, edges } do                -- existing openings first, then new ones
+			for _, e in list do
+				if #exits >= want then break end
+				if not table.find(exits, e) and apart(e) then table.insert(exits, e) end
+			end
 		end
 		for _, e in edges do setWall(walls, e[1], e[2], e[3], true) end   -- close every edge...
 		for _, e in exits do setWall(walls, e[1], e[2], e[3], false) end  -- ...then open the exits
-		room.exits = exits
+		sanctuary.exits = exits
 	end
-	return rooms
+	return sanctuaries
 end
 
 ---------------------------------------------------------------- relic rooms
 -- Picks up to `count` relic cells: cells with 2-3 openings (so there's more than one way out),
--- not in or right next to a spawn room, at least `spacing` cells apart (straight-line distance),
--- and at most `nearStart` of them in the start room's quarter of the maze.
+-- not in or right next to a sanctuary, at least `spacing` cells apart (straight-line distance),
+-- and at most `nearStart` of them in the start sanctuary's quarter of the maze.
 -- Monsters can walk through relic cells, so picks never affect how the maze connects.
 -- If it can't fit `count` relics that far apart, it tries again with the spacing reduced in
 -- half-cell steps (down to 2), so the match always gets its full set.
 -- Returns a list of { x, z }, and the spacing actually used.
 local tryPick
-function MazeLayout.pickRelics(walls, n, rooms, count, spacing, nearStart)
+function MazeLayout.pickRelics(walls, n, sanctuaries, count, spacing, nearStart)
 	local picks
 	local s = spacing
 	while true do
-		picks = tryPick(walls, n, rooms, count, s, nearStart or count)
+		picks = tryPick(walls, n, sanctuaries, count, s, nearStart or count)
 		if #picks >= count or s <= 2 then break end
 		s -= 0.5
 	end
 	return picks, s
 end
 
-function tryPick(walls, n, rooms, count, spacing, nearStart)
-	local startQuadrant = quadrant(rooms[1].x, rooms[1].z, n)
+function tryPick(walls, n, sanctuaries, count, spacing, nearStart)
+	local startQuadrant = quadrant(sanctuaries[1].x, sanctuaries[1].z, n)
 	local inStart = 0
-	local nearRoom = {}
-	for _, room in rooms do
-		for dx = -1, 2 do
-			for dz = -1, 2 do nearRoom[key(room.x + dx, room.z + dz)] = true end
+	local nearSanctuary = {}
+	for _, sanctuary in sanctuaries do
+		for dx = -1, sanctuary.size do
+			for dz = -1, sanctuary.size do nearSanctuary[key(sanctuary.x + dx, sanctuary.z + dz)] = true end
 		end
 	end
 	local candidates = {}
 	for x = 1, n do
 		for z = 1, n do
 			local sides = openSides(walls, x, z)
-			if (sides == 2 or sides == 3) and not nearRoom[key(x, z)] then
+			if (sides == 2 or sides == 3) and not nearSanctuary[key(x, z)] then
 				table.insert(candidates, { x, z })
 			end
 		end
@@ -263,17 +283,17 @@ end
 --   corridor doors - in an existing opening; they start open, and closing one forces a detour
 --   shortcut doors - in place of a wall; they start closed, and opening one cuts a long way round
 -- The rule that keeps every door safe to work at any time: with EVERY door closed, the maze is
--- still one connected piece, for survivors and for monsters (who can't use spawn rooms). So no
--- combination of doors can cut anyone off from a relic or a room - doors only redirect.
--- Doors never touch a spawn room or a relic cell (rooms keep their exits, relics their 2-3 ways in).
+-- still one connected piece, for survivors and for monsters (who can't use sanctuaries). So no
+-- combination of doors can cut anyone off from a relic or a sanctuary - doors only redirect.
+-- Doors never touch a sanctuary or a relic cell (sanctuaries keep their exits, relics their 2-3 ways in).
 -- options: corridors, shortcuts (how many of each), spacing (cells between doors), minDetour
 -- (closing a corridor door / opening a shortcut must save or cost at least this many steps).
 -- Leaves walls with corridor doors open and shortcut doors closed.
 -- Returns a list of { x, z, d (a DIRS entry: the side of cell x,z), open (starting state), kind }.
-function MazeLayout.placeDoors(walls, n, rooms, relics, options)
-	local roomCells, avoid = {}, {}
-	for _, room in rooms do
-		for k in room.cells do roomCells[k] = true avoid[k] = true end
+function MazeLayout.placeDoors(walls, n, sanctuaries, relics, options)
+	local sanctuaryCells, avoid = {}, {}
+	for _, sanctuary in sanctuaries do
+		for k in sanctuary.cells do sanctuaryCells[k] = true avoid[k] = true end
 	end
 	for _, r in relics do avoid[key(r[1], r[2])] = true end
 
@@ -288,7 +308,7 @@ function MazeLayout.placeDoors(walls, n, rooms, relics, options)
 		return true
 	end
 
-	-- Every interior side once (east and south of each cell), not touching a room or relic
+	-- Every interior side once (east and south of each cell), not touching a sanctuary or relic
 	local open, closed = {}, {}
 	for x = 1, n do
 		for z = 1, n do
@@ -310,7 +330,7 @@ function MazeLayout.placeDoors(walls, n, rooms, relics, options)
 		local x, z, d = e[1], e[2], e[3]
 		if not spacedOut(x, z, d) then continue end
 		setWall(walls, x, z, d, true)
-		local around = distance(walls, n, x, z, x + d[1], z + d[2], roomCells)
+		local around = distance(walls, n, x, z, x + d[1], z + d[2], sanctuaryCells)
 		if around and around >= options.minDetour then
 			table.insert(doors, { x = x, z = z, d = d, open = true, kind = "corridor" })
 		else
@@ -323,7 +343,7 @@ function MazeLayout.placeDoors(walls, n, rooms, relics, options)
 	local shortcuts = {}
 	for _, e in closed do
 		local x, z, d = e[1], e[2], e[3]
-		local around = distance(walls, n, x, z, x + d[1], z + d[2], roomCells)
+		local around = distance(walls, n, x, z, x + d[1], z + d[2], sanctuaryCells)
 		if around and around >= options.minDetour then
 			table.insert(shortcuts, { x, z, d, around })
 		end
@@ -347,15 +367,15 @@ end
 
 ---------------------------------------------------------------- crushing walls
 -- Picks CRUSHER cells: straight corridor cells (open at two opposite ends, ordinary walls on the
--- other two sides) whose side walls can slam together. Not in or next to a spawn room, not a relic
+-- other two sides) whose side walls can slam together. Not in or next to a sanctuary, not a relic
 -- cell, and at least `spacing` cells from every door and other crusher. They never change how the
 -- maze connects (they only shut for a moment).
 -- Returns a list of { x, z, along = "X" or "Z" (the way the corridor runs) }.
-function MazeLayout.placeCrushers(walls, n, rooms, relics, doors, count, spacing)
+function MazeLayout.placeCrushers(walls, n, sanctuaries, relics, doors, count, spacing)
 	local avoid = {}
-	for _, room in rooms do
-		for dx = -1, 2 do
-			for dz = -1, 2 do avoid[key(room.x + dx, room.z + dz)] = true end
+	for _, sanctuary in sanctuaries do
+		for dx = -1, sanctuary.size do
+			for dz = -1, sanctuary.size do avoid[key(sanctuary.x + dx, sanctuary.z + dz)] = true end
 		end
 	end
 	for _, r in relics do avoid[key(r[1], r[2])] = true end

@@ -9,8 +9,8 @@
 --   That turns a dead end into a junction and adds loops, so there's more than one way around - and
 --   you can lose the monster by circling.
 -- Every cell is still reachable from every other.
--- Step 3 (MazeLayout): carve spawn rooms, pick relic rooms and door slots. build() then makes the
---   parts: walls, floors, room floors, the barriers monsters can't cross (spawn rooms only), the
+-- Step 3 (MazeLayout): carve sanctuaries, pick relic rooms and door slots. build() then makes the
+--   parts: walls, floors, sanctuary floors, the barriers monsters can't cross (sanctuaries only), the
 --   relics, and the doors (moved by the Doors module).
 
 local MazeLayout = require(game:GetService("ServerStorage").MazeLayout)
@@ -147,9 +147,9 @@ function MazeBuilder.generate(n)
 end
 
 -- Looks of the special places
-local ROOM_FLOOR_COLOR     = Color3.fromRGB(96, 104, 110)    -- a spawn room nobody has found yet
-MazeBuilder.ROOM_CAPTURED_COLOR = Color3.fromRGB(70, 150, 160)  -- a spawn room your team has captured
-local ROOM_WARD_COLOR      = Color3.fromRGB(90, 220, 235)    -- barrier across spawn room exits
+local SANCTUARY_FLOOR_COLOR     = Color3.fromRGB(96, 104, 110)    -- a sanctuary nobody has found yet
+MazeBuilder.SANCTUARY_CAPTURED_COLOR = Color3.fromRGB(70, 150, 160)  -- a sanctuary your team has captured
+local SANCTUARY_WARD_COLOR      = Color3.fromRGB(90, 220, 235)    -- barrier across sanctuary exits
 local RELIC_COLOR          = Color3.fromRGB(255, 200, 80)
 
 -- The relic itself: a skull (the model ServerStorage.SkullRelic, Creator Store asset 98498294) sitting
@@ -254,7 +254,7 @@ function MazeBuilder.buildProgressBar(parent, adornee, color, height)
 end
 
 -- Builds the maze in the workspace (replacing any previous one).
--- Returns a maze table (see the end): the layout, plus its spawn rooms and relics.
+-- Returns a maze table (see the end): the layout, plus its sanctuaries and relics.
 function MazeBuilder.build(options)
 	options = options or {}
 	local n, S, H, T = MazeBuilder.CELLS, MazeBuilder.CELL, MazeBuilder.WALL_H, MazeBuilder.WALL_T
@@ -302,21 +302,22 @@ function MazeBuilder.build(options)
 		MazeBuilder.GROUND_COLOR, MazeBuilder.GROUND_MATERIAL)
 	y0 += 1 -- everything else sits on the maze floor
 
-	-- The layout: maze, then spawn rooms, then relic rooms (see MazeLayout)
+	-- The layout: maze, then sanctuaries, then relic rooms (see MazeLayout)
 	local walls = MazeBuilder.generate(n)
-	local roomPlans = MazeLayout.carveRooms(walls, n, options.spawnRooms or 4, options.roomSpacing or 5)
+	local sanctuaryPlans = MazeLayout.carveSanctuaries(walls, n, options.sanctuaries or 4, options.sanctuarySpacing or 5, {
+		startSize = options.startSanctuarySize, size = options.sanctuarySize, exitSpacing = options.sanctuaryExitSpacing })
 	local blocked = {}      -- cells monsters can't enter
-	for _, room in roomPlans do
-		for k in room.cells do blocked[k] = true end
+	for _, sanctuary in sanctuaryPlans do
+		for k in sanctuary.cells do blocked[k] = true end
 	end
 	MazeLayout.connect(walls, n, blocked)
-	local relicPlans = MazeLayout.pickRelics(walls, n, roomPlans,
+	local relicPlans = MazeLayout.pickRelics(walls, n, sanctuaryPlans,
 		options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
-	local doorPlans = MazeLayout.placeDoors(walls, n, roomPlans, relicPlans, {
+	local doorPlans = MazeLayout.placeDoors(walls, n, sanctuaryPlans, relicPlans, {
 		corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
 		spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
 	})
-	local crusherPlans = MazeLayout.placeCrushers(walls, n, roomPlans, relicPlans, doorPlans,
+	local crusherPlans = MazeLayout.placeCrushers(walls, n, sanctuaryPlans, relicPlans, doorPlans,
 		options.crushers or 0, options.crusherSpacing or 3)
 	-- isDoor[x][z].E / .S: that side of the cell is a door slot (doors are always on an E or S side)
 	local isDoor = {}
@@ -404,22 +405,22 @@ function MazeBuilder.build(options)
 		return p
 	end
 
-	-- SPAWN ROOMS: a tinted floor, and a barrier across each exit
-	local rooms = {}
-	for _, plan in roomPlans do
-		-- centre of the 2x2 block = the corner shared by its four cells
-		local center = Vector3.new(plan.x * S - half, y0, plan.z * S - half)
+	-- SANCTUARIES: a tinted floor, and a barrier across each exit
+	local sanctuaries = {}
+	for _, plan in sanctuaryPlans do
+		-- the middle of the block of cells
+		local center = Vector3.new((plan.x - 1 + plan.size / 2) * S - half, y0, (plan.z - 1 + plan.size / 2) * S - half)
 		local folder = Instance.new("Model")
-		folder.Name = "SpawnRoom" .. plan.id
+		folder.Name = "Sanctuary" .. plan.id
 		folder.Parent = model
-		local floor = decor("RoomFloor", Vector3.new(2 * S - T, 0.1, 2 * S - T), CFrame.new(center + Vector3.new(0, 0.05, 0)),
-			ROOM_FLOOR_COLOR, Enum.Material.Slate, folder)
+		local floor = decor("SanctuaryFloor", Vector3.new(plan.size * S - T, 0.1, plan.size * S - T), CFrame.new(center + Vector3.new(0, 0.05, 0)),
+			SANCTUARY_FLOOR_COLOR, Enum.Material.Slate, folder)
 		floor.MaterialVariant = MazeBuilder.FLOOR_VARIANT   -- same flagstones, tinted (needs a Slate-based variant)
 		local wards = {}
 		for _, e in plan.exits do
-			table.insert(wards, ward(e[1], e[2], e[3], ROOM_WARD_COLOR, folder))
+			table.insert(wards, ward(e[1], e[2], e[3], SANCTUARY_WARD_COLOR, folder))
 		end
-		table.insert(rooms, { id = plan.id, x = plan.x, z = plan.z, cells = plan.cells, center = center,
+		table.insert(sanctuaries, { id = plan.id, x = plan.x, z = plan.z, size = plan.size, cells = plan.cells, center = center,
 			floor = floor, wards = wards })
 	end
 
@@ -495,14 +496,14 @@ function MazeBuilder.build(options)
 			homes = { homeA, homeB }, shuts = { shutA, shutB }, inward = inward })
 	end
 
-	-- Move the spawn pad into the start room (players are moved to their own spots from there)
-	local start = rooms[1].center
+	-- Move the spawn pad into the start sanctuary (players are moved to their own spots from there)
+	local start = sanctuaries[1].center
 	local spawn = workspace:FindFirstChild("SpawnLocation")
 	if spawn then
 		spawn.Size = Vector3.new(6, 1, 6)
 		spawn.Position = start + Vector3.new(0, 0.5, 0)
 		spawn.Duration = 0
-		spawn.Transparency = 1                -- invisible: the room floor marks the start
+		spawn.Transparency = 1                -- invisible: the sanctuary floor marks the start
 		spawn.CanCollide = false
 		for _, d in spawn:GetChildren() do    -- including its star emblem
 			if d:IsA("Decal") then d.Transparency = 1 end
@@ -524,8 +525,8 @@ function MazeBuilder.build(options)
 		model = model,
 		walls = walls,                          -- the layout, for anything that navigates the maze
 		n = n, S = S, half = half, floorY = y0,
-		start = start + Vector3.new(0, 4, 0),   -- the start room's centre (raised to standing height)
-		rooms = rooms,                          -- spawn rooms: { id, x, z, cells, center, floor, wards }
+		start = start + Vector3.new(0, 4, 0),   -- the start sanctuary's centre (raised to standing height)
+		sanctuaries = sanctuaries,                          -- sanctuaries: { id, x, z, cells, center, floor, wards }
 		relics = relics,                        -- relics: { id, x, z, center, model, gem (the skull) }
 		doors = doors,                          -- doors: { id, x, z, d, other, kind, open, part, closedCF, openCF }
 		crushers = crushers,                    -- crushing walls: { id, x, z, along, center, slabs, homes, shuts, inward }

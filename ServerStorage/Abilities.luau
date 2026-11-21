@@ -63,8 +63,8 @@ local function setCooldown(user, slot, seconds)
 	user:SetAttribute("AbilityReady" .. slot, workspace:GetServerTimeNow() + seconds)
 end
 
--- Can't go into a spawn room: a monster pulled toward someone inside one stops at the edge
-local function stopOutsideRooms(from, to)
+-- Can't go into a sanctuary: a monster pulled toward someone inside one stops at the edge
+local function stopOutsideSanctuaries(from, to)
 	local objectives = match.objectives
 	local steps = math.ceil((to - from).Magnitude / 1)
 	local last = from
@@ -129,7 +129,7 @@ function handlers.Whip(user, root, aim, def)
 			Pull.character(ally, here + aim * 3, def.pullSpeed)
 		elseif hit.kind == "monster" then
 			local monster = hit.thing
-			local to = stopOutsideRooms(monster.pos, Vector3.new(here.X, maze.floorY, here.Z) + aim * 5)
+			local to = stopOutsideSanctuaries(monster.pos, Vector3.new(here.X, maze.floorY, here.Z) + aim * 5)
 			local seconds = monster:Pull(to, def.pullSpeed) or 0
 			match.stun(monster, seconds + def.stun)        -- stunned while dragged, then for def.stun
 		end

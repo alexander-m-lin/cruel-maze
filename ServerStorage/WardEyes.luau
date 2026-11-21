@@ -1,8 +1,8 @@
 -- WARDS: floating eyes the Maze Master places in open cells (see MazeMaster).
--- (Called "ward eyes" in the code: the spawn rooms' monster barriers are already called wards.)
+-- (Called "ward eyes" in the code: the sanctuaries' monster barriers are already called wards.)
 --
 --   local wards = WardEyes.new(maze, objectives, { onDestroying = fn(ward), onDestroyed = fn(ward) })
---   wards:CanPlace(x, z)         -- an open cell: not a spawn room, not a relic's cell, no ward yet
+--   wards:CanPlace(x, z)         -- an open cell: not a sanctuary, not a relic's cell, no ward yet
 --   wards:Add(x, z)              -- -> ward (the oldest fades if there are Config.WARDS_MAX already)
 --   wards:Update(survivors)      -- a few times a second: spotting, and destroying
 --   wards:StartDestroying(player, id)   -- a survivor clicked to destroy one (checked here)
@@ -69,7 +69,7 @@ end
 function WardEyes:CanPlace(x, z)
 	local maze = self.maze
 	if not x or x < 1 or z < 1 or x > maze.n or z > maze.n then return false end
-	if self.objectives:IsBlocked(x, z) then return false end        -- a spawn room
+	if self.objectives:IsBlocked(x, z) then return false end        -- a sanctuary
 	local relic = self.objectives.relicAt[MazeLayout.key(x, z)]
 	if relic and not relic.collected then return false end         -- a relic or false relic
 	for _, ward in self.list do

@@ -67,7 +67,7 @@ function PlayerMonster:Destroy()
 end
 
 -- Put the player's (new) character at the start spot. Until this is done, the body ignores the
--- character - it first appears on the start room's spawn pad, where survivors would see it.
+-- character - it first appears on the start sanctuary's spawn pad, where survivors would see it.
 function PlayerMonster:PlaceCharacter(character)
 	character:PivotTo(self:StartCFrame())
 	self.placed = character

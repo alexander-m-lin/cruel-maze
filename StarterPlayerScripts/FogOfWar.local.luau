@@ -467,12 +467,25 @@ end
 -- Defined after sightFrom (it uses the same fan of rays).
 local revealAround
 
+-- Is this point inside a sanctuary? (The monster side never sees survivors in one.)
+local function inSanctuary(p)
+	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	local folder = status and status:FindFirstChild("Sanctuaries")
+	if not folder then return false end
+	for _, info in folder:GetChildren() do
+		local lo, hi = info:GetAttribute("Min"), info:GetAttribute("Max")
+		if lo and hi and p.X >= lo.X and p.X <= hi.X and p.Z >= lo.Z and p.Z <= hi.Z then return true end
+	end
+	return false
+end
+
 -- eyes: the eye positions of you and your teammates (anyone of them can sense it)
 local function updateHiddenObjects(visibleNow, eyes)
 	local mySide = sideOf(player:GetAttribute("Role"))
 	-- Things that can be hidden: anything tagged (the monsters' bodies), and - for the monster
 	-- side - the survivors' characters
 	local objects = {}
+	local sheltered = {}    -- survivors in a sanctuary: always hidden from the monster side
 	for _, obj in CollectionService:GetTagged("HiddenByFog") do
 		-- monster bodies are on the monster side: always shown to it
 		objects[obj] = mySide == "monsters" and CollectionService:HasTag(obj, "Monster")
@@ -483,10 +496,14 @@ local function updateHiddenObjects(visibleNow, eyes)
 			if other.Character and other:GetAttribute("Role") == Config.Roles.Survivor then
 				-- revealed (by a false relic): shown wherever they are, like a teammate
 				objects[other.Character] = (other:GetAttribute("RevealedUntil") or 0) > now
+				local root = other.Character:FindFirstChild("HumanoidRootPart")
+				if root and inSanctuary(root.Position) then sheltered[other.Character] = true end
 			end
 		end
 		for _, bot in CollectionService:GetTagged("SurvivorBot") do   -- survivor bots (attributes on the model)
 			objects[bot] = (bot:GetAttribute("RevealedUntil") or 0) > now
+			local root = bot:FindFirstChild("HumanoidRootPart")
+			if root and inSanctuary(root.Position) then sheltered[bot] = true end
 		end
 	end
 	-- wards: the monster side's own; survivors see one like anything else, and always once spotted
@@ -509,7 +526,9 @@ local function updateHiddenObjects(visibleNow, eyes)
 		local tile = tiles[tx] and tiles[tx][tz]
 
 		local state = "hidden"
-		if ally then
+		if sheltered[obj] then
+			state = "hidden"
+		elseif ally then
 			state = "seen"
 		elseif tile and visibleNow[tile] and tile.explored and tile.target > T_EXPLORED + 0.1 then
 			state = "seen"
@@ -806,22 +825,26 @@ local function revealedSurvivors()
 	for _, bot in CollectionService:GetTagged("SurvivorBot") do
 		if (bot:GetAttribute("RevealedUntil") or 0) > now then table.insert(list, bot) end
 	end
+	for i = #list, 1, -1 do                   -- not in a sanctuary
+		local ok, pivot = pcall(list[i].GetPivot, list[i])
+		if not ok or inSanctuary(pivot.Position) then table.remove(list, i) end
+	end
 	return list
 end
 
--- CAPTURED SPAWN ROOMS: your team knows its own rooms. The start room (captured from the start)
--- and every room your team captures are added to your map whole - floor and walls - rather than
+-- CAPTURED SANCTUARIES: your team knows its own sanctuaries. The start sanctuary (captured from the start)
+-- and every sanctuary your team captures are added to your map whole - floor and walls - rather than
 -- only the parts someone happened to look at. Remembered, not in view: they show dim until seen.
-local roomsShown = {}  -- [room info Configuration] = the maze it was shown for
+local sanctuariesShown = {}  -- [sanctuary info Configuration] = the maze it was shown for
 
-local function showCapturedRooms()
+local function showCapturedSanctuaries()
 	local status = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
-	local folder = status and status:FindFirstChild("SpawnRooms")
+	local folder = status and status:FindFirstChild("Sanctuaries")
 	if not folder or player:GetAttribute("Role") ~= Config.Roles.Survivor then return end
-	local reach = maze:GetAttribute("CellSize") + 1.5   -- a 2x2-cell room around its centre, plus its walls
+	local reach = maze:GetAttribute("CellSize") + 1.5   -- a 2x2-cell sanctuary around its centre, plus its walls
 	for _, info in folder:GetChildren() do
-		if info:GetAttribute("Captured") and roomsShown[info] ~= maze then
-			roomsShown[info] = maze
+		if info:GetAttribute("Captured") and sanctuariesShown[info] ~= maze then
+			sanctuariesShown[info] = maze
 			local c = info:GetAttribute("Center")
 			local x1, x2 = tileRange(c.X - reach, c.X + reach)
 			local z1, z2 = tileRange(c.Z - reach, c.Z + reach)
@@ -836,8 +859,8 @@ local function showCapturedRooms()
 			end
 		end
 	end
-	for info in roomsShown do
-		if not info.Parent then roomsShown[info] = nil end   -- an old match's room
+	for info in sanctuariesShown do
+		if not info.Parent then sanctuariesShown[info] = nil end   -- an old match's sanctuary
 	end
 end
 
@@ -860,7 +883,7 @@ end
 
 local function updateVisibility()
 	if not ready or not (maze and maze.Parent) then return end
-	showCapturedRooms()
+	showCapturedSanctuaries()
 	showWholeMap()
 	-- Your own sight, every update (if you have a character: while respawning or out of lives you
 	-- see only through your teammates)

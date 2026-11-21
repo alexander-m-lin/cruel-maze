@@ -3,14 +3,14 @@
 --   never seen        - dark
 --   seen before       - dim (walls a little lighter than floor)
 --   in view right now - bright (yours and your teammates' sight, and the areas around spotted relics)
---   teal              - spawn rooms your team has captured
+--   teal              - sanctuaries your team has captured
 --   dots              - you (white), teammates (cyan), relics your team has spotted and not yet
 --                       collected (gold), enemies while your team can see them (red)
 -- Teams: survivors, or the monster side (monsters and the Maze Master). On the monster side every
 -- monster is a teammate, survivors are the enemies, and the Maze Master sees every relic.
 --
 -- It's turned to match the camera (the top of the map is the top of your screen), like the spawn
--- room picker. Press M to hide or show it.
+-- sanctuary picker. Press M to hide or show it.
 --
 -- The fog picture comes from the FogOfWar script (through FogState). It's drawn into a small
 -- image one pixel at a time (an EditableImage), refreshed several times a second.
@@ -40,8 +40,8 @@ local SEEN_FLOOR   = { 88, 86, 76, 245 }
 local SEEN_WALL    = { 140, 148, 118, 255 }
 local VIEW_FLOOR   = { 185, 180, 156, 255 }
 local VIEW_WALL    = { 235, 240, 205, 255 }
-local ROOM_SEEN    = { 48, 112, 120, 250 }     -- a spawn room your team has captured...
-local ROOM_VIEW    = { 80, 178, 190, 255 }     -- ...and while it's in view
+local SANCTUARY_SEEN    = { 48, 112, 120, 250 }     -- a sanctuary your team has captured...
+local SANCTUARY_VIEW    = { 80, 178, 190, 255 }     -- ...and while it's in view
 local DOT_SELF     = Color3.fromRGB(255, 255, 255)
 local DOT_ALLY     = Color3.fromRGB(80, 220, 235)
 local DOT_RELIC    = Color3.fromRGB(255, 205, 80)
@@ -164,19 +164,19 @@ local function drawFog()
 	if builtFor ~= FogState.tiles then mapPixels() end
 	local visible = FogState.visible
 
-	-- captured spawn rooms: 2x2 cells around each room's centre
-	local rooms = {}
-	local folder = match:FindFirstChild("SpawnRooms")
-	local cell = FogState.maze and FogState.maze:GetAttribute("CellSize") or 20
+	-- captured sanctuaries: the block of cells between each one's corners (Min, Max)
+	local sanctuaries = {}
+	local folder = match:FindFirstChild("Sanctuaries")
 	if folder then
 		for _, info in folder:GetChildren() do
-			if info:GetAttribute("Captured") then table.insert(rooms, info:GetAttribute("Center")) end
+			local lo, hi = info:GetAttribute("Min"), info:GetAttribute("Max")
+			if info:GetAttribute("Captured") and lo and hi then table.insert(sanctuaries, { lo, hi }) end
 		end
 	end
-	local function inRoom(index)
+	local function inSanctuary(index)
 		local x, z = pixelX[index], pixelZ[index]
-		for _, c in rooms do
-			if math.abs(x - c.X) < cell and math.abs(z - c.Z) < cell then return true end
+		for _, b in sanctuaries do
+			if x > b[1].X and x < b[2].X and z > b[1].Z and z < b[2].Z then return true end
 		end
 		return false
 	end
@@ -185,8 +185,8 @@ local function drawFog()
 		local tile = pixelTile[index]
 		if not tile then
 			buffer.writeu32(buf, index * 4, 0)              -- outside the maze: see-through
-		elseif not tile.onWall and #rooms > 0 and inRoom(index) then
-			put(index, visible[tile] and ROOM_VIEW or ROOM_SEEN)
+		elseif not tile.onWall and #sanctuaries > 0 and inSanctuary(index) then
+			put(index, visible[tile] and SANCTUARY_VIEW or SANCTUARY_SEEN)
 		elseif not tile.explored then
 			put(index, NEVER_SEEN)
 		elseif visible[tile] then

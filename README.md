@@ -14,7 +14,7 @@ Playing from the file is single player. Playing together needs the place publish
 (or Studio's Team Create).
 
 **Controls (PC):** WASD to move. Your character faces the mouse, and you see in a cone that way.
-Moving away from where you face is slower. After being caught, click a spawn room on the map to
+Moving away from where you face is slower. After being caught, click a sanctuary on the map to
 choose where you come back. M hides the minimap.
 
 **Lobby and roles:** between matches everyone waits in the lobby, which lists who's in. Pick a
@@ -65,9 +65,12 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
   side has vision rings round relics too: the Maze Master round every relic, monsters round
   false relics and the real ones they've spotted. A purple glow round your screen and a whisper mean
   the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
-- **Spawn rooms** (cyan barriers) are safe: the monster can't enter. Walk into one to capture it
-  for your team, and you can come back there after being caught. Your team's rooms (the start
-  room, and any you capture) are on your map whole.
+- **Sanctuaries** (cyan barriers) are safe: the monster can't enter, and the monster side can't
+  see you inside one at all (not through wards, relic rings, reveals or haunts). The start
+  sanctuary is 3x3 cells, the others 2x2; their 2-3 exits are spread apart, so nobody can watch
+  two from one spot. Walk into one to capture it
+  for your team, and you can come back there after being caught. Your team's sanctuaries (the start
+  sanctuary, and any you capture) are on your map whole.
 - **Doors** (wall panels between two darker posts) open and close during the match. A door shakes,
   rumbles and kicks up dust for 2 seconds before it moves. Your map shows each door as you last saw it. With
   every door shut, everything is still reachable: doors only send you the long way round.
@@ -85,14 +88,14 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 |---|---|---|
 | `ServerScriptService/Main.legacy.luau` | ServerScriptService | Starts the game (runs `Match`) |
 | `ServerStorage/Match.luau` | ServerStorage (ModuleScript) | Runs matches one after another: Waiting → Countdown → Playing → Results. Lives, being caught, respawning, the end of a match |
-| `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds each maze: walls, floors, spawn rooms, relics. Wall and floor looks |
-| `ServerStorage/MazeLayout.luau` | ServerStorage (ModuleScript) | Layout rules: carving spawn rooms, picking relic spots and door slots, keeping the maze connected (even with every door shut) |
+| `ServerStorage/MazeBuilder.luau` | ServerStorage (ModuleScript) | Generates and builds each maze: walls, floors, sanctuaries, relics. Wall and floor looks |
+| `ServerStorage/MazeLayout.luau` | ServerStorage (ModuleScript) | Layout rules: carving sanctuaries, picking relic spots and door slots, keeping the maze connected (even with every door shut) |
 | `ServerStorage/Doors.luau` | ServerStorage (ModuleScript) | Opening and closing doors mid-match (warning, movement, nudging people out of the way), the door AI, and the Studio dev panel's requests |
-| `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and spawn rooms (capturing, monster barriers) |
+| `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and sanctuaries (capturing, monster barriers) |
 | `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches. Also builds the monster body |
 | `ServerStorage/PlayerMonster.luau` | ServerStorage (ModuleScript) | A monster played by a person: dresses their invisible character in the monster body; the lunge and its catches |
 | `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, haunt, false relics, crushing walls |
-| `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a spawn room from monsters. Passes for a player to the rest of the game |
+| `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a sanctuary from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
@@ -104,7 +107,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
-| `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, spawn rooms |
+| `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, sanctuaries |
 | `ReplicatedStorage/Sounds.luau` | ReplicatedStorage (ModuleScript) | Every sound effect and the music, with volumes |
 | `ReplicatedStorage/Movement.luau` | ReplicatedStorage (ModuleScript) | Movement rules shared by players and bots: speed by facing, frozen when held, slowed by false relics, running backwards |
 | `ReplicatedStorage/Characters.luau` | ReplicatedStorage (ModuleScript) | Finds the character behind a UserId, a player's or a survivor bot's (relic beams, the kill) |
@@ -115,7 +118,7 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 | `StarterPlayerScripts/FogOfWar.local.luau` | StarterPlayer › StarterPlayerScripts | Fog of war and line of sight, shared with teammates, plus the vision around spotted relics |
 | `StarterPlayerScripts/FogState.luau` | StarterPlayer › StarterPlayerScripts (ModuleScript) | What the fog knows (seen, in view), shared with the minimap |
 | `StarterPlayerScripts/Minimap.local.luau` | StarterPlayer › StarterPlayerScripts | Corner map: explored and in-view areas, and dots for you, teammates, spotted relics and a visible monster (M hides it) |
-| `StarterPlayerScripts/SpawnPicker.local.luau` | StarterPlayer › StarterPlayerScripts | The map for choosing a spawn room after being caught |
+| `StarterPlayerScripts/SpawnPicker.local.luau` | StarterPlayer › StarterPlayerScripts | The map for choosing a sanctuary after being caught |
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly and animates them in code: the walk, the chase, the kill |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |

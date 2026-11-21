@@ -4,11 +4,11 @@
 --   Waiting   - THE LOBBY: everyone waits between matches, picks a preferred role ("PreferredRole"
 --               on the player) and anyone presses Start (needs Config.MIN_PLAYERS players)
 --   Countdown - a new maze is built and everyone gets a role (3 survivors, 2 monsters, 1 Maze
---               Master; see assignRoles). Survivors get lives and a character in the start room,
+--               Master; see assignRoles). Survivors get lives and a character in the start sanctuary,
 --               monsters a character at their start spot, the Maze Master no character at all. All
 --               frozen while a short countdown runs; the monsters don't hunt yet
 --   Playing   - survivors have Config.MATCH_TIME seconds to collect Config.RELICS_NEEDED relics.
---               Caught survivors lose a life and pick a captured spawn room to come back in;
+--               Caught survivors lose a life and pick a captured sanctuary to come back in;
 --               with no lives left they're out.
 --   Results   - the result is shown for a few seconds, then everything is cleared away
 --
@@ -20,11 +20,11 @@
 --   State   - the current state (one of Config.States)
 --   EndsAt  - server time when the current state ends (countdown, match timer, results)
 --   Message - text to show on screen ("" = none)
---   RelicsCollected / RelicsNeeded / RelicsTotal, and a SpawnRooms folder (see Objectives)
+--   RelicsCollected / RelicsNeeded / RelicsTotal, and a Sanctuaries folder (see Objectives)
 --   Winner  - during Results: the role that won (Config.Roles.Survivor or .Monster)
 -- and on each player:
---   Role, Lives, Out (no lives left), Respawning (choosing a spawn room), RespawnBy (deadline),
---   SpawnRoom (the room they'll come back in), BaseSpeed (see Controls), Seized (held by a
+--   Role, Lives, Out (no lives left), Respawning (choosing a sanctuary), RespawnBy (deadline),
+--   Sanctuary (the sanctuary they'll come back in), BaseSpeed (see Controls), Seized (held by a
 --   monster that's killing them: their controls stop), Killing (a monster player mid-kill: can't
 --   move), DevRole (Studio only: the role they asked for in the dev panel), RevealedUntil (server
 --   time: shown to the monster side wherever they are), HauntedUntil (the Maze Master's Haunt: also
@@ -34,7 +34,7 @@
 --
 -- Monsters played by people: an invisible character dressed in the monster body (PlayerMonster).
 -- Empty monster slots get AI monsters (MonsterAI). Monster characters are in the "MonsterPlayers"
--- collision group, which collides with the spawn rooms' barriers ("Wards"); nothing else does.
+-- collision group, which collides with the sanctuaries' barriers ("Wards"); nothing else does.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -71,7 +71,7 @@ status.Name = "Match"
 status.Parent = ReplicatedStorage
 
 local caughtEvent = Net.event("Caught")              -- server -> player: you were caught (lives left)
-local chooseSpawnEvent = Net.event("ChooseSpawn")    -- player -> server: respawn me in this room
+local chooseSpawnEvent = Net.event("ChooseSpawn")    -- player -> server: respawn me in this sanctuary
 local noticeEvent = Net.event("Notice")              -- server -> everyone: a short message (relic found...)
 local collectEvent = Net.event("CollectRelic")       -- player -> server: I clicked to collect this relic
 local lungeEvent = Net.event("Lunge")                -- monster player -> server: I clicked to lunge
@@ -83,7 +83,7 @@ local falseRelicEvent = Net.event("FalseRelicSprung") -- server -> survivor: you
 local falseRelicsEvent = Net.event("FalseRelics")     -- server -> monster side only: the ids of the false relics
 local destroyWardEvent = Net.event("DestroyWard")     -- survivor -> server: I clicked to destroy this ward
 
--- Spawn-room barriers stop monster players and nothing else; crushing walls stop everyone but them.
+-- Spawn-sanctuary barriers stop monster players and nothing else; crushing walls stop everyone but them.
 -- Monster players pass through survivors (players and bots): they catch with the lunge, and a
 -- solid monster shoving into a survivor - a bot especially - could fling it into the air.
 PhysicsService:RegisterCollisionGroup("Survivors")
@@ -102,7 +102,7 @@ PhysicsService:CollisionGroupSetCollidable("Wards", "MonsterPlayers", true)
 
 local state = nil
 local maze = nil         -- this match's maze (see MazeBuilder.build)
-local objectives = nil   -- this match's relics and spawn rooms (see Objectives)
+local objectives = nil   -- this match's relics and sanctuaries (see Objectives)
 local monsters = {}      -- this match's monsters: MonsterAI (bots) and PlayerMonster objects
 local playerMonsters = {} -- [player] = their PlayerMonster
 local bots = {}           -- this match's survivor bots (SurvivorBot: they pass for players)
@@ -149,7 +149,7 @@ local function survivorsInMatch()
 	return list
 end
 
--- Survivors the monsters may hunt right now: alive, not being killed, and not inside a protected room
+-- Survivors the monsters may hunt right now: alive, not being killed, and not inside a protected sanctuary
 local function huntable()
 	local list = {}
 	for _, player in survivorsInMatch() do
@@ -174,18 +174,18 @@ local function applySpeed(player)
 	end
 end
 
--- Each player gets their own spot in a spawn room, so nobody spawns inside anybody else.
--- Spots sit on a circle around the room's centre, facing outward.
+-- Each player gets their own spot in a sanctuary, so nobody spawns inside anybody else.
+-- Spots sit on a circle around the sanctuary's centre, facing outward.
 local SPAWN_RADIUS = 5
 local SPAWN_SLOTS = 6
-local function spawnSpot(player, room)
+local function spawnSpot(player, sanctuary)
 	local list = Players:GetPlayers()
 	for _, bot in bots do table.insert(list, bot) end
 	table.sort(list, function(a, b) return a.UserId < b.UserId end)   -- same order on every call
 	local index = (table.find(list, player) or 1) - 1
 	local angle = (index % SPAWN_SLOTS) / SPAWN_SLOTS * math.pi * 2
 	local offset = Vector3.new(math.cos(angle), 0, math.sin(angle)) * SPAWN_RADIUS
-	local at = room.center + Vector3.new(0, 4, 0) + offset
+	local at = sanctuary.center + Vector3.new(0, 4, 0) + offset
 	return CFrame.lookAt(at, at + offset)
 end
 
@@ -195,12 +195,12 @@ local function isBot(player)
 	return typeof(player) ~= "Instance"
 end
 
--- Put a (new) character in the player's chosen spawn room (the start room if it isn't available)
-local function placeInSpawnRoom(player)
+-- Put a (new) character in the player's chosen sanctuary (the start sanctuary if it isn't available)
+local function placeInSanctuary(player)
 	local character = player.Character
 	if not (character and maze) then return end
-	local room = objectives and objectives:CapturedRoom(player:GetAttribute("SpawnRoom") or 1) or maze.rooms[1]
-	character:PivotTo(spawnSpot(player, room))
+	local sanctuary = objectives and objectives:CapturedSanctuary(player:GetAttribute("Sanctuary") or 1) or maze.sanctuaries[1]
+	character:PivotTo(spawnSpot(player, sanctuary))
 	SpeedCheck.moved(player)
 end
 
@@ -215,7 +215,7 @@ local function setUpSurvivorCharacter(character)
 end
 
 -- A monster player's character: invisible (the monster body is drawn in its place), no name tag,
--- and stopped by spawn-room barriers. Placed at its monster's start spot.
+-- and stopped by spawn-sanctuary barriers. Placed at its monster's start spot.
 local function setUpMonsterCharacter(player, character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
@@ -239,10 +239,10 @@ local function respawn(player)
 	if not player.Parent or not player:GetAttribute("Respawning") then return end
 	player:SetAttribute("Respawning", nil)
 	player:SetAttribute("RespawnBy", nil)
-	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the room
+	player:LoadCharacter()     -- CharacterAdded (below) moves the new character into the sanctuary
 	if isBot(player) then                                  -- (bots have no CharacterAdded)
 		setUpSurvivorCharacter(player.Character)
-		placeInSpawnRoom(player)
+		placeInSanctuary(player)
 	end
 end
 
@@ -299,7 +299,7 @@ local function onCaught(player, monster)
 	end
 
 	-- Once the kill has played out: out of the match, or choose where to come back (if they
-	-- don't choose in time, their last room is used)
+	-- don't choose in time, their last sanctuary is used)
 	task.delay(monster and KILL.DONE or Config.CRUSHED_LINGER, function()
 		if state ~= States.Playing or not player.Parent then return end
 		if lives <= 0 then
@@ -309,12 +309,12 @@ local function onCaught(player, monster)
 		player:SetAttribute("Respawning", true)
 		player:SetAttribute("RespawnBy", workspace:GetServerTimeNow() + Config.RESPAWN_CHOICE_TIME)
 		if isBot(player) then
-			-- bots pick a captured room at random, straight away
-			local rooms = {}
-			for _, room in maze.rooms do
-				if room.captured then table.insert(rooms, room.id) end
+			-- bots pick a captured sanctuary at random, straight away
+			local sanctuaries = {}
+			for _, sanctuary in maze.sanctuaries do
+				if sanctuary.captured then table.insert(sanctuaries, sanctuary.id) end
 			end
-			player:SetAttribute("SpawnRoom", rooms[math.random(#rooms)] or 1)
+			player:SetAttribute("Sanctuary", sanctuaries[math.random(#sanctuaries)] or 1)
 			task.delay(0.5, function()
 				if state == States.Playing then respawn(player) end
 			end)
@@ -334,6 +334,7 @@ end
 -- AI monsters (spottedBySide) to go after survivors their side can see.
 local SIGHT_SLACK = 3
 local function monsterSideSees(position, except)
+	if objectives:IsSafe(position) then return false end   -- nobody sees into a sanctuary
 	local spot = { center = position }
 	for _, monster in monsters do
 		if monster.pos and monster.facing and objectives:CanSee(monster.pos, monster.facing, spot) then return true end
@@ -365,7 +366,7 @@ local function haunt(userId)
 	for _, survivor in survivorsInMatch() do
 		if survivor.UserId ~= userId then continue end
 		local character = not survivor:GetAttribute("Seized") and aliveCharacter(survivor)
-		if not character then return false, "They can't be haunted now" end
+		if not character or objectives:IsSafe(character.HumanoidRootPart.Position) then return false, "They can't be haunted now" end
 		local now = workspace:GetServerTimeNow()
 		local revealed = (survivor:GetAttribute("RevealedUntil") or 0) > now
 		if not revealed and not monsterSideSees(character.HumanoidRootPart.Position, survivor) then
@@ -429,11 +430,11 @@ collectEvent.OnServerEvent:Connect(function(player, relicId)
 	objectives:StartCollecting(player, relicId)
 end)
 
--- A player picked a spawn room. Check everything: never trust what a client sends.
-chooseSpawnEvent.OnServerEvent:Connect(function(player, roomId)
+-- A player picked a sanctuary. Check everything: never trust what a client sends.
+chooseSpawnEvent.OnServerEvent:Connect(function(player, sanctuaryId)
 	if state ~= States.Playing or not player:GetAttribute("Respawning") then return end
-	if typeof(roomId) ~= "number" or not objectives or not objectives:CapturedRoom(roomId) then return end
-	player:SetAttribute("SpawnRoom", roomId)
+	if typeof(sanctuaryId) ~= "number" or not objectives or not objectives:CapturedSanctuary(sanctuaryId) then return end
+	player:SetAttribute("Sanctuary", sanctuaryId)
 	local wait = MIN_RESPAWN_DELAY - (os.clock() - (caughtAt[player] or 0))
 	if wait > 0 then
 		task.delay(wait, function()
@@ -465,7 +466,7 @@ local function cleanUp()
 	table.clear(caughtAt)
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
-		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "SpawnRoom", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
+		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "Sanctuary", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
 			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo", "PullStyle" } do
 			player:SetAttribute(name, nil)
 		end
@@ -474,16 +475,16 @@ end
 
 -- The free cell nearest the middle of the maze, for a monster to appear in
 -- Where each monster appears. The first: the free cell nearest the middle. Each one after: as far
--- as possible from those already placed, but never near the start room (survivors spawn there).
-local START_ROOM_CLEARANCE = 6   -- cells
+-- as possible from those already placed, but never near the start sanctuary (survivors spawn there).
+local START_SANCTUARY_CLEARANCE = 6   -- cells
 local function monsterStartCell(taken)
 	local mid = math.ceil(maze.n / 2)
-	local startRoom = maze.rooms[1]
+	local startSanctuary = maze.sanctuaries[1]
 	local best, bestScore
 	for x = 1, maze.n do
 		for z = 1, maze.n do
 			if objectives:IsBlocked(x, z) then continue end
-			if math.abs(x - startRoom.x) + math.abs(z - startRoom.z) < START_ROOM_CLEARANCE then continue end
+			if math.abs(x - startSanctuary.x) + math.abs(z - startSanctuary.z) < START_SANCTUARY_CLEARANCE then continue end
 			local score
 			if #taken == 0 then
 				score = -(math.abs(x - mid) + math.abs(z - mid))       -- nearest the middle
@@ -577,8 +578,11 @@ end
 
 local function runCountdown()
 	maze = MazeBuilder.build({
-		spawnRooms = Config.SPAWN_ROOMS,
-		roomSpacing = Config.SPAWN_ROOM_SPACING,
+		sanctuaries = Config.SANCTUARIES,
+		sanctuarySpacing = Config.SANCTUARY_SPACING,
+		sanctuarySize = Config.SANCTUARY_SIZE,
+		startSanctuarySize = Config.START_SANCTUARY_SIZE,
+		sanctuaryExitSpacing = Config.SANCTUARY_EXIT_SPACING,
 		relics = Config.RELIC_TOTAL,
 		relicSpacing = Config.RELIC_SPACING,
 		relicsNearStart = Config.RELICS_NEAR_START,
@@ -596,8 +600,8 @@ local function runCountdown()
 			noticeEvent:FireAllClients(("%s collected a relic! (%d/%d)"):format(
 				player.DisplayName, objectives.collected, Config.RELICS_NEEDED))
 		end,
-		onCapture = function(player, room)
-			noticeEvent:FireAllClients(("%s captured a spawn room!"):format(player.DisplayName))
+		onCapture = function(player, sanctuary)
+			noticeEvent:FireAllClients(("%s captured a sanctuary!"):format(player.DisplayName))
 		end,
 		-- a false relic was placed: tell the monster side (only them) which relics are false
 		onFalseRelicPlaced = function()
@@ -617,9 +621,9 @@ local function runCountdown()
 		end,
 	})
 
-	-- spawn-room barriers become solid for monster players
-	for _, room in maze.rooms do
-		for _, ward in room.wards do
+	-- spawn-sanctuary barriers become solid for monster players
+	for _, sanctuary in maze.sanctuaries do
+		for _, ward in sanctuary.wards do
 			ward.CanCollide = true
 			ward.CollisionGroup = "Wards"
 		end
@@ -687,12 +691,12 @@ local function runCountdown()
 	for _, bot in bots do
 		bot:SetAttribute("Role", Roles.Survivor)
 		bot:SetAttribute("Lives", Config.LIVES)
-		bot:SetAttribute("SpawnRoom", 1)
+		bot:SetAttribute("Sanctuary", 1)
 		bot:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
 		bot:SetAttribute("BaseSpeed", 0)
 		bot:LoadCharacter()
 		setUpSurvivorCharacter(bot.Character)
-		placeInSpawnRoom(bot)
+		placeInSanctuary(bot)
 	end
 	for player, role in roles do
 		player:SetAttribute("Role", role)
@@ -700,7 +704,7 @@ local function runCountdown()
 		player:SetAttribute("Out", nil)
 		player:SetAttribute("Respawning", nil)
 		player:SetAttribute("Killing", nil)
-		player:SetAttribute("SpawnRoom", role == Roles.Survivor and 1 or nil)
+		player:SetAttribute("Sanctuary", role == Roles.Survivor and 1 or nil)
 		player:SetAttribute("Hero", role == Roles.Survivor and Config.DEFAULT_SURVIVOR_HERO or nil)
 		if role == Roles.MazeMaster then
 			if player.Character then player.Character:Destroy() end   -- no body in the maze
@@ -719,7 +723,7 @@ local function runCountdown()
 			focus.Parent = maze.model
 			player.ReplicationFocus = focus
 		else
-			task.spawn(player.LoadCharacter, player)  -- a fresh character (start room, or monster spot)
+			task.spawn(player.LoadCharacter, player)  -- a fresh character (start sanctuary, or monster spot)
 		end
 	end
 	task.wait(Config.COUNTDOWN)
@@ -809,16 +813,16 @@ local function onPlayerAdded(player)
 				task.defer(setUpMonsterCharacter, player, character)
 			else
 				setUpSurvivorCharacter(character)
-				task.defer(placeInSpawnRoom, player)
+				task.defer(placeInSanctuary, player)
 			end
 		end
 	end)
 
-	-- Joining mid-match: you're a survivor with full lives, in the start room
+	-- Joining mid-match: you're a survivor with full lives, in the start sanctuary
 	if state == States.Countdown or state == States.Playing then
 		player:SetAttribute("Role", Roles.Survivor)
 		player:SetAttribute("Lives", Config.LIVES)
-		player:SetAttribute("SpawnRoom", 1)
+		player:SetAttribute("Sanctuary", 1)
 		player:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
 	end
 	player:LoadCharacter()

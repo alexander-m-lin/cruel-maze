@@ -13,7 +13,7 @@
 --
 -- THE BRAIN (a few times a second):
 --   FLEE    - sees a monster (within FLEE_SIGHT studs, in line of sight): runs to the nearest
---             spawn room (monsters can't follow) and waits there until none has been seen for
+--             sanctuary (monsters can't follow) and waits there until none has been seen for
 --             SAFE_AFTER seconds
 --   COLLECT - sees a relic nobody has collected: goes to it and collects it (it can be fooled by a
 --             false relic, like anyone)
@@ -32,7 +32,7 @@ local Movement = require(ReplicatedStorage.Movement)   -- the same speed rules a
 local THINK_EVERY = 0.2
 local REPLAN_EVERY = 3        -- seconds: re-plan the route (doors change)
 local FLEE_SIGHT = 50         -- studs: sees a monster this far, in line of sight
-local SAFE_AFTER = 4          -- seconds without seeing a monster before leaving a spawn room
+local SAFE_AFTER = 4          -- seconds without seeing a monster before leaving a sanctuary
 local EYE = 3
 local DIRS = { {0, -1, "N"}, {1, 0, "E"}, {0, 1, "S"}, {-1, 0, "W"} }
 
@@ -288,7 +288,7 @@ function SurvivorBot:think(root, cx, cz, monsters, now)
 	local eye = Vector3.new(root.Position.X, self.maze.floorY + EYE, root.Position.Z)
 	local objectives = self.objectives
 
-	-- 1. FLEE from any monster it sees, to the nearest spawn room
+	-- 1. FLEE from any monster it sees, to the nearest sanctuary
 	local threat = self:seeMonster(eye, monsters)
 	if threat then self.lastThreatAt = now end
 	local safe = objectives:IsSafe(root.Position)

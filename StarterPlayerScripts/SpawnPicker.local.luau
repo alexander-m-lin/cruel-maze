@@ -1,6 +1,6 @@
 -- When you're caught (and have lives left), shows a small map of the maze with a button on each
--- spawn room your team has captured. Click one to respawn there.
--- If you don't choose in time, the server brings you back in your last room.
+-- sanctuary your team has captured. Click one to respawn there.
+-- If you don't choose in time, the server brings you back in your last sanctuary.
 --
 -- The map is turned 45° to match the isometric camera, so "up" on the map is "up" on screen.
 -- The camera looks from the -X/-Z corner, so on screen:
@@ -75,24 +75,24 @@ local function toMap(worldPos)
 end
 
 local buttons = {}
-local function choose(roomId)
+local function choose(sanctuaryId)
 	if not player:GetAttribute("Respawning") then return end
-	chooseSpawn:FireServer(roomId)
+	chooseSpawn:FireServer(sanctuaryId)
 	title.Text = "Respawning..."
 end
 
 local function rebuild()
 	for _, b in buttons do b:Destroy() end
 	table.clear(buttons)
-	local rooms = match:FindFirstChild("SpawnRooms")
-	if not rooms then return end
-	local list = rooms:GetChildren()
+	local sanctuaries = match:FindFirstChild("Sanctuaries")
+	if not sanctuaries then return end
+	local list = sanctuaries:GetChildren()
 	table.sort(list, function(a, b) return a:GetAttribute("Id") < b:GetAttribute("Id") end)
 	for _, info in list do
-		if not info:GetAttribute("Captured") then continue end   -- only rooms your team has found
+		if not info:GetAttribute("Captured") then continue end   -- only sanctuaries your team has found
 		local id = info:GetAttribute("Id")
 		local b = Instance.new("TextButton")
-		b.Text = ""                                -- no label: rooms are picked by where they are
+		b.Text = ""                                -- no label: sanctuaries are picked by where they are
 		b.AnchorPoint = Vector2.new(0.5, 0.5)
 		b.Position = UDim2.fromOffset(toMap(info:GetAttribute("Center")).X, toMap(info:GetAttribute("Center")).Y)
 		b.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
@@ -103,7 +103,7 @@ local function rebuild()
 		local ring = Instance.new("UIStroke", b)
 		ring.Thickness = 3
 		ring.Color = SELECTED_COLOR
-		ring.Enabled = player:GetAttribute("SpawnRoom") == id   -- your last room: the default
+		ring.Enabled = player:GetAttribute("Sanctuary") == id   -- your last sanctuary: the default
 		b.Activated:Connect(function() choose(id) end)
 		buttons[id] = b
 	end
