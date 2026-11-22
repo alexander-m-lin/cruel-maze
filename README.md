@@ -22,19 +22,20 @@ preferred role there (Any, Survivor, Monster or Maze Master; you get it if the s
 anyone presses Start. Roles: 3 survivors, 2 monsters and a Maze Master; empty slots get bots
 (survivor bots named "Bot 1"..., AI monsters, and an AI Maze Master that uses the same tools as a
 person: it shuts doors ahead of chased survivors, sets off crushing walls as they walk in, keeps
-wards out and haunts whoever the monster side can see).
+wards watching relics and wherever survivors were last seen).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
 starts another straight away, and "Doors" opens the doors panel.
 - **Monster:** move as usual; left-click to lunge. A survivor you hit is caught. You see what your
   team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
+  Your map shows the relics your side has seen (with your own eyes or a ward's).
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
-  red for you and the monsters. You see what the monsters see, all round every relic, and each
-  crushing wall's stretch of corridor. Every door, crushing wall and survivor you can see is
+  red for you and the monsters. You see what the monsters see, round your wards, and each
+  crushing wall's stretch of corridor. You know where every relic is (they're on your map) but
+  can't see round them: wards are how you watch them. Every door and crushing wall is
   outlined (purple = ready, grey = not yet): click one to use it. Each door rests 20 s after you
   change it and each crushing wall 10 s after it slams; the others stay ready. A door opens or shuts; a
-  crushing wall (hidden in the maze) slams together, crushing survivors between them; a survivor
-  is haunted (for 5 seconds your side sees them and what they see, and they're slowed to 70%).
+  crushing wall (hidden in the maze) slams together, crushing survivors between them.
   Hovering one shows the ability's name, or a clock while it recharges. Two buttons place things:
   wards (1: a floating eye your side sees round, 50 studs in line of sight; up to 4 at a time) and
   false relics (2, two a match: they look like relics, and a survivor who clicks one is revealed
@@ -90,14 +91,13 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 - **Wards** (floating purple eyes) let the monster side see 50 studs around them, in line of sight. Once your team spots
   one it stays shown; stand next to one and left-click, then stay close for 2 seconds (a bar
   fills), to destroy it (the monster side sees where). Anything that reveals you (a false relic,
-  a haunt) also lights up a small ring round you for the monster side. AI monsters come for you,
+  being feared) also lights up a small ring round you for the monster side. AI monsters come for you,
   even through walls, whenever you're within 120 studs and the monster side can see you
-  in any way: another monster, a ward, a crushing wall, a relic's ring, a reveal. The monster
-  side has vision rings round relics too: the Maze Master round every relic, monsters round
-  false relics and the real ones they've spotted. A purple glow round your screen and a whisper mean
-  the Maze Master has **haunted** you: for a few seconds they see you, and what you see.
+  in any way: another monster, a ward, a crushing wall, a reveal. Relics give the monster side
+  no sight of their own: the Maze Master knows where they all are and watches them with wards,
+  usually from a little way down a corridor, so look for the eye before you walk in.
 - **Sanctuaries** (cyan barriers) are safe: the monster can't enter, and the monster side can't
-  see you inside one at all (not through wards, relic rings, reveals or haunts). The start
+  see you inside one at all (not through wards or reveals). The start
   sanctuary is 3x3 cells with 3 exits, the others 2x2 with 2-3; walking from just outside one
   exit to just outside another takes at least 6 cells, even with every door open, so nobody can
   hold two. Walk into one to capture it
@@ -126,7 +126,7 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `ServerStorage/Objectives.luau` | ServerStorage (ModuleScript) | Relics (spotting, collecting) and sanctuaries (capturing, monster barriers) |
 | `ServerStorage/MonsterAI.luau` | ServerStorage (ModuleScript) | An AI monster: roams, chases, catches. Also builds the monster body |
 | `ServerStorage/PlayerMonster.luau` | ServerStorage (ModuleScript) | A monster played by a person: dresses their invisible character in the monster body; the lunge and its catches |
-| `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, haunt, false relics, crushing walls |
+| `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, false relics, crushing walls |
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a sanctuary from monsters. Passes for a player to the rest of the game |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
@@ -165,7 +165,6 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/FalseRelicMarks.local.luau` | StarterPlayer › StarterPlayerScripts | False relics glow red for the monster side (only they're told which are false) |
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
-| `StarterPlayerScripts/HauntAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The purple screen edge and whisper when you're haunted |
 | `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |

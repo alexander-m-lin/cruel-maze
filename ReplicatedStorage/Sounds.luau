@@ -31,7 +31,7 @@ local Sounds = {
 	CrusherSlam    = { id = 9125393230,  volume = 1.2, range = 120, stopAfter = 1.5 },   -- big rocks dropping
 
 	-- The Maze Master
-	HauntWhisper   = { id = 72101610830828, volume = 0.8 },                           -- you've been haunted (only you hear it)
+	Whisper        = { id = 72101610830828, volume = 0.8 },                           -- dread (Instill Fear; only you hear it)
 
 	-- Heroes
 	WhipCrack      = { id = 9113612888, volume = 0.9, range = 90 },                    -- Sara's whip (Pro Sound Effects)

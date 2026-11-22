@@ -1,9 +1,9 @@
 -- The MAZE MASTER's interface (only while you're the Maze Master). The camera pans over the maze
 -- (IsometricCamera); this script adds:
 --
---   TARGETS in the world, always outlined: every door, every crushing wall, and every survivor you
---   can see. Purple = ready to use, grey = not yet (recharging, or the door/wall is busy). Click one
---   to use it on that: a door opens or shuts, a crushing wall slams, a survivor is haunted.
+--   TARGETS in the world, always outlined: every door and every crushing wall. Purple = ready to
+--   use, grey = not yet (recharging, or the door/wall is busy). Click one to use it on that: a door
+--   opens or shuts, a crushing wall slams.
 --   Hovering one brightens it and shows, by the mouse, the ability's name in a box when it's ready,
 --   or a clock filling up (with the seconds left) while it recharges.
 --   Two PLACEMENT buttons along the bottom (or keys 1-2): Ward and False relic. Pick one, then click
@@ -17,7 +17,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
@@ -36,7 +35,7 @@ local PURPLE_BRIGHT = Color3.fromRGB(205, 140, 255)
 local GREY = Color3.fromRGB(110, 110, 120)
 
 -- the abilities used by clicking a target, and their names on the hover box
-local TARGET_TOOLS = { Door = "Door", Crusher = "Crushing wall", Haunt = "Haunt" }
+local TARGET_TOOLS = { Door = "Door", Crusher = "Crushing wall" }
 -- the placement abilities, which have buttons
 local TOOLS = {
 	{ id = "Ward", name = "Ward", key = Enum.KeyCode.One },
@@ -289,23 +288,7 @@ local function crushersList()
 	return list
 end
 
--- Survivors you can see right now (FogOfWar marks each "VisibleToMe"): [character] = UserId
-local function visibleSurvivors()
-	local list = {}
-	for _, other in Players:GetPlayers() do
-		local character = other.Character
-		if character and other:GetAttribute("Role") == Config.Roles.Survivor and character:GetAttribute("VisibleToMe")
-			and not other:GetAttribute("Seized") then
-			list[character] = other.UserId
-		end
-	end
-	for _, bot in CollectionService:GetTagged("SurvivorBot") do
-		if bot:GetAttribute("VisibleToMe") and not bot:GetAttribute("Seized") then list[bot] = bot:GetAttribute("BotUserId") end
-	end
-	return list
-end
-
--- Outlines: one SelectionBox per door ghost, crushing-wall slab or survivor, reused
+-- Outlines: one SelectionBox per door ghost or crushing-wall slab, reused
 local outlines = {}      -- [object] = SelectionBox
 
 local function outline(adornee, color, thick)
@@ -447,21 +430,14 @@ local function targetsNow(now)
 			use = { "Crusher", id }, left = left, total = total,
 			busy = c.slab:GetAttribute("State") ~= "idle", name = TARGET_TOOLS.Crusher })
 	end
-	local hauntLeft, hauntTotal = toolLeft("Haunt")
-	for character, userId in visibleSurvivors() do
-		table.insert(list, { tool = "Haunt", adornees = { character }, at = character:GetPivot().Position,
-			use = { "Haunt", userId }, left = hauntLeft, total = hauntTotal, name = TARGET_TOOLS.Haunt,
-			survivor = true })
-	end
 	return list
 end
 
--- the target nearest a floor point (within PICK_RANGE); survivors win close calls, as they move
+-- the target nearest a floor point (within PICK_RANGE)
 local function targetAt(list, point)
 	local best, bestDist
 	for _, t in list do
 		local d = (Vector3.new(t.at.X, 0, t.at.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
-		if t.survivor then d -= 4 end
 		if d < PICK_RANGE and (not bestDist or d < bestDist) then best, bestDist = t, d end
 	end
 	return best

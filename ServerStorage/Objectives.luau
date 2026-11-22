@@ -27,7 +27,7 @@
 --   attributes RelicsCollected, RelicsNeeded, RelicsTotal
 --   a "Sanctuaries" folder with one Configuration per sanctuary: attributes Id, Center (Vector3), Min and Max (its corners), Captured
 --   a "Relics" folder with one Configuration per relic: attributes Id, Center, Discovered (by the
---   survivors), MonsterDiscovered (by the monster side; the Maze Master knows them all), Collected,
+--   survivors), MonsterDiscovered (seen by a monster or a ward; the Maze Master knows them all), Collected,
 --   CollectSince (server time collecting started; nil when nobody is collecting), Collector (the
 --   UserId of the survivor collecting it: their character reaches for it with a beam of light)
 
@@ -207,16 +207,19 @@ local function canSee(self, root, relic)
 	return canSeeFrom(self, root.Position, root.CFrame.LookVector, relic)
 end
 
--- The monster side spots relics too (separately from the survivors): any monster, played or AI
-function Objectives:UpdateMonsterSight(monsters)
+-- The monster side spots relics too (separately from the survivors): any monster, played or AI,
+-- or a ward. Monsters only know the relics their side has seen (the Maze Master knows them all).
+function Objectives:UpdateMonsterSight(monsters, wards)
 	for _, relic in self.maze.relics do
 		if relic.monsterDiscovered or relic.collected then continue end
+		local seen = wards ~= nil and wards:Sees(relic.center)
 		for _, monster in monsters do
-			if monster.pos and monster.facing and canSeeFrom(self, monster.pos, monster.facing, relic) then
-				relic.monsterDiscovered = true
-				relic.info:SetAttribute("MonsterDiscovered", true)
-				break
-			end
+			if seen then break end
+			seen = monster.pos ~= nil and monster.facing ~= nil and canSeeFrom(self, monster.pos, monster.facing, relic)
+		end
+		if seen then
+			relic.monsterDiscovered = true
+			relic.info:SetAttribute("MonsterDiscovered", true)
 		end
 	end
 end

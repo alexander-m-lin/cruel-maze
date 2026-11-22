@@ -1,8 +1,8 @@
 -- THE AI MAZE MASTER: works the Maze Master's tools when no person has the role. It uses the same
 -- tools object a person does (MazeMaster: same cooldowns, same rules, dark mana if that's on), and
 -- it only knows what the monster side knows: survivors count as seen only when the monster side
--- can see them (Match's monsterSideSees, the same check Haunt uses), and it remembers where each
--- was last seen.
+-- can see them (Match's monsterSideSees), and it remembers where each was last seen. Like a
+-- person, it knows where every relic is but can't see round them: it watches them with wards.
 --
 --   local ai = MazeMasterAI.new(tools, { maze, doors, crushers, wards, objectives, monsters,
 --                                        survivors = fn, sees = fn(position, survivor) })
@@ -12,14 +12,14 @@
 -- What it does, most urgent first:
 --   CRUSHING WALLS - sets one off when a seen survivor will be between its walls as they slam
 --                    (where they'll be after the warning, from how they're moving).
---   HAUNT          - on a seen survivor, preferring the one nearest a monster (so the hunter
---                    can follow them), whenever it's ready.
 --   DOORS          - when a seen survivor is being chased, shuts open doors a few cells ahead of
 --                    them (on their side, away from the monster), cutting off the escape.
 --                    Otherwise, now and then, shifts a door near where survivors were last seen.
---   WARDS          - on cooldown, at junctions nothing watches yet, near where survivors were last
---                    seen or on the way to relics. With all Config.WARDS_MAX out, it only moves
---                    one (the oldest) toward survivors spotted somewhere unwatched.
+--   WARDS          - on cooldown, where they watch relics no ward watches yet (from a little way
+--                    off, not on top of them), or near where survivors were last seen. With all
+--                    Config.WARDS_MAX out, it moves one (the oldest fades) toward survivors
+--                    spotted somewhere unwatched, or, if the oldest watches no relic any more, to
+--                    an unwatched relic.
 --   FALSE RELICS   - all of them at the start, spread out away from the real relics.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -175,7 +175,6 @@ function MazeMasterAI:Step(dt)
 	end
 
 	self:crush(seen)
-	self:haunt(seen)
 	if not self:cutOffChases(seen) then self:idleDoor(now) end
 	self:ward(now)
 end
@@ -202,22 +201,6 @@ function MazeMasterAI:crush(seen)
 			end
 		end
 	end
-end
-
--- HAUNT: a seen survivor, preferring the one nearest a monster
-function MazeMasterAI:haunt(seen)
-	if #seen == 0 or not self:ready("Haunt") then return end
-	local nowServer = workspace:GetServerTimeNow()
-	local best, bestScore
-	for _, s in seen do
-		if (s.survivor:GetAttribute("HauntedUntil") or 0) > nowServer then continue end
-		local nearest = math.huge
-		for _, monster in self.monsters do
-			if monster.pos then nearest = math.min(nearest, ((monster.pos - s.root.Position) * Vector3.new(1, 0, 1)).Magnitude) end
-		end
-		if not bestScore or nearest < bestScore then best, bestScore = s, nearest end
-	end
-	if best and self.tools:Use("Haunt", best.survivor.UserId) then note("haunt " .. best.survivor.Name) end
 end
 
 -- DOORS, in a chase: shut the open doors just ahead of a chased survivor. Returns true if anyone
@@ -284,7 +267,7 @@ function MazeMasterAI:idleDoor(now)
 	end
 end
 
--- WARDS: junctions nothing watches yet, near last sightings or on the way to relics
+-- WARDS: where they watch relics nothing watches yet, or near sightings nothing watches
 function MazeMasterAI:ward(now)
 	if not self:ready("Ward") then return end
 	local maze, wards = self.maze, self.wards
@@ -300,55 +283,70 @@ function MazeMasterAI:ward(now)
 		local x, z = cellOf(maze, memory.pos)
 		if not wardNear(x, z, WARD_MOVE_IF_UNWATCHED) then table.insert(hot, { x, z }) end
 	end
+	-- relics still to collect that no ward sees
+	local unwatched = {}
+	for _, relic in maze.relics do
+		if not relic.collected and not wards:Sees(relic.center) then table.insert(unwatched, relic) end
+	end
 	local full = #wards.list >= Config.WARDS_MAX
-	if full and (#hot == 0 or now < (self.nextWardMove or 0)) then return end   -- all out, nothing new to watch
+	-- with every ward out, the oldest (the one that fades) may move if it watches no relic now
+	local oldestIdle = false
+	if full then
+		local oldest = wards.list[1]
+		oldestIdle = true
+		for _, relic in maze.relics do
+			if not relic.collected and wards:clearLine(oldest.center, relic.center, Config.WARD_VISION_RADIUS + 2) then
+				oldestIdle = false
+			end
+		end
+		if now < (self.nextWardMove or 0) or (#hot == 0 and not (oldestIdle and #unwatched > 0)) then return end
+	end
 
-	local ringCells = Config.RELIC_VISION_RADIUS / maze.S     -- the Maze Master already sees this far round relics
-	local best, bestScore
+	local best, bestScore, bestRelics
 	for x = 1, maze.n do
 		for z = 1, maze.n do
-			if MazeLayout.openSides(maze.walls, x, z) < 3 or not wards:CanPlace(x, z) then continue end
+			if MazeLayout.openSides(maze.walls, x, z) < 2 or not wards:CanPlace(x, z) then continue end
 			if wardNear(x, z, WARD_SPACING) then continue end
 			if now - (wards.destroyedAt[key(x, z)] or -math.huge) < WARD_REPLACE_AFTER then continue end
 			local center = cellCenter(maze, x, z)
-			local score = math.random() * 0.5
-			-- not somewhere already seen (relic rings, crushing walls, monsters)
+			-- not right next to a monster (it already sees there)
 			local watched = false
-			for _, relic in maze.relics do
-				if not relic.collected and (relic.center - center).Magnitude < Config.RELIC_VISION_RADIUS then watched = true end
-			end
 			for _, monster in self.monsters do
 				if monster.pos and ((monster.pos - center) * Vector3.new(1, 0, 1)).Magnitude < 25 then watched = true end
 			end
 			if watched then continue end
+			local score = math.random() * 0.5
+			-- relics it would watch that nothing watches yet (the more the better)
+			local relics = 0
+			for _, relic in unwatched do
+				if wards:clearLine(center, relic.center, Config.WARD_VISION_RADIUS) then relics += 1 end
+			end
+			if relics > 0 then score += 6 + 2 * (relics - 1) end
 			-- near a sighting no ward is watching: the best spot of all
 			for _, h in hot do
 				local d = math.abs(h[1] - x) + math.abs(h[2] - z)
 				if d <= 4 then score += 10 - d end
 			end
-			-- on the way to a relic (just outside the area already watched round it)
-			for _, relic in maze.relics do
-				if relic.collected then continue end
-				local d = math.max(math.abs(relic.x - x), math.abs(relic.z - z))
-				if d <= ringCells + 2 then score += 3 end
-			end
 			-- busier junctions see more
 			score += MazeLayout.openSides(maze.walls, x, z) - 3
-			if not bestScore or score > bestScore then best, bestScore = { x, z }, score end
+			if not bestScore or score > bestScore then best, bestScore, bestRelics = { x, z }, score, relics end
 		end
 	end
 	if not best then return end
+	local reason = bestRelics > 0 and (" watching " .. bestRelics .. " relic" .. (bestRelics > 1 and "s" or "")) or ""
 	if full then
-		-- moving one: only if the new spot really watches a fresh sighting
+		-- moving one: only if the new spot really watches a fresh sighting, or a relic the idle
+		-- oldest ward could be watching instead
 		local close = false
 		for _, h in hot do
 			if math.abs(h[1] - best[1]) + math.abs(h[2] - best[2]) <= WARD_MOVE_IF_UNWATCHED then close = true end
 		end
-		if not close then return end
+		if not close and not (oldestIdle and bestRelics > 0) then return end
 		self.nextWardMove = now + WARD_MOVE_EVERY
+		reason ..= close and " (moved toward a sighting)" or " (moved to a relic)"
 	end
 	if self.tools:Use("Ward", cellCenter(maze, best[1], best[2])) then
-		note(("ward at %d,%d%s"):format(best[1], best[2], full and " (moved toward a sighting)" or ""))
+		note(("ward at %d,%d%s"):format(best[1], best[2], reason))
 	end
 end
 

@@ -43,7 +43,7 @@ Config.LIVES = 3                  -- per survivor; caught with none left = out f
 Config.RESPAWN_CHOICE_TIME = 6    -- seconds to pick a sanctuary after being caught (then your last sanctuary is used)
 
 -- Sanctuaries: safe blocks of cells with 2-3 exits that monsters can never enter, and where the
--- monster side can't see survivors at all (not by sight, wards, relic rings or reveals). Your team
+-- monster side can't see survivors at all (not by sight, wards or reveals). Your team
 -- starts with the start sanctuary; walking into another one captures it, and you can respawn in any
 -- captured sanctuary. Each is in its own quarter of the maze (up to 4).
 Config.SANCTUARIES = 3              -- including the start sanctuary
@@ -77,7 +77,6 @@ Config.DARK_MANA_REGEN = 5        -- per second
 Config.MAZE_MASTER_TOOLS = {      -- cost in dark mana, cooldown in seconds (shared by the whole tool)
 	Door       = { cost = 10, cooldown = 0 },    -- open or shut a door (each door then rests DOOR_COOLDOWN)
 	Ward       = { cost = 15, cooldown = 4 },    -- place a ward (a floating eye that watches around it)
-	Haunt      = { cost = 20, cooldown = 15 },   -- haunt a survivor the monster side can see
 	FalseRelic = { cost = 30, cooldown = 0 },    -- place a false relic (limited: FALSE_RELICS_PER_MATCH)
 	Crusher    = { cost = 50, cooldown = 0 },    -- set off a crushing wall (each then rests CRUSHER_COOLDOWN)
 }
@@ -104,19 +103,13 @@ Config.WARD_HEIGHT = 4.5                -- studs above the floor the eye floats
 Config.WARD_REACH = 8                   -- a survivor this close (studs, flat) can destroy it...
 Config.WARD_DESTROY_TIME = 2            -- ...by staying close this long (a bar shows how far along)
 
--- Revealed survivors (a false relic, a haunt...): the monster side sees them wherever they are,
+-- Revealed survivors (a false relic, feared...): the monster side sees them wherever they are,
 -- with a small ring of sight round them (smaller than a relic's), and AI monsters go for them
 -- if they're within their usual sight range, walls or not.
 Config.REVEAL_VISION_RADIUS = 10
 -- AI monsters go after a survivor their side can see (revealed, or seen by a ward, another
--- monster, a relic ring...) within this many studs, straight line, walls or not (6 cells)
+-- monster, a crushing wall...) within this many studs, straight line, walls or not (6 cells)
 Config.REVEALED_CHASE_RANGE = 120
-
--- Haunt: on a survivor the monster side can see right now. For a few seconds they're revealed to
--- the monster side wherever they go, and their vision cone counts as the monster side's sight too.
--- The haunted survivor feels it (a faint purple screen edge and a whisper).
-Config.HAUNT_TIME = 5
-Config.HAUNT_SLOW = 0.7              -- a haunted survivor moves at this fraction of their speed while it lasts
 
 -- Crushing walls: pairs of walls along straight corridor cells, built into the maze, that the Maze
 -- Master sets off. They rumble, slam together (killing survivors between), then slide back.

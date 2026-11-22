@@ -27,8 +27,7 @@
 --   Sanctuary (the sanctuary they'll come back in), BaseSpeed (see Controls), Seized (held by a
 --   monster that's killing them: their controls stop), Killing (a monster player mid-kill: can't
 --   move), DevRole (Studio only: the role they asked for in the dev panel), RevealedUntil (server
---   time: shown to the monster side wherever they are), HauntedUntil (the Maze Master's Haunt: also
---   their vision cone counts as the monster side's), SlowUntil (a false relic)
+--   time: shown to the monster side wherever they are), SlowUntil (a false relic)
 --
 -- Survivor bots fill empty survivor slots (Config.SURVIVOR_BOTS); they pass for players (SurvivorBot).
 --
@@ -339,12 +338,11 @@ end
 
 -- Can the monster side see this spot right now? The same sources as their fog (FogOfWar), checked
 -- more simply (straight sight lines, a little extra range for the difference): every monster's
--- cone, wards, crushing walls, the rings round relics (every relic if there's a Maze Master, who
--- knows them all; otherwise the ones a monster has spotted; false relics always), and haunted
--- survivors' cones. Used to check a Haunt is on a survivor the Maze Master can really see, and by
--- AI monsters (spottedBySide) to go after survivors their side can see.
+-- cone, wards and crushing walls. (Relics give the monster side no sight: the Maze Master knows
+-- where they are, and watches them with wards.) Used by the AI Maze Master, and by AI monsters
+-- (spottedBySide) to go after survivors their side can see.
 local SIGHT_SLACK = 3
-local function monsterSideSees(position, except)
+local function monsterSideSees(position)
 	if objectives:IsSafe(position) then return false end   -- nobody sees into a sanctuary
 	local spot = { center = position }
 	for _, monster in monsters do
@@ -354,40 +352,7 @@ local function monsterSideSees(position, except)
 	for _, crusher in crushers and crushers.list or {} do
 		if wards:clearLine(crusher.center, position, maze.S / 2 + Config.CRUSHER_VISION + SIGHT_SLACK) then return true end
 	end
-	for _, relic in maze.relics do
-		if not relic.collected and (mazeMasterTools or relic.monsterDiscovered)
-			and wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
-	end
-	for _, relic in objectives.fakes do
-		if wards:clearLine(relic.center, position, Config.RELIC_VISION_RADIUS + SIGHT_SLACK) then return true end
-	end
-	local now = workspace:GetServerTimeNow()
-	for _, other in survivorsInMatch() do
-		local character = other ~= except and (other:GetAttribute("HauntedUntil") or 0) > now and aliveCharacter(other)
-		if character then
-			local root = character.HumanoidRootPart
-			if objectives:CanSee(root.Position, root.CFrame.LookVector, spot) then return true end
-		end
-	end
 	return false
-end
-
--- The Maze Master's Haunt on the survivor with this UserId (a player or a bot): -> ok, message
-local function haunt(userId)
-	for _, survivor in survivorsInMatch() do
-		if survivor.UserId ~= userId then continue end
-		local character = not survivor:GetAttribute("Seized") and aliveCharacter(survivor)
-		if not character or objectives:IsSafe(character.HumanoidRootPart.Position) then return false, "They can't be haunted now" end
-		local now = workspace:GetServerTimeNow()
-		local revealed = (survivor:GetAttribute("RevealedUntil") or 0) > now
-		if not revealed and not monsterSideSees(character.HumanoidRootPart.Position, survivor) then
-			return false, "You can't see them"
-		end
-		survivor:SetAttribute("HauntedUntil", now + Config.HAUNT_TIME)
-		survivor:SetAttribute("RevealedUntil", math.max(survivor:GetAttribute("RevealedUntil") or 0, now + Config.HAUNT_TIME))
-		return true
-	end
-	return false, "Click a survivor you can see"
 end
 
 -- A survivor clicked to destroy a ward (WardEyes checks they're really next to it)
@@ -477,7 +442,7 @@ local function cleanUp()
 	table.clear(respawnFrom)
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
-		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "Sanctuary", "Killing", "RevealedUntil", "SlowUntil", "HauntedUntil",
+		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "Sanctuary", "Killing", "RevealedUntil", "SlowUntil",
 			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo", "PullStyle" } do
 			player:SetAttribute(name, nil)
 		end
@@ -669,7 +634,7 @@ local function runCountdown()
 				isBlocked = function(x, z) return objectives:IsBlocked(x, z) end,
 				startCell = startCell,
 				pack = monsters,                        -- they spread out from each other when roaming
-				-- can the monster side see this survivor right now (another monster, a ward, a relic...)?
+				-- can the monster side see this survivor right now (another monster, a ward, a crushing wall)?
 				spottedBySide = function(survivor)
 					local character = aliveCharacter(survivor)
 					return character ~= nil and monsterSideSees(character.HumanoidRootPart.Position)
@@ -688,7 +653,7 @@ local function runCountdown()
 	wards = WardEyes.new(maze, objectives)
 	if mazeMaster or Config.MAZE_MASTER_AI then
 		mazeMasterTools = MazeMaster.new(mazeMaster, { maze = maze, doors = doors, crushers = crushers, objectives = objectives,
-			wards = wards, haunt = haunt })
+			wards = wards })
 	end
 	if not mazeMaster and Config.MAZE_MASTER_AI then
 		mazeMasterAI = MazeMasterAI.new(mazeMasterTools, { maze = maze, doors = doors, crushers = crushers, wards = wards,
@@ -731,7 +696,7 @@ local function runCountdown()
 			-- With streaming on, a player's computer only gets what's near their character. The
 			-- Maze Master has none, so give them a spot to stream around instead: the middle of the
 			-- maze (the streaming radius covers the whole map from there). Without it, survivors'
-			-- bodies never reach their computer, so they can't be seen (or haunted).
+			-- bodies never reach their computer, so they can't be seen.
 			local focus = Instance.new("Part")
 			focus.Name = "MazeMasterFocus"
 			focus.Anchored = true
@@ -771,7 +736,7 @@ local function runPlaying()
 		end
 		objectives:Update(collectors)
 		wards:Update(collectors)
-		objectives:UpdateMonsterSight(monsters)
+		objectives:UpdateMonsterSight(monsters, wards)
 		if objectives.collected >= Config.RELICS_NEEDED then return "survivors" end
 		if os.clock() >= endsAt then return "time" end
 		if #survivorsInMatch() == 0 and hadSurvivors then return "caught" end   -- (none at all: a test, play on)
@@ -859,7 +824,6 @@ end)
 --   "crush", id             -> set that crusher off (no dark mana needed)
 --   "falseRelic", x, z      -> place a false relic in cell (x, z); -> its id, or nil
 --   "monsters", on          -> switch every monster on or off (off: they stand still and catch nobody)
---   "haunt", userId         -> the Maze Master's Haunt on that survivor (no dark mana): -> ok, message
 --   "ward", x, z            -> place a ward in cell (x, z) (no Maze Master needed); -> its id, or nil
 --   "sees", position        -> can the monster side see that spot right now?
 --   "reveal", userId, secs  -> reveal that survivor to the monster side (as a false relic does)
@@ -879,8 +843,6 @@ if RunService:IsStudio() then
 		elseif action == "monsters" then
 			for _, monster in monsters do monster.active = a == true end
 			return true
-		elseif action == "haunt" and maze then
-			return { haunt(a) }
 		elseif action == "ward" and wards then
 			local ward = wards:Add(a, b)
 			return ward and ward.id

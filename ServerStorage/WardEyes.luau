@@ -6,7 +6,7 @@
 --   wards:Add(x, z)              -- -> ward (the oldest fades if there are Config.WARDS_MAX already)
 --   wards:Update(survivors)      -- a few times a second: spotting, and destroying
 --   wards:StartDestroying(player, id)   -- a survivor clicked to destroy one (checked here)
---   wards:Sees(position)         -- does any ward see this spot? (for Haunt's "can the monster side see them")
+--   wards:Sees(position)         -- does any ward see this spot? (the monster side's sight checks, relics spotted)
 --   wards.destroyedAt[MazeLayout.key(x, z)] -- os.clock() a survivor last destroyed a ward in that cell
 --   wards:Destroy()
 --

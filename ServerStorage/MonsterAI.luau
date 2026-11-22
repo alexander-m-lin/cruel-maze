@@ -209,7 +209,7 @@ end
 -- options.startCell = {x, z}: where it appears.
 -- options.pack: a list of all the match's monsters (this one included), to spread out from.
 -- options.spottedBySide(player): true if the monster side can see them right now (another
--- monster, a ward, a relic's ring...): it goes after them as if it saw them itself, when near.
+-- monster, a ward, a crushing wall): it goes after them as if it saw them itself, when near.
 -- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is Devour catches
 -- only with Devour (it dashes at you once you're in range); otherwise it catches anyone who gets
 -- within CATCH_DIST, like the stand-in.
@@ -337,8 +337,8 @@ function MonsterAI:Pull(to, speed)
 end
 
 ---------------------------------------------------------------- senses
--- revealed: the survivor is revealed to the monster side (a false relic, a haunt...) or their side
--- can see them (another monster, a ward, a relic's ring: options.spottedBySide): seen within
+-- revealed: the survivor is revealed to the monster side (a false relic, feared...) or their side
+-- can see them (another monster, a ward, a crushing wall: options.spottedBySide): seen within
 -- Config.REVEALED_CHASE_RANGE even through walls
 function MonsterAI:canDetect(root, revealed)
 	local eye = self.pos + Vector3.new(0, HOVER, 0)

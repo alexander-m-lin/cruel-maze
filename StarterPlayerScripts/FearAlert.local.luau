@@ -59,9 +59,9 @@ label.Parent = gui
 
 local whisper = Instance.new("Sound")
 whisper.Name = "DreadWhisper"
-whisper.SoundId = "rbxassetid://" .. Sounds.HauntWhisper.id
-whisper.Volume = Sounds.HauntWhisper.volume
-whisper.PlaybackSpeed = 0.8      -- lower than a haunt's
+whisper.SoundId = "rbxassetid://" .. Sounds.Whisper.id
+whisper.Volume = Sounds.Whisper.volume
+whisper.PlaybackSpeed = 0.8      -- lower and slower than the recording
 whisper.Parent = SoundService
 
 local level = 0
