@@ -326,16 +326,26 @@ local function buildCircuit()
 	return c
 end
 
--- a line of tiles from `from` to `to` (floor points), drawn as the circuit travels along it
-local function newTrail(from, to, startAt, moveTime)
+-- How far along a move it is (0-1) after `k` of its time: eased at the ends the server says ("Ease":
+-- two moves round a corner run on through it, at the same speed)
+local function ease(k, how)
+	if how == "in" then return k * k end
+	if how == "out" then return 1 - (1 - k) * (1 - k) end
+	return k * k * (3 - 2 * k)
+end
+
+-- a line of tiles from `from` to `to` (floor points), drawn as the circuit travels along it. Tiles
+-- start at `from` and stop a tile short of `to` (the next move's line starts there: no gap at a
+-- corner, and no tile twice)
+local function newTrail(from, to, startAt, moveTime, how)
 	local flat = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
 	local length = flat.Magnitude
 	if length < 0.5 then return nil end
-	local trail = { tiles = {}, from = from, dir = flat.Unit, length = length, startAt = startAt, moveTime = moveTime }
+	local trail = { tiles = {}, from = from, dir = flat.Unit, length = length, startAt = startAt, moveTime = moveTime, ease = how }
 	local count = math.max(1, math.round(length / PITCH))
 	for i = 1, count do
 		local tile = newTile(Vector3.new(TILE, 0.05, TILE))
-		tile.d = (i - 0.5) * length / count
+		tile.d = (i - 1) * length / count
 		trail.tiles[i] = tile
 	end
 	return trail
@@ -357,8 +367,7 @@ local function circuitPosition(model, now)
 	if not (from and to) then return nil end
 	local t = model:GetAttribute("MoveTime") or 0
 	local k = t > 0 and math.clamp((now - (model:GetAttribute("MoveAt") or now)) / t, 0, 1) or 1
-	k = k * k * (3 - 2 * k)
-	return from:Lerp(to, k)
+	return from:Lerp(to, ease(k, model:GetAttribute("Ease")))
 end
 
 RunService.RenderStepped:Connect(function()
@@ -378,7 +387,7 @@ RunService.RenderStepped:Connect(function()
 		if moveAt and moveAt ~= c.lastMove then
 			c.lastMove = moveAt
 			local from, to = model:GetAttribute("From"), model:GetAttribute("To")
-			local trail = from and to and newTrail(from, to, moveAt, model:GetAttribute("MoveTime") or 0)
+			local trail = from and to and newTrail(from, to, moveAt, model:GetAttribute("MoveTime") or 0, model:GetAttribute("Ease"))
 			if trail then table.insert(c.trails, trail) end
 		end
 		local at = circuitPosition(model, now)
@@ -399,12 +408,12 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 
-		-- the lines: drawn up to where the circuit's got to, then lingering and fading
+		-- the lines: drawn up to where the circuit's got to (none under its square), then lingering and fading
 		for i = #c.trails, 1, -1 do
 			local trail = c.trails[i]
 			local elapsed = now - trail.startAt
 			local k = trail.moveTime > 0 and math.clamp(elapsed / trail.moveTime, 0, 1) or 1
-			k = k * k * (3 - 2 * k)   -- (the same easing as the square's slide)
+			k = ease(k, trail.ease)   -- (the same easing as the square's slide)
 			local fade = math.clamp((elapsed - trail.moveTime - TRAIL_HOLD) / TRAIL_FADE, 0, 1)
 			if fade >= 1 then
 				destroyTiles(trail.tiles)
@@ -413,9 +422,9 @@ RunService.RenderStepped:Connect(function()
 			end
 			local look = CFrame.lookAt(Vector3.zero, trail.dir)
 			for _, tile in trail.tiles do
-				-- (up to the square's edge: none under it)
-				if shown and tile.d <= k * trail.length - SQUARE_HALF then
-					local p = trail.from + trail.dir * tile.d
+				local p = trail.from + trail.dir * tile.d
+				local under = origin and math.abs(p.X - origin.X) < SQUARE_HALF and math.abs(p.Z - origin.Z) < SQUARE_HALF
+				if shown and tile.d <= k * trail.length + 0.01 and not under then
 					tile.part.CFrame = CFrame.new(p.X, y, p.Z) * look
 					tile.part.Transparency = 1 - (1 - flicker(tile, clock)) * (1 - fade)
 				else

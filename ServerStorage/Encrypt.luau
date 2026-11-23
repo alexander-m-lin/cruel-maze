@@ -12,14 +12,18 @@
 -- While it lasts he's hidden from the monster side and can't be caught (Protection.encrypted;
 -- Match leaves him out of who monsters may hunt). What they see instead is a blue circuit on the
 -- floor of the CELL he's in (never his spot in it), which slides to the next cell when he crosses
--- into it. When it leaves a junction (3+ ways on), copies run off down the other ways out (at most
+-- into it. It only ever moves straight from one cell's middle to a neighbour's (4 ways, never
+-- diagonally): cells he crosses into wait their turn, and a corner he cuts is two quick moves, across
+-- then up or down (the other way round only if a wall's in the way). When it leaves a junction (3+ ways on), copies run off down the other ways out (at most
 -- def.decoys at once, at most one junction every def.decoyEvery seconds), and wander from cell to
 -- cell along open corridors at the same pace, now and then stopping for a moment as a person would.
 --
 -- Every indicator is the same: a model "Circuit<random number>" in the maze, tagged "HiddenByFog"
 -- (so each player's fog shows it only where their side can see) and "CircuitIndicator", with an
 -- invisible part the fog checks, and attributes for players' computers to draw it smoothly
--- (KaiEffects): From, To (floor points), MoveAt (server time), MoveTime, EndsAt, WarnTime. Nothing
+-- (KaiEffects): From, To (floor points), MoveAt (server time), MoveTime, Ease ("both", "in", "out":
+-- which ends of the move slow down; two moves round a corner run on without stopping), EndsAt,
+-- WarnTime. Nothing
 -- says which one is him, so nothing on anyone's computer can tell.
 
 local CollectionService = game:GetService("CollectionService")
@@ -71,6 +75,7 @@ end
 
 local function publish(ind)
 	local m = ind.model
+	m:SetAttribute("Ease", ind.ease or "both")
 	m:SetAttribute("From", ind.from)
 	m:SetAttribute("To", ind.to)
 	m:SetAttribute("MoveAt", workspace:GetServerTimeNow() - (os.clock() - ind.moveStart))
@@ -100,15 +105,25 @@ local function newIndicator(state, x, z, from)
 	return ind
 end
 
--- Start sliding to cell (x, z) from wherever it is now
-local function moveTo(state, ind, x, z, now)
+-- Start sliding to cell (x, z) from wherever it is now (a neighbour's middle, or back the way it
+-- came: always straight along one axis). opts: { fast = true } for half the time, ease = see publish
+local function moveTo(state, ind, x, z, now, opts)
 	local at = positionOf(ind, now)
 	ind.cameFrom = { ind.x, ind.z }
 	ind.x, ind.z = x, z
 	ind.from, ind.to = at, center(state.maze, x, z)
-	ind.moveStart, ind.moveTime = now, moveTime(state.maze)
+	ind.moveStart = now
+	ind.moveTime = moveTime(state.maze) * (opts and opts.fast and 0.5 or 1) * ((at - ind.to).Magnitude / state.maze.S)
+	ind.ease = opts and opts.ease or "both"
 	ind.pauseUntil = nil
 	publish(ind)
+end
+
+local function isExit(state, x, z, tx, tz)
+	for _, w in exits(state, x, z) do
+		if w[1] == tx and w[2] == tz then return true end
+	end
+	return false
 end
 
 function Encrypt.isOn(user)
@@ -123,7 +138,7 @@ function Encrypt.start(user, def, maze, objectives)
 	Encrypt.stop(user)
 	local endsAtServer = workspace:GetServerTimeNow() + def.duration
 	local state = { def = def, maze = maze, objectives = objectives, endsAt = os.clock() + def.duration,
-		endsAtServer = endsAtServer, decoys = {}, nextDecoyAt = 0 }
+		endsAtServer = endsAtServer, decoys = {}, nextDecoyAt = 0, queue = {} }
 	state.real = newIndicator(state, x, z, center(maze, x, z))
 	active[user] = state
 	user:SetAttribute("EncryptedUntil", endsAtServer)
@@ -188,19 +203,40 @@ function Encrypt.step()
 			Encrypt.stop(user)
 			continue
 		end
-		-- the real one follows his cell
+		-- the real one follows his cell: the cells he crosses into are queued, and it goes through them
+		-- one neighbour at a time
 		local ind = state.real
+		local queue = state.queue
 		local x, z = state.objectives:CellOf(root.Position)
-		if x and (x ~= ind.x or z ~= ind.z) then
-			if math.abs(x - ind.x) + math.abs(z - ind.z) == 1 then
-				branch(state, ind, x, z, now)
-				moveTo(state, ind, x, z, now)
+		local last = queue[#queue] or { ind.x, ind.z }
+		local _, arrived = positionOf(ind, now)
+		if x and (x ~= last[1] or z ~= last[2]) then
+			local dx, dz = x - last[1], z - last[2]
+			if math.abs(dx) + math.abs(dz) == 1 then
+				local back = #queue == 0 and not arrived and ind.cameFrom and ind.cameFrom[1] == x and ind.cameFrom[2] == z
+				if back then
+					moveTo(state, ind, x, z, now)             -- (turned back mid-move: straight back)
+				else
+					table.insert(queue, { x, z })
+				end
+			elseif math.abs(dx) == 1 and math.abs(dz) == 1 then
+				-- a corner cut: across, then up or down (the other way round if across is walled)
+				local corner = isExit(state, last[1], last[2], x, last[2]) and { x, last[2] } or { last[1], z }
+				table.insert(queue, { corner[1], corner[2], fast = true, ease = "in" })
+				table.insert(queue, { x, z, fast = true, ease = "out" })
 			else                                            -- (moved some other way: it jumps there)
+				table.clear(queue)
 				ind.x, ind.z = x, z
 				ind.from = center(state.maze, x, z)
 				ind.to, ind.moveTime = ind.from, 0
 				publish(ind)
 			end
+		end
+		if arrived and #queue > 0 then
+			local nextCell = table.remove(queue, 1)
+			if #queue >= 2 then nextCell.fast = true end    -- (fallen behind him: catching up)
+			branch(state, ind, nextCell[1], nextCell[2], now)
+			moveTo(state, ind, nextCell[1], nextCell[2], now, nextCell)
 		end
 		for _, decoy in state.decoys do stepDecoy(state, decoy, now) end
 		for _, i in { ind, table.unpack(state.decoys) } do
