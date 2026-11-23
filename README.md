@@ -22,7 +22,9 @@ preferred role there (Any, Survivor, Monster or Maze Master; you get it if the s
 anyone presses Start. Roles: 3 survivors, 2 monsters and a Maze Master; empty slots get bots
 (survivor bots named "Bot 1"..., AI monsters, and an AI Maze Master that uses the same tools as a
 person: it shuts doors ahead of chased survivors, sets off crushing walls as they walk in, keeps
-wards watching relics and wherever survivors were last seen).
+wards watching relics and wherever survivors were last seen). One survivor bot a match also uses
+its hero's abilities, if it's a hero bots know how to play (Kai so far: scans unseen areas, EMPs wards
+it sees, encrypts when about to be caught).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
 starts another straight away, and "Doors" opens the doors panel. "Sandbox" starts the **sandbox**
