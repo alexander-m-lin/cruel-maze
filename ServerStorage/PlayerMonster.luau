@@ -4,7 +4,8 @@
 --                                                     hero = heroId })
 --   monster:Step(dt, targets)   -- every frame, like MonsterAI (targets = survivors it may catch)
 --   monster:Lunge()             -- the player clicked to lunge (checked here; the stand-in only)
---   monster:Devour(aim, distance, time, def)   -- Devour (from HeroAbilities.FearEater)
+--   monster:DevourStart(toward, def) / DevourDash(aim, distance, time) / DevourCatch(survivor)
+--                               -- Devour's steps (HeroAbilities.FearEater runs them)
 --   monster:Stun(seconds)       -- can't move, lunge or catch for a while
 --   monster:Pull(to, speed)     -- their character dragged to `to` (Pull); -> seconds
 --   monster:Destroy()
@@ -15,9 +16,14 @@
 -- animates the body from that - the gait, the reaching arms, the kill. (On the player's own
 -- computer the body follows their character directly, so it never lags behind their controls.)
 --
--- CATCHING (a hero monster): with its abilities - Fear Eater's Devour is a dash much like the
--- lunge below (its numbers in HeroData), sent to the player's computer as "DevourAt" etc. on the
--- body, which carries them (MonsterControls) while the server checks for a catch.
+-- CATCHING (a hero monster): with its abilities - Fear Eater's Devour (HeroAbilities.FearEater
+-- decides who and whether it lands). The windup and the dash are sent to the player's computer as
+-- "DevourAt" / "DevourGo" etc. on the body, which holds and carries them (MonsterControls).
+--
+-- CHASE SPEED: while they can see a survivor (in their cone, in a clear line, not in a sanctuary),
+-- a monster player speeds up, from nothing to Config.CHASE_BOOST_MAX over Config.CHASE_BOOST_RAMP
+-- seconds; losing sight for Config.CHASE_BOOST_GRACE seconds resets it. Published as the player's
+-- "ChaseBoost" attribute (Movement and SpeedCheck read it).
 --
 -- CATCHING (the stand-in): by lunging. The player's computer crouches them for Config.LUNGE_WINDUP seconds, then
 -- carries them Config.LUNGE_DISTANCE studs forward; during that time any survivor within
@@ -46,6 +52,7 @@ function PlayerMonster.new(player, maze, options)
 	self.player = player
 	self.maze = maze
 	self.onCatch = options.onCatch or function() end
+	self.isSafe = options.isSafe or function() return false end   -- (in a sanctuary: not seen)
 	self.model, self.groundOffset, self.isRig = MonsterAI.buildBody(options.hero)
 	self.hero = self.model:GetAttribute("Hero")
 	self.kill = MonsterAI.killFor(self.hero)
@@ -71,6 +78,7 @@ function PlayerMonster:Destroy()
 	if self.model then self.model:Destroy() end
 	self.model = nil
 	if self.player.Parent then
+		self.player:SetAttribute("ChaseBoost", nil)
 		self.player:SetAttribute("Killing", nil)
 		self.player:SetAttribute("StunnedUntil", nil)
 	end
@@ -115,7 +123,7 @@ end
 
 function PlayerMonster:Stun(seconds)
 	if self:Killing() then return end
-	self.reach, self.reachForward, self.dashAim = nil, nil, nil
+	self.devourToken = nil       -- a Devour under way is called off
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	local untilServer = workspace:GetServerTimeNow() + (self.stunUntil - os.clock())
 	self.player:SetAttribute("StunnedUntil", untilServer)
@@ -141,26 +149,38 @@ function PlayerMonster:Lunge()
 	return true
 end
 
--- DEVOUR (HeroAbilities.FearEater worked out where to): the player's computer holds them still for
--- def.windup, then carries them `distance` studs along `aim` in `time` seconds; meanwhile the first
--- survivor within def.reach of a point def.reachForward ahead of them is caught.
-function PlayerMonster:Devour(aim, distance, time, def)
-	local now = os.clock()
-	if not self.active or self.killUntil or now < (self.stunUntil or 0) then return false end
-	if not rootOf(self.player) then return false end
-	self.lungeHitFrom = now + def.windup
-	self.lungeUntil = self.lungeHitFrom + time + LATENCY_SLACK
-	self.reach, self.reachForward, self.dashAim = def.reach, def.reachForward, aim
-	self.facing = aim
+-- DEVOUR, step 1: held still facing them for def.windup (their computer holds them: "DevourAt")
+function PlayerMonster:DevourStart(toward, def)
+	self.facing = toward
 	self.mode = "chase"
-	SpeedCheck.grant(self.player, distance + 4)        -- their computer carries them this far
 	local model = self.model
-	model:SetAttribute("DevourAim", aim * distance)
+	model:SetAttribute("DevourAim", toward * def.range)
 	model:SetAttribute("DevourWindup", def.windup)
-	model:SetAttribute("DevourTime", time)
+	model:SetAttribute("DevourTime", def.range / def.dashSpeed)
 	model:SetAttribute("DevourAt", workspace:GetServerTimeNow())
 	self:publish()
-	return true
+end
+
+-- step 2: carried `distance` studs along `aim` in `time` seconds (their computer: "DevourGo")
+function PlayerMonster:DevourDash(aim, distance, time)
+	self.facing = aim
+	SpeedCheck.grant(self.player, distance + 4)
+	local model = self.model
+	model:SetAttribute("DevourAim", aim * distance)
+	model:SetAttribute("DevourTime", time)
+	model:SetAttribute("DevourGo", workspace:GetServerTimeNow())
+	self:publish()
+	task.delay(time + 0.2, function()
+		if self.mode == "chase" and not self.killUntil then self.mode = "roam" end
+	end)
+end
+
+-- step 3: caught them
+function PlayerMonster:DevourCatch(survivor)
+	local root = rootOf(self.player)
+	local theirs = rootOf(survivor)
+	if not (root and theirs) then return end
+	self:catch(survivor, (theirs.Position - root.Position) * Vector3.new(1, 0, 1), os.clock())
 end
 
 -- LIVING NIGHTMARE (HeroAbilities.FearEater): for def.duration seconds their character is in the
@@ -220,19 +240,18 @@ function PlayerMonster:Step(dt, targets)
 
 	if self.lungeUntil and now > self.lungeUntil then
 		self.lungeUntil, self.lungeHitFrom = nil, nil
-		self.reach, self.reachForward, self.dashAim = nil, nil, nil
 		self.mode = "roam"
 	end
+	self:updateChaseBoost(now, root, targets)
 
-	-- the lunge: catch the first survivor within reach
+	-- the lunge (the stand-in): catch the first survivor within reach
 	if self.active and root and self.lungeHitFrom and now >= self.lungeHitFrom then
-		-- (Devour reaches from a point ahead of them, where the hands are)
-		local reachAt = root.Position + (self.dashAim or Vector3.zero) * (self.reachForward or 0)
+		local reachAt = root.Position
 		for _, player in targets do
 			local theirRoot = rootOf(player)
 			if theirRoot and (self.graceUntil[player] or 0) < now and not player:GetAttribute("Seized") then
 				local flat = (theirRoot.Position - reachAt) * Vector3.new(1, 0, 1)
-				if flat.Magnitude < (self.reach or Config.LUNGE_REACH) and not self:wallBetween(root.Position, theirRoot.Position) then
+				if flat.Magnitude < Config.LUNGE_REACH and not self:wallBetween(root.Position, theirRoot.Position) then
 					self:catch(player, flat, now)
 					break
 				end
@@ -240,6 +259,45 @@ function PlayerMonster:Step(dt, targets)
 		end
 	end
 	self:publish()
+end
+
+-- CHASE SPEED: do they see a survivor right now (cone, clear line, not in a sanctuary)?
+function PlayerMonster:seesSurvivor(root, targets)
+	local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	if look.Magnitude < 0.01 then return false end
+	look = look.Unit
+	local cos = math.cos(math.rad(Config.VIEW_CONE / 2))
+	for _, player in targets do
+		local theirs = rootOf(player)
+		if not theirs or player:GetAttribute("Seized") or self.isSafe(theirs.Position) then continue end
+		local offset = (theirs.Position - root.Position) * Vector3.new(1, 0, 1)
+		local d = offset.Magnitude
+		if d > Config.VIEW_RANGE then continue end
+		if d > Config.VIEW_NEAR and offset.Unit:Dot(look) < cos then continue end
+		if not self:wallBetween(root.Position, theirs.Position) then return true end
+	end
+	return false
+end
+
+function PlayerMonster:updateChaseBoost(now, root, targets)
+	local boost = 0
+	if self.active and root and not self.killUntil then
+		if self:seesSurvivor(root, targets) then
+			self.lastSaw = now
+			self.chaseFrom = self.chaseFrom or now
+		end
+		if self.lastSaw and now - self.lastSaw <= Config.CHASE_BOOST_GRACE then
+			boost = Config.CHASE_BOOST_MAX * math.clamp((now - self.chaseFrom) / Config.CHASE_BOOST_RAMP, 0, 1)
+		else
+			self.chaseFrom, self.lastSaw = nil, nil
+		end
+	else
+		self.chaseFrom, self.lastSaw = nil, nil
+	end
+	boost = math.floor(boost * 100 + 0.5) / 100
+	if (self.player:GetAttribute("ChaseBoost") or 0) ~= boost then
+		self.player:SetAttribute("ChaseBoost", boost > 0 and boost or nil)
+	end
 end
 
 -- A wall between two points (at waist height)? The lunge can't catch through one.
@@ -258,7 +316,7 @@ end
 function PlayerMonster:catch(player, toThem, now)
 	self.graceUntil[player] = now + CATCH_GRACE
 	self.lungeUntil, self.lungeHitFrom = nil, nil
-	self.reach, self.reachForward, self.dashAim = nil, nil, nil
+	self.devourToken = nil
 	self.cooldownUntil = now + self.kill.DONE
 	if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
 	self.mode = "kill"

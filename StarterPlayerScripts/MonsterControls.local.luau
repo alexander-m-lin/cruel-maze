@@ -1,6 +1,6 @@
 -- Controls for a monster played by a person: the stand-in's LUNGE, and carrying you through a hero's
 -- DASH (Fear Eater's Devour). A hero's abilities themselves are used from the ability bar
--- (AbilityControls: right click, Q, E).
+-- (AbilityControls: left click, Q, E for monsters).
 --
 -- THE LUNGE (the stand-in monster only; a hero like Fear Eater has no left-click action):
 -- Left click (or the on-screen button on a touch screen, or the right trigger on a gamepad):
@@ -12,10 +12,11 @@
 -- Only bound while you're a monster, so a left click does its usual job (collecting relics) for
 -- everyone else.
 --
--- THE DASH: when the server starts a Devour it puts "DevourAt" (server time), "DevourAim"
--- (direction times distance), "DevourWindup" and "DevourTime" on your monster body. Your character
--- is held still for the windup, then carried along the dash here (your movement is simulated on
--- your own computer); the server checks for a catch.
+-- THE DASH: when the server starts a Devour it puts "DevourAt" (server time) and "DevourAim" (the
+-- way to the target) on your monster body: you're turned to face them and held still. When the
+-- windup is over it sets "DevourGo", with the final "DevourAim" (direction times distance) and
+-- "DevourTime": you're carried along it here (your movement is simulated on your own computer).
+-- The server decides whether it catches.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -87,28 +88,47 @@ local function lunge()
 	spring(root, facing, Config.LUNGE_DISTANCE, Config.LUNGE_TIME)
 end
 
--- A hero's dash, started by the server on your monster body
-local function dash(model)
-	local aim, windup, seconds = model:GetAttribute("DevourAim"), model:GetAttribute("DevourWindup"), model:GetAttribute("DevourTime")
-	local startedAt = model:GetAttribute("DevourAt")
-	if typeof(aim) ~= "Vector3" or not windup or not seconds or not startedAt then return end
+-- A hero's dash, started by the server on your monster body: first held still, facing the target...
+local holdToken = nil
+local function hold(model)
+	local aim, windup = model:GetAttribute("DevourAim"), model:GetAttribute("DevourWindup") or 0.3
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root or aim.Magnitude < 0.1 then return end
-	-- held still for the windup (less however long the news took to arrive)
+	if not root then return end
+	if typeof(aim) == "Vector3" and (aim * Vector3.new(1, 0, 1)).Magnitude > 0.1 then
+		local flat = aim * Vector3.new(1, 0, 1)
+		root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
+	end
+	local token = {}
+	holdToken = token
 	player:SetAttribute("Lunging", true)
-	task.wait(math.max(0, startedAt + windup - workspace:GetServerTimeNow()))
+	task.delay(windup + 0.6, function()                 -- (called off: never told to go)
+		if holdToken == token then
+			holdToken = nil
+			player:SetAttribute("Lunging", nil)
+		end
+	end)
+end
+
+-- ...then the lunge itself
+local function dash(model)
+	holdToken = nil
 	player:SetAttribute("Lunging", nil)
-	if not root.Parent or player:GetAttribute("Killing") then return end
-	-- face the way it goes, then go
+	local aim, seconds = model:GetAttribute("DevourAim"), model:GetAttribute("DevourTime")
+	if typeof(aim) ~= "Vector3" or not seconds then return end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or player:GetAttribute("Killing") then return end
 	local flat = aim * Vector3.new(1, 0, 1)
+	if flat.Magnitude < 0.1 then return end
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
-	spring(root, flat, aim.Magnitude, seconds)
+	spring(root, flat, flat.Magnitude, seconds)
 end
 
 local function watchBody(model)
 	if model:GetAttribute("OwnerUserId") ~= player.UserId then return end
-	model:GetAttributeChangedSignal("DevourAt"):Connect(function() task.spawn(dash, model) end)
+	model:GetAttributeChangedSignal("DevourAt"):Connect(function() hold(model) end)
+	model:GetAttributeChangedSignal("DevourGo"):Connect(function() task.spawn(dash, model) end)
 end
 CollectionService:GetInstanceAddedSignal("Monster"):Connect(function(model) task.defer(watchBody, model) end)
 for _, model in CollectionService:GetTagged("Monster") do watchBody(model) end

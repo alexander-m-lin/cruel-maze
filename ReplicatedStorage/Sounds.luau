@@ -17,6 +17,7 @@ local Sounds = {
 
 	-- The monster
 	MonsterRoar    = { id = 9113980319,  volume = 2.0, range = 140 },                 -- when it starts chasing someone
+	DevourWarning  = { id = 9113980319,  volume = 0.9, speed = 1.5 },                 -- you're Devour's target (only you hear it; the roar, higher)
 	KillGrab       = { id = 9113980512,  volume = 0.8, range = 160, stopAfter = 2.2 }, -- as it lifts its victim
 	KillScream     = { id = 87645109019991, volume = 0.8, range = 140 },              -- the victim's scream as they're torn apart...
 	KillCrack      = { id = 9113542694,  volume = 0.6, range = 140 },                 -- ...and the crack of bones

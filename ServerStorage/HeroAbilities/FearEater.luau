@@ -1,9 +1,11 @@
 -- FEAR EATER's abilities on the server (his numbers: ReplicatedStorage.HeroData.FearEater).
 -- Each handler gets (ctx, cast): see Abilities for both.
 --
--- DEVOUR: a dash the way he faces; the monster body does the dashing and catching
--- (monster:Devour, in PlayerMonster and MonsterAI). Here we only work out where to: aimed at a
--- feared survivor ("FearedUntil"), it heads straight for them and reaches much further.
+-- DEVOUR: auto-targeted (DevourAim picks who). He gathers himself for def.windup (the target gets
+-- "DevourTargetAt", server time, and is warned on their screen), then DevourAim.lands decides: a
+-- catch, or a lunge that misses. The monster body does the moving (monster:DevourStart /
+-- DevourDash / DevourCatch, in PlayerMonster and MonsterAI). A stun or pull meanwhile calls it off
+-- (monster.devourToken is cleared). Nobody to target: not used, no cooldown.
 --
 -- INSTILL FEAR: every survivor not in a sanctuary gets "DreadUntil" (server time). Until then,
 -- reaching a sanctuary or another survivor clears it; otherwise they're feared: "FearedUntil",
@@ -17,34 +19,82 @@ local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local SpeedCheck = require(ServerStorage.SpeedCheck)
 local DevourAim = require(game:GetService("ReplicatedStorage").DevourAim)
+local Movement = require(game:GetService("ReplicatedStorage").Movement)
 
 local handlers = {}
 
 local function flat(v) return v * Vector3.new(1, 0, 1) end
 
 ---------------------------------------------------------------- Devour
+-- not stunned, pulled (a whip) or mid-kill: free to carry on with a Devour
+local function monsterFree(monster)
+	if monster:Killing() or (monster.stunUntil or 0) > os.clock() or monster.pull ~= nil then return false end
+	return not (monster.player and Movement.held(monster.player))
+end
+
 function handlers.Devour(ctx, cast)
 	local monster, def = cast.monster, cast.def
-	if not (monster and monster.Devour and monster.pos) then return false end
-	-- straight ahead, or at a feared survivor (DevourAim: the same choice the player's computer
-	-- previews while the button is held)
-	-- (aim assist only toward survivors he could catch: not in a sanctuary)
+	if not (monster and monster.DevourStart and monster.pos) or not monster.active then return false end   -- (inactive: the countdown)
+	local objectives = ctx.match.objectives
 	local now = workspace:GetServerTimeNow()
-	local feared, others = {}, {}
+	-- who he could go for: not in a sanctuary, not already held; feared ones, and whether he sees the rest
+	local candidates, survivorOf = {}, {}
 	for _, survivor in ctx.match.survivors() do
 		local root = ctx.rootOf(survivor)
-		if root and not survivor:GetAttribute("Seized") then
-			if (survivor:GetAttribute("FearedUntil") or 0) > now then
-				table.insert(feared, root)
-			elseif not ctx.match.objectives:IsSafe(root.Position) then
-				table.insert(others, root)
-			end
+		if root and not survivor:GetAttribute("Seized") and not objectives:IsSafe(root.Position) then
+			local feared = (survivor:GetAttribute("FearedUntil") or 0) > now
+			table.insert(candidates, { root = root, feared = feared,
+				visible = feared or objectives:CanSee(monster.pos, cast.aim, { center = root.Position }) })
+			survivorOf[root] = survivor
 		end
 	end
-	local aim, distance, time = DevourAim.pick(monster.pos, cast.aim, def, feared, others, ctx.wallBetween)
-	if not monster:Devour(aim, distance, time, def) then return false end
+	local target, feared = DevourAim.pick(monster.pos, cast.aim, def, candidates, ctx.wallBetween)
+	if not target then return false, "Nobody in reach" end
+	local survivor = survivorOf[target]
+	local token = {}
+	monster.devourToken = token
+	local toward = flat(target.Position - monster.pos)
+	toward = toward.Magnitude > 0.1 and toward.Unit or cast.aim
+	monster:DevourStart(toward, def)
+	survivor:SetAttribute("DevourTargetAt", now)       -- their screen warns them (FearMarks)
+	survivor:SetAttribute("DevourWindup", def.windup)
+	local match = ctx.match
+
+	task.delay(def.windup, function()
+		if monster.devourToken ~= token or ctx.match ~= match or not monsterFree(monster) then return end
+		local root = ctx.rootOf(survivor)
+		local hit = root ~= nil and not survivor:GetAttribute("Seized") and not objectives:IsSafe(root.Position)
+			and DevourAim.lands(monster.pos, root, def, feared, ctx.wallBetween)
+		local to = flat((root and root.Position or target.Position) - monster.pos)
+		local aim = to.Magnitude > 0.1 and to.Unit or toward
+		local distance = hit and math.max(0, to.Magnitude - 2.5) or math.min(to.Magnitude, def.missDistance)
+		local time = math.max(0.08, distance / def.dashSpeed)
+		monster:DevourDash(aim, distance, time)
+		if not hit then
+			monster.devourToken = nil
+			return
+		end
+		-- the catch: once he's reached them (a player's computer carries them, so it can lag a
+		-- little), or a moment after the lunge should have got there
+		task.spawn(function()
+			local giveUp = os.clock() + time + 0.4
+			while os.clock() < giveUp do
+				task.wait()
+				if monster.devourToken ~= token then return end
+				local theirs = ctx.rootOf(survivor)
+				if theirs and flat(theirs.Position - monster.pos).Magnitude <= 5 then break end
+			end
+			if monster.devourToken ~= token then return end
+			monster.devourToken = nil
+			if ctx.match ~= match or not monsterFree(monster) then return end
+			local theirs = ctx.rootOf(survivor)
+			if not theirs or survivor:GetAttribute("Seized") or objectives:IsSafe(theirs.Position) then return end
+			monster:DevourCatch(survivor)
+		end)
+	end)
+
 	-- in his Living Nightmare it recharges much faster
-	local nightmare = (cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow())
+	local nightmare = (cast.user ~= nil and (cast.user:GetAttribute("NightmareUntil") or 0) > now)
 		or (cast.user == nil and monster.Nightmaring ~= nil and monster:Nightmaring())
 	return true, nil, nightmare and def.nightmareCooldown or nil
 end

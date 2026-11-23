@@ -1,52 +1,61 @@
--- Where Fear Eater's DEVOUR goes, worked out the same way on the server (HeroAbilities.FearEater,
--- which carries it out) and on the player's computer (HeroVisuals.FearEater, which paints the
--- area it will catch in while the button is held).
+-- Who Fear Eater's DEVOUR goes for, and whether it lands. Shared by the server (HeroAbilities.FearEater,
+-- which carries it out) and the player's computer (FearMarks, which rings the survivor it would
+-- target, so you know before you click).
 --
---   local aim, distance, seconds, target, locked = DevourAim.pick(from, aim, def, feared, others, blocked)
---     from     - where he is (Vector3; only X and Z matter)
---     aim      - the flat unit direction he faces
---     def      - Devour's numbers (HeroData.FearEater)
---     feared   - HumanoidRootParts of the feared survivors to consider
---     others   - HumanoidRootParts of every other survivor he may catch (for aim assist)
+--   local root, feared = DevourAim.pick(from, facing, def, candidates, blocked)
+--     from       - where he is (Vector3; only X and Z matter)
+--     facing     - the flat unit direction he faces
+--     def        - Devour's numbers (HeroData.FearEater)
+--     candidates - { { root = HumanoidRootPart, feared = bool, visible = bool }, ... }: survivors he
+--                  may catch (not in a sanctuary, not already held). visible: his side can see them
+--                  (the caller decides: the server's sight check, or the fog on a player's computer)
 --     blocked(a, b) - true if a wall stands between two points
+--   1. FEARED: the nearest feared survivor within def.fearedRange, in a clear line (anywhere
+--      round him: they're revealed). feared = true.
+--   2. Otherwise the nearest visible survivor within def.range, in a clear line, in front of him
+--      (within Config.VIEW_CONE, or closer than Config.VIEW_NEAR).
+--   Nobody: nil.
 --
---   1. FEARED: within def.fearedCone of his aim, def.fearedRange away, clear line: it heads
---      straight for them (the closest to his aim), 1 stud past them, much faster. locked = true.
---   2. AIM ASSIST: otherwise, any survivor within def.assistCone of his aim and def.assistRange
---      (as far as the normal dash can catch), clear line: it turns to head straight at them (the
---      closest to his aim). The dash and its reach are unchanged; only its direction.
---   3. Otherwise straight ahead, def.range. target: the root it's heading for, if any.
+--   DevourAim.lands(from, root, def, feared, blocked) -> bool: when the windup ends, is it a catch?
+--     feared: still within def.fearedCatchRange (walls don't matter: he's sure of them).
+--     others: within def.catchRange, in a clear line.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
 
 local DevourAim = {}
 
 local function flat(v) return v * Vector3.new(1, 0, 1) end
 
--- the root closest to `aim` (in angle) within `cone` degrees (total) and `range` studs, in a clear line
-local function closest(from, aim, roots, cone, range, blocked)
-	local best, bestAngle
-	for _, root in roots do
-		local offset = flat(root.Position - from)
-		local d = offset.Magnitude
-		if d < 0.5 or d > range then continue end
-		local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(aim), -1, 1)))
-		if angle > cone / 2 then continue end
-		if blocked(from, root.Position) then continue end
-		if not bestAngle or angle < bestAngle then best, bestAngle = { offset = offset, d = d, root = root }, angle end
+function DevourAim.pick(from, facing, def, candidates, blocked)
+	local best, bestD, bestFeared
+	local halfCone = Config.VIEW_CONE / 2
+	for pass = 1, 2 do                        -- feared first, then anyone in sight
+		for _, c in candidates do
+			if (pass == 1) ~= (c.feared == true) then continue end
+			local offset = flat(c.root.Position - from)
+			local d = offset.Magnitude
+			if d > (pass == 1 and def.fearedRange or def.range) then continue end
+			if pass == 2 then
+				if not c.visible then continue end
+				if d > Config.VIEW_NEAR and d > 0.5 then
+					local angle = math.deg(math.acos(math.clamp(offset.Unit:Dot(facing), -1, 1)))
+					if angle > halfCone then continue end
+				end
+			end
+			if bestD and d >= bestD then continue end
+			if blocked(from, c.root.Position) then continue end
+			best, bestD, bestFeared = c.root, d, pass == 1
+		end
+		if best then return best, bestFeared end
 	end
-	return best
+	return nil, false
 end
 
-function DevourAim.pick(from, aim, def, feared, others, blocked)
-	local fearedTarget = closest(from, aim, feared, def.fearedCone, def.fearedRange, blocked)
-	if fearedTarget then
-		local distance = math.min(fearedTarget.d + 1, def.fearedRange)
-		return fearedTarget.offset.Unit, distance, distance / def.fearedSpeed, fearedTarget.root, true
-	end
-	local assisted = def.assistCone and closest(from, aim, others, def.assistCone, def.assistRange, blocked)
-	if assisted then
-		return assisted.offset.Unit, def.range, def.dashTime, assisted.root, false
-	end
-	return aim, def.range, def.dashTime, nil, false
+function DevourAim.lands(from, root, def, feared, blocked)
+	local d = flat(root.Position - from).Magnitude
+	if feared then return d <= def.fearedCatchRange end
+	return d <= def.catchRange and not blocked(from, root.Position)
 end
 
 return DevourAim

@@ -6,7 +6,7 @@
 --   Movement.setRunBackwards(humanoid, angle > Movement.BACKWARDS_FROM)
 --
 -- who: the player or bot (its attributes: BaseSpeed, Seized, Killing, Lunging, SlowUntil,
---   StunnedUntil, PullAt/PullTime, FearedUntil + FearSlow, NightmareUntil + NightmareBoost)
+--   StunnedUntil, PullAt/PullTime, FearedUntil + FearSlow, NightmareUntil + NightmareBoost, ChaseBoost)
 -- options.aiming: true when facing comes from aiming (the mouse) rather than from moving, so moving
 --   away from where you face is slower (Config.FACING_*). A bot faces the way it walks.
 -- options.collecting: true while collecting a relic (you face it, and move at the backwards speed)
@@ -102,6 +102,8 @@ function Movement.walkSpeed(who, humanoid, root, options)
 	if (who:GetAttribute("FearedUntil") or 0) > workspace:GetServerTimeNow() then
 		multiplier *= who:GetAttribute("FearSlow") or 1
 	end
+	-- a monster player chasing a survivor they can see (PlayerMonster): faster the longer it lasts
+	multiplier *= 1 + (who:GetAttribute("ChaseBoost") or 0)
 	-- Fear Eater in his Living Nightmare: much faster while moving toward a feared survivor
 	if (who:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow() and Movement.towardFeared(root.Position, move) then
 		multiplier *= 1 + (who:GetAttribute("NightmareBoost") or 0)

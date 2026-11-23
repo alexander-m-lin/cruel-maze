@@ -26,7 +26,9 @@ wards watching relics and wherever survivors were last seen).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
 starts another straight away, and "Doors" opens the doors panel.
-- **Monster:** move as usual; left-click to lunge. A survivor you hit is caught. You see what your
+- **Monster:** move as usual; left-click is your hero's main ability (Fear Eater: Devour). While
+  you can see a survivor you speed up, to +20% after 3 seconds; lose sight of them all for a
+  second and it starts again. You see what your
   team sees (other monsters and the Maze Master); survivors are hidden unless you see them.
   Your map shows the relics your side has seen (with your own eyes or a ward's).
 - **Maze Master:** no body; pan the camera with WASD, zoom with the mouse wheel. False relics glow
@@ -42,7 +44,7 @@ starts another straight away, and "Doors" opens the doors panel.
   and slowed). Right-click or Esc cancels placing.
 
 **Heroes:** every survivor plays **Sara, the Cryptraider** and every monster **Fear Eater** for
-now (more heroes and a character select are coming). Abilities aim the way you face.
+now (more heroes and a character select are coming). Survivors' abilities aim the way you face.
 
 Sara:
 - **Right mouse: Whip** (5 s; 2 s if it hits nothing). Lashes out 39 studs, catching monsters within 5 studs of it and
@@ -58,15 +60,17 @@ monsters caught between them too. A monster in the middle of a kill can't be stu
 
 Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching out of his
 sleeves; left click does nothing for him):
-- **Right mouse: Devour** (5 s). Hold right click to aim: the area it would catch in is painted
-  blue on the floor (brighter when it would lock on to a feared survivor); let go to Devour.
-  Aim assist: a survivor within 45 degrees either side of where he faces and close enough to
-  reach (25 studs, clear line) turns the dash straight at them (same range and reach). He gathers himself for a moment, then lunges 16 studs the way he
-  faces; the first survivor his hands reach is caught (within 9 studs ahead, 7 to the sides). He holds them up facing away, struggling,
+- **Left click: Devour** (5 s). No aiming: he goes for the nearest survivor he can see in front of
+  him within 12 studs (a feared survivor within 40 studs, in a clear line, anywhere round him, comes
+  first), ringed on the floor while Devour is ready (blue; red for a feared one). Nobody to go for:
+  nothing happens, no cooldown. He gathers himself for 0.3 seconds, facing them, while their screen
+  flashes red and he snarls; then a feared survivor is caught unless they reached a sanctuary or
+  got 46 studs away, and anyone else is caught if they're still within 14 studs in a clear line.
+  Otherwise he lunges 8 studs and misses (full cooldown). A stun or a whip pull during the windup
+  calls it off. Caught: he lunges to them, holds them up facing away, struggling,
   winds his head back, lifts them flat and draws their head into his hood, where they keep
   struggling until it dies away; then he draws them back out and drops the body, which lies there
-  for 4 seconds. Aimed at a *feared* survivor (within 30°
-  of where he faces, in a clear line), the lunge heads straight for them and reaches 40 studs.
+  for 4 seconds.
   A feared survivor has a red glow and red wisps round their head, for anyone who can see them.
 - **Q: Instill Fear** (25 s). He rears up, arms flung wide, and a dark ring sweeps out from him.
   Every survivor outside a sanctuary, wherever they are, feels **dread**: a 5-second countdown to
@@ -141,8 +145,8 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/HeroVisuals/<Hero>.luau` | StarterPlayerScripts › HeroVisuals (ModuleScripts) | One per hero: how they look on players' computers. FearEater: his floating, the Devour lunge and kill |
 | `StarterPlayerScripts/Victims.luau` | StarterPlayerScripts (ModuleScript) | Drawing a monster's victim: hiding, struggling, going limp, the body that drops |
 | `ServerStorage/Pull.luau` | ServerStorage (ModuleScript) | Pulling a player, bot or monster along a line (the whip) |
-| `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse, Q, E) and the ability bar; hold-to-aim previews (a hero's `aim[slot]`) |
-| `ReplicatedStorage/DevourAim.luau` | ReplicatedStorage (ModuleScript) | Where Fear Eater's Devour goes (straight on, or locked on to a feared survivor): the server and the aiming preview share it |
+| `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse for survivors, left for monsters; Q, E) and the ability bar; hold-to-aim previews (a hero's `aim[slot]`, none at the moment) |
+| `ReplicatedStorage/DevourAim.luau` | ReplicatedStorage (ModuleScript) | Who Fear Eater's Devour targets and whether it lands: the server and the target ring share it |
 | `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
@@ -162,14 +166,14 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/RelicEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Reaching for a relic with a beam of light while collecting it |
 | `StarterPlayerScripts/MonsterAnimate.local.luau` | StarterPlayer › StarterPlayerScripts | Moves monsters smoothly; a hero monster is posed by its `HeroVisuals` module, the stand-in here (walk, chase, kill) |
 | `StarterPlayerScripts/DoorView.local.luau` | StarterPlayer › StarterPlayerScripts | Draws each door as your team last saw it, and its warning rumble (shaking, dust) |
-| `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player's movement in a dash (Devour), and the stand-in's left-click lunge |
+| `StarterPlayerScripts/MonsterControls.local.luau` | StarterPlayer › StarterPlayerScripts | A monster player held still for Devour's windup and carried through its lunge, and the stand-in's left-click lunge |
 | `StarterPlayerScripts/MazeMasterUI.local.luau` | StarterPlayer › StarterPlayerScripts | The Maze Master's controls: outlined targets (doors, crushing walls, survivors) to click, the hover name or cooldown clock, and the ward / false relic placement buttons |
 | `StarterPlayerScripts/CrusherView.local.luau` | StarterPlayer › StarterPlayerScripts | A crushing wall's warning: its walls shake and dust pours out |
 | `StarterPlayerScripts/FalseRelicMarks.local.luau` | StarterPlayer › StarterPlayerScripts | False relics glow red for the monster side (only they're told which are false) |
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
-| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, and his Living Nightmare arrow to the nearest feared survivor |
+| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, his Living Nightmare arrow to the nearest feared survivor, the ring under Devour's target, and the targeted survivor's red flash |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |

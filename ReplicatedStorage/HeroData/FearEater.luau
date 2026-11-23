@@ -2,8 +2,8 @@
 -- of its sleeves. His abilities are carried out in ServerStorage.HeroAbilities.FearEater; his body
 -- is ServerStorage.FearEaterRig, moved and animated by StarterPlayerScripts.HeroVisuals.FearEater.
 --
--- Devour is his only way to catch someone (left click does nothing for him). "Feared" survivors
--- (the "FearedUntil" attribute, from Instill Fear) can be devoured from much further away.
+-- Devour (left click, auto-targeted) is his only way to catch someone. "Feared" survivors (the
+-- "FearedUntil" attribute, from Instill Fear) are devoured from much further away, without fail.
 
 return {
 	name = "Fear Eater",
@@ -28,23 +28,22 @@ return {
 	CORPSE_TIME = 4,           -- seconds the body lies there before it fades
 
 	abilities = {
-		-- Lunge forward the way you face; the first survivor in reach is caught and devoured.
-		-- Aimed at a feared survivor (within fearedCone of where you face, in a clear line), the
-		-- dash reaches much further and heads straight for them.
+		-- AUTO-TARGETED (left click): no aiming. He picks the nearest survivor he can see in front
+		-- of him within `range` (a FEARED survivor anywhere within fearedRange, in a clear line,
+		-- comes first), gathers himself for `windup` seconds (the target is warned), then:
+		--   feared: always caught (unless they reached a sanctuary)
+		--   others: caught if still within catchRange in a clear line; otherwise he lunges and misses
+		-- Nobody to target: nothing happens and it costs no cooldown. A stun or pull during the
+		-- windup calls it off (a teammate can save them).
 		Primary = {
 			id = "Devour", name = "Devour", cooldown = 5,
-			windup = 0.15,          -- seconds he gathers himself first (can't move)
-			range = 16,             -- studs the dash carries him (was 14)
-			dashTime = 0.3,         -- seconds it takes
-			fearedRange = 40,       -- at a feared survivor: this far (was 35)...
-			fearedSpeed = 75,       -- ...at this many studs per second
-			fearedCone = 60,        -- degrees (total width) around where you face that counts as aimed at them (was 40)
-			-- aim assist: a survivor this far round from where you face (total width), and close
-			-- enough for the dash to reach, turns the dash to head straight at them (same range and reach)
-			assistCone = 90,        -- (was 60)
-			assistRange = 25,       -- (range + reachForward + reach)
-			reach = 7,              -- a survivor this close to his reach point is caught (studs)...
-			reachForward = 2,       -- ...which is this far in front of his middle (so: 9 ahead, 7 to the sides, 5 behind)
+			windup = 0.3,           -- seconds he gathers himself (can't move); the target sees it coming
+			range = 12,             -- studs: who he can target (seen, in front of him)
+			catchRange = 14,        -- studs: still this close (clear line) when the windup ends = caught
+			fearedRange = 40,       -- studs: a feared survivor this far away (clear line) can be targeted...
+			fearedCatchRange = 46,  -- ...and is caught unless they've got this far (or into a sanctuary)
+			dashSpeed = 70,         -- studs per second he lunges at them
+			missDistance = 8,       -- studs he lunges after a miss
 			nightmareCooldown = 1,  -- seconds to recharge during Living Nightmare (casting it also cuts what's left to this)
 		},
 		-- Every survivor in the maze, wherever they are, is filled with DREAD: within dreadTime they

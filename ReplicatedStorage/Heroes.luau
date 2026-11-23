@@ -3,10 +3,10 @@
 -- the effects).
 --
 -- Every hero, survivor or monster, has three ability slots:
---   Primary   - right mouse button
+--   Primary   - right mouse button for survivors (their left click collects relics); LEFT for
+--               monsters (AbilityControls)
 --   Secondary - Q
 --   Ultimate  - E
--- (left click stays each role's own action: collecting relics, or the stand-in monster's lunge)
 --
 -- A player's hero is their "Hero" attribute (set by Match; until there's a character select,
 -- survivors are Config.DEFAULT_SURVIVOR_HERO and monsters Config.DEFAULT_MONSTER_HERO). A monster's
@@ -23,7 +23,7 @@
 local Heroes = {}
 
 Heroes.SLOTS = { "Primary", "Secondary", "Ultimate" }
-Heroes.KEYS = { Primary = "RMB", Secondary = "Q", Ultimate = "E" }
+Heroes.KEYS = { Primary = "RMB", Secondary = "Q", Ultimate = "E" }   -- (a monster's Primary: "LMB")
 Heroes.ORDER = { "Sara", "FearEater" }
 
 Heroes.list = {}

@@ -39,6 +39,7 @@ end
 
 local function maxSpeed(player)
 	local speed = math.max(MIN_SPEED, player:GetAttribute("BaseSpeed") or Config.PLAYER_SPEED) * SLACK
+	speed *= 1 + (player:GetAttribute("ChaseBoost") or 0)      -- a monster player's chase speed
 	-- Fear Eater's Living Nightmare: up to this much faster (toward feared survivors)
 	if (player:GetAttribute("NightmareUntil") or 0) > workspace:GetServerTimeNow() then
 		speed *= 1 + (player:GetAttribute("NightmareBoost") or 0)

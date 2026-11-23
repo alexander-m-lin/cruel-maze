@@ -1,6 +1,7 @@
 -- Your HERO'S ABILITIES: the controls and the ability bar (survivors and monsters with a hero,
 -- during a match).
---   right mouse button - Primary     Q - Secondary     E - Ultimate
+--   Primary: right mouse button for survivors (left click collects relics), LEFT for monsters
+--   Q - Secondary     E - Ultimate
 -- (on a touch screen or gamepad: the buttons on the bar, or the gamepad's shoulder buttons)
 -- Each ability aims the way you face. The server checks and carries it out (Abilities); the bar
 -- shows each one's key, name and cooldown (the "AbilityReady<Slot>" attributes it publishes).
@@ -30,6 +31,17 @@ local INPUTS = {
 	Ultimate = { Enum.KeyCode.E, Enum.KeyCode.ButtonY },
 }
 local GOLD = Color3.fromRGB(235, 190, 90)
+
+-- Monsters use their Primary (e.g. Fear Eater's Devour) with the left mouse button
+local function isMonster() return player:GetAttribute("Role") == Config.Roles.Monster end
+local function inputsFor(slot)
+	if slot == "Primary" and isMonster() then return { Enum.UserInputType.MouseButton1, Enum.KeyCode.ButtonR1 } end
+	return INPUTS[slot]
+end
+local function keyLabel(slot)
+	if slot == "Primary" and isMonster() then return "LMB" end
+	return Heroes.KEYS[slot]
+end
 
 local function myHero()
 	local role = player:GetAttribute("Role")
@@ -135,19 +147,20 @@ RunService.RenderStepped:Connect(function()
 		b.button.Visible = def ~= nil
 		if not def then continue end
 		if def.soon then                           -- not built yet
-			b.button.Text = ("[%s]\n%s\n(soon)"):format(Heroes.KEYS[slot], def.name)
+			b.button.Text = ("[%s]\n%s\n(soon)"):format(keyLabel(slot), def.name)
 			b.shade.Size = UDim2.fromScale(1, 1)
 			continue
 		end
 		local left = math.max(0, (player:GetAttribute("AbilityReady" .. slot) or 0) - now)
-		b.button.Text = ("[%s]\n%s%s"):format(Heroes.KEYS[slot], def.name, left > 0 and ("\n%ds"):format(math.ceil(left)) or "")
+		b.button.Text = ("[%s]\n%s%s"):format(keyLabel(slot), def.name, left > 0 and ("\n%ds"):format(math.ceil(left)) or "")
 		b.shade.Size = UDim2.fromScale(1, math.clamp(left / def.cooldown, 0, 1))
 	end
 end)
 
 ---------------------------------------------------------------- the keys
 local aiming = {}   -- [slot] = the aimer while its key is held
-for slot, inputs in INPUTS do
+local function bindSlot(slot)
+	ContextActionService:UnbindAction("Ability" .. slot)
 	ContextActionService:BindAction("Ability" .. slot, function(_, state)
 		if state == Enum.UserInputState.Begin then
 			local hero = myHero()
@@ -169,8 +182,13 @@ for slot, inputs in INPUTS do
 			return Enum.ContextActionResult.Sink
 		end
 		return Enum.ContextActionResult.Pass
-	end, false, table.unpack(inputs))
+	end, false, table.unpack(inputsFor(slot)))
 end
+for slot in INPUTS do bindSlot(slot) end
+player:GetAttributeChangedSignal("Role"):Connect(function()     -- (Primary's button depends on the role)
+	aiming.Primary = nil
+	bindSlot("Primary")
+end)
 
 -- previews follow you while their keys are held (and go away if the match ends meanwhile)
 RunService.RenderStepped:Connect(function()

@@ -157,6 +157,13 @@ Config.AI_MONSTERS_CASTING = 1    -- this many AI monsters a match also use thei
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)
+-- Chase speed (monster players): while you can see a survivor, you speed up, from nothing to
+-- CHASE_BOOST_MAX over CHASE_BOOST_RAMP seconds. Lose sight of them all for CHASE_BOOST_GRACE
+-- seconds and it starts again from nothing, so breaking line of sight (corners, doors) is how
+-- survivors shake a chase. (AI monsters have their own chase ramp: MonsterAI.)
+Config.CHASE_BOOST_MAX = 0.2        -- +20% speed at most
+Config.CHASE_BOOST_RAMP = 3         -- seconds in sight to reach it
+Config.CHASE_BOOST_GRACE = 1        -- seconds out of sight before it resets
 Config.LUNGE_WINDUP = 0.15        -- seconds crouched before the lunge (you can't move)
 Config.LUNGE_DISTANCE = 12        -- studs the lunge carries you
 Config.LUNGE_TIME = 0.25          -- seconds the lunge takes

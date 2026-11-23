@@ -621,7 +621,8 @@ local function runCountdown()
 		local monster
 		if player then
 			monster = PlayerMonster.new(player, maze, { onCatch = onCaught, startCell = startCell,
-				hero = player:GetAttribute("Hero") or Config.DEFAULT_MONSTER_HERO })
+				hero = player:GetAttribute("Hero") or Config.DEFAULT_MONSTER_HERO,
+				isSafe = function(p) return objectives:IsSafe(p) end })
 			playerMonsters[player] = monster
 		else
 			aiMonsters += 1

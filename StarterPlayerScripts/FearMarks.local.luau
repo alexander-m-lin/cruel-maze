@@ -7,6 +7,11 @@
 --                  (ARROW_LEAD seconds or less), or running, a wide red arrow on the floor round
 --                  him points straight at the nearest feared survivor, wherever they are (off
 --                  screen too). It's drawn over walls and fog, so it never gets hidden.
+--   DEVOUR TARGET - for a Fear Eater player, while Devour is ready: a ring on the floor under the
+--                  survivor a click would go for (DevourAim, the server's own choice; only
+--                  survivors you can see count). Red for a feared survivor (a sure catch).
+--   DEVOUR WARNING - the survivor Devour is coming for ("DevourTargetAt" on you, server time):
+--                  a red flash round the screen edges and a snarl for the windup, time to run.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,6 +19,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Movement = require(ReplicatedStorage:WaitForChild("Movement"))
+local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
+local DevourAim = require(ReplicatedStorage:WaitForChild("DevourAim"))
+local Sounds = require(ReplicatedStorage:WaitForChild("Sounds"))
+local CollectionService = game:GetService("CollectionService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 
@@ -186,9 +196,121 @@ local function updateArrow(feared)
 	arrow.Parent = workspace.CurrentCamera
 end
 
+---------------------------------------------------------------- Devour target
+local TARGET_BLUE = Color3.fromRGB(70, 170, 255)
+local ring = Instance.new("Part")
+ring.Name = "DevourTarget"
+ring.Shape = Enum.PartType.Cylinder
+ring.Anchored, ring.CanCollide, ring.CanQuery, ring.CanTouch, ring.CastShadow = true, false, false, false, false
+ring.Material = Enum.Material.Neon
+ring.Transparency = 0.35
+ring.Size = Vector3.new(0.12, 7, 7)
+local ringGlow = Instance.new("Highlight")      -- a bright edge, drawn over anything in the way
+ringGlow.FillTransparency = 1
+ringGlow.OutlineTransparency = 0
+ringGlow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+ringGlow.Adornee = ring
+ringGlow.Parent = ring
+
+local wallRays = RaycastParams.new()
+wallRays.FilterType = Enum.RaycastFilterType.Include
+
+local function updateTarget(feared)
+	local hero = Heroes.get(player:GetAttribute("Hero"))
+	local def = hero and hero.abilities.Primary
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local maze = workspace:FindFirstChild("Maze")
+	if player:GetAttribute("Role") ~= Config.Roles.Monster or not def or def.id ~= "Devour" or not root or not maze
+		or (player:GetAttribute("AbilityReadyPrimary") or 0) > workspace:GetServerTimeNow()
+		or player:GetAttribute("Killing") or player:GetAttribute("Lunging") then
+		ring.Parent = nil
+		return
+	end
+	local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	if look.Magnitude < 0.01 then ring.Parent = nil return end
+	wallRays.FilterDescendantsInstances = { maze }
+	local function blocked(a, b)
+		local y = root.Position.Y
+		local from, to = Vector3.new(a.X, y, a.Z), Vector3.new(b.X, y, b.Z)
+		local hit = workspace:Raycast(from, to - from, wallRays)
+		return hit ~= nil and hit.Instance.CanCollide
+	end
+	-- survivors you can see (the fog marks them; it hides anyone in a sanctuary)
+	local isFeared = {}
+	for _, r in feared do isFeared[r] = true end
+	local candidates = {}
+	local function consider(body, holder)
+		local r = body and body:FindFirstChild("HumanoidRootPart")
+		if not r or holder:GetAttribute("Seized") or body:GetAttribute("FogState") == "hidden" then return end
+		table.insert(candidates, { root = r, feared = isFeared[r] == true, visible = true })
+	end
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor then consider(other.Character, other) end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do consider(bot, bot) end
+	local target, lockedOn = DevourAim.pick(root.Position, look.Unit, def, candidates, blocked)
+	if not target then ring.Parent = nil return end
+	local down = workspace:Raycast(target.Position, Vector3.new(0, -20, 0), wallRays)
+	local y = (down and down.Position.Y or target.Position.Y - 3) + 0.08
+	local pulse = 0.5 + 0.5 * math.sin(os.clock() * 8)
+	local color = lockedOn and RED or TARGET_BLUE
+	ring.Color = color
+	ringGlow.OutlineColor = color
+	ring.Size = Vector3.new(0.12, 6.5 + pulse, 6.5 + pulse)
+	ring.CFrame = CFrame.new(target.Position.X, y, target.Position.Z) * CFrame.Angles(0, 0, math.pi / 2)
+	ring.Parent = workspace.CurrentCamera
+end
+
+---------------------------------------------------------------- Devour warning (you're its target)
+local warnGui = Instance.new("ScreenGui")
+warnGui.Name = "DevourWarning"
+warnGui.ResetOnSpawn = false
+warnGui.IgnoreGuiInset = true
+warnGui.DisplayOrder = 6
+warnGui.Parent = player:WaitForChild("PlayerGui")
+local warnEdges = {}
+local function warnEdge(anchor, position, size, rotation)
+	local f = Instance.new("Frame")
+	f.AnchorPoint, f.Position, f.Size = anchor, position, size
+	f.BackgroundColor3 = Color3.fromRGB(220, 20, 30)
+	f.BackgroundTransparency = 1
+	f.BorderSizePixel = 0
+	local g = Instance.new("UIGradient")
+	g.Rotation = rotation
+	g.Transparency = NumberSequence.new(0, 1)
+	g.Parent = f
+	f.Parent = warnGui
+	table.insert(warnEdges, f)
+end
+warnEdge(Vector2.new(0, 0), UDim2.fromScale(0, 0), UDim2.new(1, 0, 0, 120), 90)
+warnEdge(Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.new(1, 0, 0, 120), -90)
+warnEdge(Vector2.new(0, 0), UDim2.fromScale(0, 0), UDim2.new(0, 120, 1, 0), 0)
+warnEdge(Vector2.new(1, 0), UDim2.fromScale(1, 0), UDim2.new(0, 120, 1, 0), 180)
+local snarl = Instance.new("Sound")
+snarl.SoundId = "rbxassetid://" .. Sounds.DevourWarning.id
+snarl.Volume = Sounds.DevourWarning.volume
+snarl.PlaybackSpeed = Sounds.DevourWarning.speed or 1
+snarl.Parent = SoundService
+
+player:GetAttributeChangedSignal("DevourTargetAt"):Connect(function()
+	if player:GetAttribute("DevourTargetAt") then snarl:Play() end
+end)
+
+local function updateWarning()
+	local at = player:GetAttribute("DevourTargetAt")
+	local windup = player:GetAttribute("DevourWindup") or 0.3
+	local t = at and workspace:GetServerTimeNow() - at or math.huge
+	-- full for the windup, then fading over a moment
+	local strength = t < windup and 1 or math.clamp(1 - (t - windup) / 0.4, 0, 1)
+	for _, f in warnEdges do f.BackgroundTransparency = 1 - 0.75 * strength end
+end
+
 ---------------------------------------------------------------- every frame
 RunService.RenderStepped:Connect(function()
 	local feared = Movement.fearedRoots()
 	updateMarks(feared)
 	updateArrow(feared)
+	updateTarget(feared)
+	updateWarning()
 end)

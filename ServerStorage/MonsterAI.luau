@@ -315,7 +315,7 @@ end
 
 function MonsterAI:Stun(seconds)
 	if self:Killing() then return end
-	self.dash = nil
+	self.dash, self.devourToken = nil, nil
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	if self.model then
 		self.model:SetAttribute("StunnedUntil", workspace:GetServerTimeNow() + (self.stunUntil - os.clock()))
@@ -327,7 +327,7 @@ function MonsterAI:Pull(to, speed)
 	local target = Vector3.new(to.X, self.pos.Y, to.Z)
 	local distance = (target - self.pos).Magnitude
 	if distance < 0.5 then return 0 end
-	self.dash = nil
+	self.dash, self.devourToken = nil, nil
 	self.pull = { from = self.pos, to = target, startedAt = os.clock(), time = distance / speed }
 	if self.model then   -- (players' computers draw the drag: dust and a scrape)
 		self.model:SetAttribute("PullAt", workspace:GetServerTimeNow())
@@ -517,7 +517,7 @@ function MonsterAI:Step(dt, targets)
 	end
 	-- Mid-Devour: the dash, nothing else
 	if self.dash then
-		self:stepDash(now, targets)
+		self:stepDash(now)
 		self:publish(now)
 		return
 	end
@@ -680,7 +680,7 @@ end
 -- Caught someone: turn to face them and start the kill (players' computers animate it from these)
 function MonsterAI:catch(player, root, now)
 	self.graceUntil[player] = now + CATCH_GRACE
-	self.chaseTarget, self.path, self.dash = nil, {}, nil
+	self.chaseTarget, self.path, self.dash, self.devourToken = nil, {}, nil, nil
 	local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)
 	if toThem.Magnitude > 0.1 then self.facing = toThem.Unit end
 	self.mode = "kill"
@@ -693,46 +693,61 @@ end
 
 ---------------------------------------------------------------- Devour
 -- Chasing someone within Devour's reach (or a feared survivor within its feared reach), in a clear
--- line, with Devour ready: dash at them, aiming a little ahead of where they're running.
+-- line, with Devour ready: use it toward them (HeroAbilities.FearEater picks the target, the
+-- same way as for a player).
 function MonsterAI:tryDevour(targets)
 	local def = self.devourDef
-	if self.mode ~= "chase" or not self.chaseTarget or not Abilities.ready(self, "Primary") then return end
+	if self.mode ~= "chase" or not self.chaseTarget or self.devourToken or not Abilities.ready(self, "Primary") then return end
 	local root = rootOf(self.chaseTarget)
 	if not root then return end
 	local feared = (self.chaseTarget:GetAttribute("FearedUntil") or 0) > workspace:GetServerTimeNow()
 	local target = Vector3.new(root.Position.X, self.pos.Y, root.Position.Z)
-	local d = (target - self.pos).Magnitude
-	if d > (feared and def.fearedRange or def.range) or not self:canPass(self.pos, target) then return end
-	local lead = root.AssemblyLinearVelocity * Vector3.new(1, 0, 1) * (def.windup + def.dashTime * 0.5)
-	local aim = (target + lead - self.pos) * Vector3.new(1, 0, 1)
-	if aim.Magnitude < 0.1 then aim = target - self.pos end
+	local aim = target - self.pos
+	if aim.Magnitude > (feared and def.fearedRange or def.range) or not self:canPass(self.pos, target) then return end
 	if aim.Magnitude < 0.1 then aim = self.facing end
 	Abilities.useMonster(self, "Primary", aim.Unit)
 end
 
--- Start a Devour dash (called by HeroAbilities.FearEater): stands still for def.windup, then dashes
--- `distance` studs along `aim` in `time` seconds, stopping at walls; the first survivor within
--- def.reach of its reach point is caught. Players' computers draw it from "DevourAt" (server time),
--- "DevourAim" (the dash: direction times distance), "DevourWindup" and "DevourTime".
-function MonsterAI:Devour(aim, distance, time, def)
-	if not self.active or self.killUntil or self.pull or os.clock() < (self.stunUntil or 0) then return false end
+-- DEVOUR's steps (HeroAbilities.FearEater runs them). Players' computers draw it from "DevourAt"
+-- (server time the windup starts), "DevourWindup", then "DevourGo" (the lunge starts), "DevourAim"
+-- (direction times distance) and "DevourTime".
+-- 1: stands still facing them for def.windup
+function MonsterAI:DevourStart(toward, def)
 	local now = os.clock()
-	self.facing = aim
+	self.facing = toward
 	self.path = {}
-	self.dash = { aim = aim, distance = distance, def = def, from = self.pos,
-		start = now + def.windup, stop = now + def.windup + time, time = time }
+	self.dash = { holding = true, giveUpAt = now + def.windup + 1 }
 	self.mode = "chase"
-	self.model:SetAttribute("DevourAim", aim * distance)
+	self.model:SetAttribute("DevourAim", toward * def.range)
 	self.model:SetAttribute("DevourWindup", def.windup)
-	self.model:SetAttribute("DevourTime", time)
+	self.model:SetAttribute("DevourTime", def.range / def.dashSpeed)
 	self.model:SetAttribute("DevourAt", workspace:GetServerTimeNow())
 	self:publish(now)
-	return true
 end
 
-function MonsterAI:stepDash(now, targets)
+-- 2: lunges `distance` studs along `aim` in `time` seconds, stopping at walls
+function MonsterAI:DevourDash(aim, distance, time)
+	local now = os.clock()
+	self.facing = aim
+	self.dash = { aim = aim, distance = distance, from = self.pos, start = now, time = time }
+	self.model:SetAttribute("DevourAim", aim * distance)
+	self.model:SetAttribute("DevourTime", time)
+	self.model:SetAttribute("DevourGo", workspace:GetServerTimeNow())
+	self:publish(now)
+end
+
+-- 3: caught them
+function MonsterAI:DevourCatch(survivor)
+	local root = rootOf(survivor)
+	if root then self:catch(survivor, root, os.clock()) end
+end
+
+function MonsterAI:stepDash(now)
 	local dash = self.dash
-	if now < dash.start then return end                         -- gathering itself
+	if dash.holding then                                         -- gathering itself
+		if now > dash.giveUpAt then self.dash = nil end          -- (called off and never told)
+		return
+	end
 	local k = math.clamp((now - dash.start) / dash.time, 0, 1)
 	local want = dash.from + dash.aim * dash.distance * k
 	if (want - self.pos).Magnitude > 0.01 then
@@ -740,18 +755,6 @@ function MonsterAI:stepDash(now, targets)
 			self.pos = want
 		else
 			k = 1                                                -- hit a wall: the dash ends here
-		end
-	end
-	-- anyone within reach of its hands
-	local reachAt = self.pos + dash.aim * dash.def.reachForward
-	for _, player in targets do
-		local root = rootOf(player)
-		if root and (self.graceUntil[player] or 0) < now and not player:GetAttribute("Seized") then
-			local flat = Vector3.new(root.Position.X - reachAt.X, 0, root.Position.Z - reachAt.Z).Magnitude
-			if flat < dash.def.reach then
-				self:catch(player, root, now)
-				return
-			end
 		end
 	end
 	if k >= 1 then
