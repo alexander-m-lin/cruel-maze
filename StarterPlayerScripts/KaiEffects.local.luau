@@ -490,6 +490,9 @@ RunService.RenderStepped:Connect(function()
 			local character = other.Character
 			if character and (other:GetAttribute("EncryptedUntil") or 0) > now then want[character] = true end
 		end
+		for _, bot in CollectionService:GetTagged("SurvivorBot") do   -- (a bot's attributes are on its body)
+			if (bot:GetAttribute("EncryptedUntil") or 0) > now then want[bot] = true end
+		end
 	end
 	for character in want do
 		if not ghosts[character] then
@@ -520,7 +523,8 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Coming back: a burst where he is, for anyone who can see him now
+-- Coming back: a burst where he is, for anyone who can see him now (players, and survivor bots:
+-- their attributes are on their bodies)
 local watching = {}
 local function watch(other)
 	if watching[other] then return end
@@ -528,7 +532,7 @@ local function watch(other)
 	other:GetAttributeChangedSignal("EncryptedUntil"):Connect(function()
 		if other:GetAttribute("EncryptedUntil") then return end
 		task.wait(0.1)                                   -- (the fog shows him again first)
-		local character = other.Character
+		local character = if other:IsA("Player") then other.Character else other
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and character:GetAttribute("FogState") ~= "hidden" then dissolveBurst(root.Position) end
 	end)
@@ -536,11 +540,15 @@ end
 for _, other in Players:GetPlayers() do watch(other) end
 Players.PlayerAdded:Connect(watch)
 Players.PlayerRemoving:Connect(function(other) watching[other] = nil end)
+for _, bot in CollectionService:GetTagged("SurvivorBot") do watch(bot) end
+CollectionService:GetInstanceAddedSignal("SurvivorBot"):Connect(watch)
+CollectionService:GetInstanceRemovedSignal("SurvivorBot"):Connect(function(bot) watching[bot] = nil end)
 
 ---------------------------------------------------------------- the server's word
 fxEvent.OnClientEvent:Connect(function(kind, userId, a, b, c, d)
 	if kind == "Scanner" then
-		local holder = Players:GetPlayerByUserId(userId)
+		-- (a player holds the scan's attributes; a survivor bot's are on its body)
+		local holder = Players:GetPlayerByUserId(userId) or Characters.of(userId)
 		if holder then task.spawn(scanner, holder) end
 	elseif kind == "EMP" then
 		task.spawn(emp, a, b, c, d)

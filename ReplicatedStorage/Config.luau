@@ -154,6 +154,8 @@ Config.SURVIVOR_BOTS = true       -- fill empty survivor slots with bots (Surviv
 Config.DEFAULT_SURVIVOR_HERO = "Sara"
 Config.DEFAULT_MONSTER_HERO = "FearEater"   -- every monster, AI or player (nil or an unknown id: the stand-in)
 Config.AI_MONSTERS_CASTING = 1    -- this many AI monsters a match also use their hero's Q and E (the rest only catch)
+Config.AI_SURVIVORS_CASTING = 1   -- this many survivor bots a match use their hero's abilities (ServerStorage.BotAbilities;
+                                  -- only heroes it has a brain for: Kai so far)
 
 -- Monsters played by people
 Config.MONSTER_SPEED = 24         -- walk speed (the facing rule applies, as for survivors)

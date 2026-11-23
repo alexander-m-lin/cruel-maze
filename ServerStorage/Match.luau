@@ -64,6 +64,7 @@ local Fear = require(ServerStorage.Fear)
 local Heroes = require(ReplicatedStorage.Heroes)
 local Protection = require(ReplicatedStorage.Protection)
 local Encrypt = require(ServerStorage.Encrypt)
+local BotAbilities = require(ServerStorage.BotAbilities)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -609,6 +610,15 @@ local function addBot()
 	bot:SetAttribute("Lives", sandbox and Sandbox.LIVES or Config.LIVES)
 	bot:SetAttribute("Sanctuary", 1)
 	bot:SetAttribute("Hero", pickSurvivorHero(nil))
+	-- the first Config.AI_SURVIVORS_CASTING bots whose hero has a brain use their abilities (BotAbilities)
+	local casting = 0
+	for _, other in bots do
+		if other.castsAbilities then casting += 1 end
+	end
+	if casting < Config.AI_SURVIVORS_CASTING and BotAbilities.has(bot:GetAttribute("Hero")) then
+		bot.castsAbilities = true
+		bot.wards = wards
+	end
 	bot:SetAttribute("BaseSpeed", state == States.Playing and Config.PLAYER_SPEED or 0)
 	bot:LoadCharacter()
 	setUpSurvivorCharacter(bot.Character)

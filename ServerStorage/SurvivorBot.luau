@@ -21,6 +21,10 @@
 --             false relic, like anyone)
 --   ROAM    - otherwise wanders, preferring cells it hasn't been to
 -- Routes are planned over the maze's grid (shut doors block them) and re-planned every few seconds.
+--
+-- ABILITIES: a bot with castsAbilities set (Match: Config.AI_SURVIVORS_CASTING of them) also uses its
+-- hero's abilities, chosen by BotAbilities and carried out by Abilities.use exactly as a player's.
+-- Match gives it the wards (bot.wards) for that.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -30,6 +34,7 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Config = require(ReplicatedStorage.Config)
 local Movement = require(ReplicatedStorage.Movement)   -- the same speed rules as players
+local BotAbilities = require(ServerStorage.BotAbilities)
 
 local THINK_EVERY = 0.2
 local REPLAN_EVERY = 3        -- seconds: re-plan the route (doors change)
@@ -263,6 +268,12 @@ function SurvivorBot:Step(dt, monsters)
 
 	local cx, cz = self:cellOf(root.Position)
 	self.visited[cx * 1000 + cz] = true
+
+	-- ABILITIES (a bot that casts; every frame, as escapes can't wait): see BotAbilities
+	if self.castsAbilities then
+		local eye = Vector3.new(root.Position.X, self.maze.floorY + EYE, root.Position.Z)
+		BotAbilities.think(self, self:GetAttribute("Hero"), { root = root, eye = eye, monsters = monsters, wards = self.wards, now = now })
+	end
 
 	if now >= self.thinkAt then
 		self.thinkAt = now + THINK_EVERY

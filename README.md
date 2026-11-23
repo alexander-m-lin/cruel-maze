@@ -170,6 +170,7 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `ServerStorage/PlayerMonster.luau` | ServerStorage (ModuleScript) | A monster played by a person: dresses their invisible character in the monster body; the lunge and its catches |
 | `ServerStorage/MazeMaster.luau` | ServerStorage (ModuleScript) | The Maze Master's tools: dark mana, cooldowns, doors, wards, false relics, crushing walls |
 | `ServerStorage/SurvivorBot.luau` | ServerStorage (ModuleScript) | A survivor bot for empty survivor slots: roams, collects relics it sees, runs to a sanctuary from monsters. Passes for a player to the rest of the game |
+| `ServerStorage/BotAbilities.luau` | ServerStorage (ModuleScript) | When a survivor bot uses its hero's abilities (Kai so far: Scanner at nearby unseen cells, EMP at wards it sees, Encrypt when about to be caught); carried out through `Abilities.use`, exactly as a player's |
 | `ServerStorage/BotAnimate.legacy.luau` | ServerStorage (Script, a template) | Roblox's standard character Animate script, as a server copy that bots get, so they animate exactly like players |
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
