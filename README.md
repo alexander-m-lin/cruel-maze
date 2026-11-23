@@ -81,8 +81,8 @@ sleeves; left click does nothing for him):
   sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
   them), and Devour recharges in 1 second (casting it cuts Devour's wait to 1 s too). Ending
   inside a wall pushes him out into the middle of that cell. While it's ready (or 2 seconds from
-  ready) and while it runs, a wide red arrow on the floor round him points straight at the
-  nearest feared survivor, wherever they are, drawn over walls and fog.
+  ready) and while it runs, a wide red triangle round him points straight at each feared
+  survivor, wherever they are (drawn on the screen, so walls and fog never hide them).
 AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range. One
 AI monster a match (`Config.AI_MONSTERS_CASTING`) also casts Instill Fear whenever it's ready,
 and Living Nightmare whenever it's ready and a survivor is feared (then it goes straight through
@@ -173,7 +173,7 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
-| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, his Living Nightmare arrow to the nearest feared survivor, the ring under Devour's target, and the targeted survivor's red flash |
+| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, his Living Nightmare pointers to each feared survivor, the ring under Devour's target, and the targeted survivor's red flash |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |

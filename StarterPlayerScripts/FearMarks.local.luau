@@ -3,10 +3,10 @@
 --                  their head and red wisps rising off it, for anyone who can see them (the fog
 --                  decides: a survivor hidden from you shows no mark). Survivors see it on
 --                  themselves and their teammates too.
---   NIGHTMARE ARROW - for a Fear Eater player: while Living Nightmare is ready, nearly ready
---                  (ARROW_LEAD seconds or less), or running, a wide red arrow on the floor round
---                  him points straight at the nearest feared survivor, wherever they are (off
---                  screen too). It's drawn over walls and fog, so it never gets hidden.
+--   NIGHTMARE POINTERS - for a Fear Eater player: while Living Nightmare is ready, nearly ready
+--                  (ARROW_LEAD seconds or less), or running, a wide red triangle round him points
+--                  straight at each feared survivor, wherever they are (off screen too). Drawn on
+--                  the screen, so walls and fog never hide them.
 --   DEVOUR TARGET - for a Fear Eater player, while Devour is ready: a ring on the floor under the
 --                  survivor a click would go for (DevourAim, the server's own choice; only
 --                  survivors you can see count). Red for a feared survivor (a sure catch).
@@ -106,52 +106,38 @@ local function updateMarks(feared)
 	end
 end
 
----------------------------------------------------------------- nightmare arrow
-local ARROW_LEAD = 2          -- seconds before Living Nightmare is ready that the arrow appears
-local ARROW_START = 6         -- studs from his middle the arrow starts (clear of his body)
-local SHAFT_LENGTH = 8
-local SHAFT_WIDTH = 5
-local HEAD_LENGTH = 9
-local HEAD_HALF_WIDTH = 7     -- (the head is twice this wide)
-local THICK = 0.2
+---------------------------------------------------------------- nightmare pointers
+-- Drawn on the screen (so walls and fog can never hide them): one red triangle per feared
+-- survivor, just out from his feet, pointing the way they are. Each is a square turned into a
+-- diamond with half of it faded out by a gradient, which leaves a solid triangle.
+local ARROW_LEAD = 2          -- seconds before Living Nightmare is ready that the pointers appear
+local POINTER_SIZE = 62       -- pixels: the square's side (the triangle is 1.41x this wide)
+local POINTER_OUT = 62        -- pixels from his feet to the triangle's base
+local POINTER_BOB = 6         -- pixels it pushes out and back, so it reads as pointing
 
-local arrow = Instance.new("Model")
-arrow.Name = "NightmareArrow"
-local function arrowPart(class)
-	local p = Instance.new(class)
-	p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
-	p.Material = Enum.Material.Neon
-	p.Color = RED
-	p.Transparency = 0.2
-	p.Parent = arrow
-	return p
+local pointerGui = Instance.new("ScreenGui")
+pointerGui.Name = "NightmarePointers"
+pointerGui.ResetOnSpawn = false
+pointerGui.IgnoreGuiInset = true    -- (positions are viewport points)
+pointerGui.DisplayOrder = 1
+pointerGui.Parent = player:WaitForChild("PlayerGui")
+local pointers = {}
+
+local function newPointer()
+	local f = Instance.new("Frame")
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Size = UDim2.fromOffset(POINTER_SIZE, POINTER_SIZE)
+	f.BackgroundColor3 = RED
+	f.BackgroundTransparency = 0.1
+	f.BorderSizePixel = 0
+	local g = Instance.new("UIGradient")
+	g.Rotation = -45      -- (with the frame turned angle + 45: keeps the half toward `angle`)
+	g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 1),
+		NumberSequenceKeypoint.new(0.501, 0), NumberSequenceKeypoint.new(1, 0) })
+	g.Parent = f
+	f.Parent = pointerGui
+	return f
 end
-local shaft = arrowPart("Part")
-local headLeft = arrowPart("WedgePart")
-local headRight = arrowPart("WedgePart")
-local arrowGlow = Instance.new("Highlight")   -- drawn over walls and fog
-arrowGlow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-arrowGlow.FillColor = RED
-arrowGlow.FillTransparency = 0.2
-arrowGlow.OutlineColor = Color3.fromRGB(255, 200, 200)
-arrowGlow.OutlineTransparency = 0.1
-arrowGlow.Adornee = arrow
-arrowGlow.Parent = arrow
-
--- A flat right triangle on the floor: its right angle at `corner`, one leg `along` (unit) for
--- `length` studs, the other `side` (unit, flat, perpendicular) for `width` studs. A WedgePart's
--- right angle is at its bottom back edge: local +Y runs up the back to the top, local -Z along the
--- bottom to the front; local X is its thickness (here: up).
-local function placeHalf(wedge, corner, along, side, length, width)
-	wedge.Size = Vector3.new(THICK, length, width)
-	local center = corner + along * (length / 2) + side * (width / 2)
-	local localZ = -side
-	local localX = along:Cross(localZ)
-	wedge.CFrame = CFrame.fromMatrix(center, localX, along, localZ)
-end
-
-local floorRays = RaycastParams.new()
-floorRays.FilterType = Enum.RaycastFilterType.Exclude
 
 local function nightmareSoon()
 	if player:GetAttribute("Role") ~= Config.Roles.Monster or player:GetAttribute("Hero") ~= "FearEater" then return false end
@@ -167,33 +153,31 @@ end
 local function updateArrow(feared)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root or #feared == 0 or player:GetAttribute("Seized") or not nightmareSoon() then
-		arrow.Parent = nil
-		return
+	local camera = workspace.CurrentCamera
+	local used = 0
+	if root and #feared > 0 and not player:GetAttribute("Seized") and nightmareSoon() then
+		local feet = root.Position - Vector3.new(0, 2.5, 0)
+		local at = camera:WorldToViewportPoint(feet)
+		local center = Vector2.new(at.X, at.Y)
+		local bob = POINTER_BOB * math.sin(os.clock() * 5)
+		for _, r in feared do
+			local to = (r.Position - root.Position) * Vector3.new(1, 0, 1)
+			if to.Magnitude < 1 then continue end
+			-- the way they are, on the screen
+			local ahead = camera:WorldToViewportPoint(feet + to.Unit * 10)
+			local dir = Vector2.new(ahead.X, ahead.Y) - center
+			if dir.Magnitude < 0.5 then continue end
+			dir = dir.Unit
+			used += 1
+			local f = pointers[used] or newPointer()
+			pointers[used] = f
+			local p = center + dir * (POINTER_OUT + bob)
+			f.Position = UDim2.fromOffset(p.X, p.Y)
+			f.Rotation = math.deg(math.atan2(dir.Y, dir.X)) + 45
+			f.Visible = true
+		end
 	end
-	-- the nearest feared survivor (straight line)
-	local best, bestDist
-	for _, r in feared do
-		local d = ((r.Position - root.Position) * Vector3.new(1, 0, 1)).Magnitude
-		if d > 1 and (not bestDist or d < bestDist) then best, bestDist = r, d end
-	end
-	if not best then arrow.Parent = nil return end
-	local f = ((best.Position - root.Position) * Vector3.new(1, 0, 1)).Unit
-	local s = f:Cross(Vector3.yAxis)
-	-- on the floor under him
-	floorRays.FilterDescendantsInstances = { character, arrow }
-	local hit = workspace:Raycast(root.Position, Vector3.new(0, -20, 0), floorRays)
-	local y = (hit and hit.Position.Y or root.Position.Y - 3) + 0.25
-	local base = Vector3.new(root.Position.X, y, root.Position.Z)
-	-- a gentle push toward the target, so it reads as pointing
-	local bob = 0.8 * math.sin(os.clock() * 5)
-	local shaftStart = base + f * (ARROW_START + bob)
-	local headBase = shaftStart + f * SHAFT_LENGTH
-	shaft.Size = Vector3.new(SHAFT_WIDTH, THICK, SHAFT_LENGTH + 0.4)   -- (a little under the head, so no gap shows)
-	shaft.CFrame = CFrame.lookAt(shaftStart + f * (SHAFT_LENGTH / 2 + 0.2), shaftStart + f * (SHAFT_LENGTH + 1))
-	placeHalf(headLeft, headBase, f, s, HEAD_LENGTH, HEAD_HALF_WIDTH)
-	placeHalf(headRight, headBase, f, -s, HEAD_LENGTH, HEAD_HALF_WIDTH)
-	arrow.Parent = workspace.CurrentCamera
+	for n = used + 1, #pointers do pointers[n].Visible = false end
 end
 
 ---------------------------------------------------------------- Devour target
@@ -203,14 +187,8 @@ ring.Name = "DevourTarget"
 ring.Shape = Enum.PartType.Cylinder
 ring.Anchored, ring.CanCollide, ring.CanQuery, ring.CanTouch, ring.CastShadow = true, false, false, false, false
 ring.Material = Enum.Material.Neon
-ring.Transparency = 0.35
+ring.Transparency = 0.25
 ring.Size = Vector3.new(0.12, 7, 7)
-local ringGlow = Instance.new("Highlight")      -- a bright edge, drawn over anything in the way
-ringGlow.FillTransparency = 1
-ringGlow.OutlineTransparency = 0
-ringGlow.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-ringGlow.Adornee = ring
-ringGlow.Parent = ring
 
 local wallRays = RaycastParams.new()
 wallRays.FilterType = Enum.RaycastFilterType.Include
@@ -256,7 +234,6 @@ local function updateTarget(feared)
 	local pulse = 0.5 + 0.5 * math.sin(os.clock() * 8)
 	local color = lockedOn and RED or TARGET_BLUE
 	ring.Color = color
-	ringGlow.OutlineColor = color
 	ring.Size = Vector3.new(0.12, 6.5 + pulse, 6.5 + pulse)
 	ring.CFrame = CFrame.new(target.Position.X, y, target.Position.Z) * CFrame.Angles(0, 0, math.pi / 2)
 	ring.Parent = workspace.CurrentCamera
