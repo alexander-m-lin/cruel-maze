@@ -4,6 +4,8 @@
 --   local doors = Doors.new(maze, { monsters = list, survivors = function() return players end,
 --                                   ai = false })   -- (ai = false: a person is the Maze Master)
 --   doors:Request(id, open)   -- start opening/closing a door; false if it can't right now
+--   doors:Jam(id, seconds)    -- Kai's EMP: held open that long (opening now if it's shut, a closing
+--                             -- that hasn't started moving called off), then shut again if it was
 --   doors:Step(dt)            -- every frame while the match plays (moves doors, runs the AI)
 --   doors:Destroy()
 --
@@ -19,7 +21,7 @@
 --
 -- Players' computers follow along through attributes on each door part (see MazeBuilder):
 --   Open (true/false: what it is or is becoming), State ("open", "closed", "warning", "moving"),
---   WarnAt / MoveAt (server times the warning and the movement start)
+--   WarnAt / MoveAt (server times the warning and the movement start), JammedUntil (an EMP; server time)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -80,6 +82,7 @@ function Doors:Request(id, open)
 	local door = self.list[id]
 	if not door or (door.state ~= "open" and door.state ~= "closed") then return false end
 	if door.open == open then return false end
+	if not open and (door.jamUntil or 0) > os.clock() then return false end   -- jammed open (EMP)
 	door.open = open
 	door.state = "warning"
 	door.changedAt = os.clock()
@@ -90,6 +93,38 @@ function Doors:Request(id, open)
 	door.part:SetAttribute("MoveAt", now + Config.DOOR_WARNING)
 	door.part:SetAttribute("State", "warning")
 	return true
+end
+
+function Doors:Jam(id, seconds)
+	local door = self.list[id]
+	if not door then return end
+	local now = os.clock()
+	if (door.jamUntil or 0) <= now then door.wasShut = not door.open end   -- (a new jam: remember how it stood)
+	door.jamUntil = math.max(door.jamUntil or 0, now + seconds)
+	door.part:SetAttribute("JammedUntil", workspace:GetServerTimeNow() + (door.jamUntil - now))
+	if door.state == "warning" and not door.open then
+		-- about to close, hasn't moved yet: called off
+		door.open = true
+		door.state = "open"
+		door.part:SetAttribute("Open", true)
+		door.part:SetAttribute("State", "open")
+	elseif door.state == "closed" then
+		self:Request(id, true)
+	end
+	-- (one already rising finishes shutting, then stepJam opens it)
+end
+
+-- A jammed door that's shut opens; once the jam is over, one that was shut closes again
+local function stepJam(self, door, now)
+	if not door.jamUntil then return end
+	if now < door.jamUntil then
+		if door.state == "closed" then self:Request(door.id, true) end
+		return
+	end
+	door.jamUntil = nil
+	door.part:SetAttribute("JammedUntil", nil)
+	if door.wasShut and door.open and door.state == "open" then self:Request(door.id, false) end
+	door.wasShut = nil
 end
 
 function Doors:Toggle(id)
@@ -220,7 +255,10 @@ end
 
 function Doors:Step(dt)
 	local now = os.clock()
-	for _, door in self.list do stepDoor(self, door, now) end
+	for _, door in self.list do
+		stepDoor(self, door, now)
+		stepJam(self, door, now)
+	end
 	self:stepAI(now)
 end
 

@@ -679,6 +679,7 @@ end
 
 -- Caught someone: turn to face them and start the kill (players' computers animate it from these)
 function MonsterAI:catch(player, root, now)
+	if Abilities.refusesCatch(player) then return false end   -- (Flourish deflects it; Encrypt)
 	self.graceUntil[player] = now + CATCH_GRACE
 	self.chaseTarget, self.path, self.dash, self.devourToken = nil, {}, nil, nil
 	local toThem = Vector3.new(root.Position.X - self.pos.X, 0, root.Position.Z - self.pos.Z)

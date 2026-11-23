@@ -3,7 +3,8 @@
 --
 --   Place (click a button, then click the floor; right-click or Esc cancels):
 --     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic
---   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters)
+--   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters),
+--            Hero (a survivor: switch to the next survivor hero, e.g. Sara -> Kai)
 -- The server's answer shows under the buttons.
 -- At the top, a TRACKER: where you are (studs, and the maze cell) and how fast you're moving
 -- (across the floor, smoothed a little), next to the walk speed the movement rules allow you now.
@@ -36,6 +37,7 @@ local NOW = {
 	{ id = "ready", name = "Ready" },
 	{ id = "lives", name = "Lives" },
 	{ id = "clear", name = "Clear" },
+	{ id = "hero", name = "Hero" },
 }
 local ACTIVE = Color3.fromRGB(120, 60, 170)
 local IDLE = Color3.fromRGB(40, 40, 46)

@@ -7,6 +7,8 @@
 --   wards:Update(survivors)      -- a few times a second: spotting, and destroying
 --   wards:StartDestroying(player, id)   -- a survivor clicked to destroy one (checked here)
 --   wards:Sees(position)         -- does any ward see this spot? (the monster side's sight checks, relics spotted)
+--   wards:Disable(ward, seconds) -- Kai's EMP: it sees nothing for that long ("DisabledUntil", server
+--                                   time, on its Configuration and its model)
 --   wards.destroyedAt[MazeLayout.key(x, z)] -- os.clock() a survivor last destroyed a ward in that cell
 --   wards:Destroy()
 --
@@ -151,9 +153,20 @@ function WardEyes:clearLine(from, to, range)
 	return offset.Magnitude < 0.6 or workspace:Raycast(eye, offset - offset.Unit * 0.5, self.rayParams) == nil
 end
 
+function WardEyes:Disable(ward, seconds)
+	ward.disabledUntil = math.max(ward.disabledUntil or 0, os.clock() + seconds)
+	local untilServer = workspace:GetServerTimeNow() + (ward.disabledUntil - os.clock())
+	ward.info:SetAttribute("DisabledUntil", untilServer)
+	ward.model:SetAttribute("DisabledUntil", untilServer)
+end
+
+function WardEyes:Working(ward)
+	return (ward.disabledUntil or 0) <= os.clock()
+end
+
 function WardEyes:Sees(position)
 	for _, ward in self.list do
-		if self:clearLine(ward.center, position, Config.WARD_VISION_RADIUS + 2) then return true end
+		if self:Working(ward) and self:clearLine(ward.center, position, Config.WARD_VISION_RADIUS + 2) then return true end
 	end
 	return false
 end

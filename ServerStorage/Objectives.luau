@@ -1,6 +1,7 @@
 -- The things survivors go after in a match: RELICS and SANCTUARIES (built by MazeBuilder).
 --
---   local objectives = Objectives.new(maze, { onRelic = fn(player, relic), onCapture = fn(player, sanctuary) })
+--   local objectives = Objectives.new(maze, { onRelic = fn(player, relic), onCapture = fn(player, sanctuary),
+--                                             onInteract = fn(player) })   -- (started collecting, or sprang a false one)
 --   objectives:Update(survivors)   -- a few times a second: spotting, collecting, captures
 --   objectives:UpdateMonsterSight(monsters)  -- relics the monster side has seen (monsters' pos/facing)
 --   objectives:StartCollecting(player, relicId)  -- they clicked to collect a relic (checked here)
@@ -354,6 +355,7 @@ function Objectives:StartCollecting(player, relicId)
 	local x, z = self:CellOf(root.Position)
 	local relic = x and self.relicAt[key(x, z)]
 	if not relic or relic.id ~= relicId or relic.collected or relic.collector then return end
+	if self.callbacks.onInteract then self.callbacks.onInteract(player) end
 	if relic.fake then
 		spring(self, relic, player)
 		return

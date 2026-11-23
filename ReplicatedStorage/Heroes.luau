@@ -8,9 +8,10 @@
 --   Secondary - Q
 --   Ultimate  - E
 --
--- A player's hero is their "Hero" attribute (set by Match; until there's a character select,
--- survivors are Config.DEFAULT_SURVIVOR_HERO and monsters Config.DEFAULT_MONSTER_HERO). A monster's
--- body carries its hero in a "Hero" attribute too.
+-- A player's hero is their "Hero" attribute (set by Match). Survivors' heroes are all different in a
+-- match (the one picked in the lobby, "PreferredHero", if it's free; Heroes.survivorIds), repeating
+-- only while there are fewer survivor heroes than survivors. Monsters are Config.DEFAULT_MONSTER_HERO.
+-- A monster's body carries its hero in a "Hero" attribute too.
 --
 -- ADDING A HERO: one module per place, all named after the hero's id (e.g. "FearEater"):
 --   ReplicatedStorage.HeroData.<Id>          -- who they are and their numbers (tune here)
@@ -24,7 +25,7 @@ local Heroes = {}
 
 Heroes.SLOTS = { "Primary", "Secondary", "Ultimate" }
 Heroes.KEYS = { Primary = "RMB", Secondary = "Q", Ultimate = "E" }   -- (a monster's Primary: "LMB")
-Heroes.ORDER = { "Sara", "FearEater" }
+Heroes.ORDER = { "Sara", "Kai", "FearEater" }
 
 Heroes.list = {}
 local folder = script.Parent:WaitForChild("HeroData")
@@ -32,6 +33,15 @@ for _, id in Heroes.ORDER do
 	local hero = require(folder:WaitForChild(id))
 	hero.id = id
 	Heroes.list[id] = hero
+end
+
+-- The survivor heroes, in ORDER
+function Heroes.survivorIds()
+	local ids = {}
+	for _, id in Heroes.ORDER do
+		if Heroes.list[id].role == "Survivor" then table.insert(ids, id) end
+	end
+	return ids
 end
 
 function Heroes.get(id)

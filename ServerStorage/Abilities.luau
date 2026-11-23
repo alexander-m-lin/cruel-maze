@@ -3,16 +3,21 @@
 -- does is in ServerStorage.HeroAbilities.<hero>.
 --
 --   Abilities.start(match)   -- a match begins: match = { maze, objectives, monsters, survivors = fn,
---                            --   stun = fn(monster, seconds), monsterOf = fn(player) -> monster }
+--                            --   stun = fn(monster, seconds), monsterOf = fn(player) -> monster,
+--                            --   doors, crushers, wards }
 --   Abilities.stop()         -- the match is over
 --   Abilities.use(player, slot, aim)          -- a player (survivor or monster) uses an ability
 --   Abilities.useMonster(monster, slot, aim)  -- an AI monster does
 --   Abilities.ready(who, slot)                -- off cooldown? (who: a player or an AI monster)
 --   Abilities.resetCooldowns(who)             -- everything ready now (the dev Sandbox)
+--   Abilities.refusesCatch(survivor)          -- a monster is about to catch them: protected?
+--                                             --   (Protection: Flourish deflects it, with sparks;
+--                                             --   Encrypt can't be caught). Every catch asks.
 --
 -- A player's computer sends "UseAbility" (slot, aim): slot is "Primary" / "Secondary" / "Ultimate",
 -- aim the flat direction they face. Checked here: a match is on, their hero has that slot, they're
 -- alive and not held, stunned, pulled or in the middle of a kill, and the cooldown is over.
+-- Using any other ability ends Kai's Encrypt.
 -- Survivors and monsters (players or AI) all go through the same path. Cooldowns are kept here and
 -- published as "AbilityReady<Slot>" (server time) on the player, for the ability bar.
 --
@@ -35,6 +40,8 @@ local Config = require(ReplicatedStorage.Config)
 local Net = require(ReplicatedStorage.Net)
 local Heroes = require(ReplicatedStorage.Heroes)
 local Movement = require(ReplicatedStorage.Movement)
+local Protection = require(ReplicatedStorage.Protection)
+local Encrypt = require(ServerStorage.Encrypt)
 
 local useEvent = Net.event("UseAbility")     -- player -> server: (slot, aim)
 local fxEvent = Net.event("AbilityFx")       -- server -> players: (kind, userId, ...)
@@ -122,6 +129,21 @@ function Abilities.resetCooldowns(who)
 	end
 end
 
+-- A monster is about to catch this survivor: refused while they're protected. A deflect shows
+-- (sparks off her: "Deflect" to everyone, at most every DEFLECT_FX_EVERY seconds, since a monster
+-- touching her tries again every frame).
+local DEFLECT_FX_EVERY = 0.4
+local deflectShownAt = {}
+function Abilities.refusesCatch(survivor)
+	if Protection.encrypted(survivor) then return true end
+	if not Protection.deflecting(survivor) then return false end
+	if os.clock() - (deflectShownAt[survivor] or -math.huge) >= DEFLECT_FX_EVERY then
+		deflectShownAt[survivor] = os.clock()
+		fxEvent:FireAllClients("Deflect", survivor.UserId)
+	end
+	return true
+end
+
 function Abilities.ready(who, slot)
 	return ctx.match ~= nil and os.clock() >= ((readyAt[who] or {})[slot] or 0)
 end
@@ -171,8 +193,10 @@ function Abilities.use(user, slot, aim)
 	elseif role ~= Config.Roles.Survivor then
 		return false
 	end
-	return cast(user, slot, { user = user, monster = monster, root = root, def = def, hero = hero,
+	local ok, message = cast(user, slot, { user = user, monster = monster, root = root, def = def, hero = hero,
 		aim = flatAim(aim, root.CFrame.LookVector) })
+	if ok and def.id ~= "Encrypt" then Encrypt.stop(user) end    -- (anything else ends it)
+	return ok, message
 end
 
 -- An AI monster uses an ability (its hero: monster.hero)
@@ -190,6 +214,9 @@ useEvent.OnServerEvent:Connect(function(player, slot, aim)
 	if not ok and message then resultEvent:FireClient(player, slot, message) end
 end)
 
-Players.PlayerRemoving:Connect(function(player) readyAt[player] = nil end)
+Players.PlayerRemoving:Connect(function(player)
+	readyAt[player] = nil
+	deflectShownAt[player] = nil
+end)
 
 return Abilities

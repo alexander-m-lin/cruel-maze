@@ -11,7 +11,7 @@ local EYE_HEIGHT = 3       -- the whip travels at this height above the floor
 
 local handlers = {}
 
--- WHIP: the first thing along the lash, out to its range
+-- WHIP: the first wall, relic or monster along the lash, out to its range (teammates aren't hit)
 function handlers.Whip(ctx, cast)
 	local match, user, root, aim, def = ctx.match, cast.user, cast.root, cast.aim, cast.def
 	local maze = match.maze
@@ -36,10 +36,6 @@ function handlers.Whip(ctx, cast)
 	for _, monster in match.monsters do
 		if monster.pos then consider("monster", along(monster.pos, def.monsterHitRadius), monster) end
 	end
-	for _, other in match.survivors() do
-		local otherRoot = other ~= user and not other:GetAttribute("Seized") and ctx.rootOf(other)
-		if otherRoot then consider("ally", along(otherRoot.Position, def.allyHitRadius), other) end
-	end
 	for _, relic in match.maze.relics do
 		if not relic.collected then consider("relic", along(relic.center, def.relicHitRadius), relic) end
 	end
@@ -57,9 +53,6 @@ function handlers.Whip(ctx, cast)
 			-- you're pulled to it (stopping short of the wall, or beside the relic)
 			local stopShort = hit.kind == "wall" and 2.5 or 3.5
 			Pull.character(user, tip - aim * stopShort, def.pullSpeed, "slide")
-		elseif hit.kind == "ally" then
-			local ally = hit.thing
-			Pull.character(ally, here + aim * 3, def.pullSpeed)
 		elseif hit.kind == "monster" then
 			local monster = hit.thing
 			local to = ctx.stopOutsideSanctuaries(monster.pos, Vector3.new(here.X, maze.floorY, here.Z) + aim * 5)
@@ -92,20 +85,23 @@ function handlers.TreasureHunt(ctx, cast)
 	return true
 end
 
--- FLOURISH: she stands still for castTime ("CastingUntil": Movement.held); stunAt seconds in,
--- every monster in range of her is stunned. Caught (or out of the match) before then: nothing.
+-- FLOURISH: she stands still for castTime ("CastingUntil": Movement.held), deflecting catches the
+-- whole time ("DeflectUntil": Protection); when it ends, every monster in range of her is stunned.
+-- (Crushed or out of the match before then: nothing.)
 function handlers.Flourish(ctx, cast)
 	local match, user, def = ctx.match, cast.user, cast.def
-	user:SetAttribute("CastingUntil", workspace:GetServerTimeNow() + def.castTime)
+	local endsAt = workspace:GetServerTimeNow() + def.castTime
+	user:SetAttribute("CastingUntil", endsAt)
+	user:SetAttribute("DeflectUntil", endsAt)
 	ctx.fx:FireAllClients("Flourish", user.UserId)
 	task.delay(def.castTime, function()
-		if (user:GetAttribute("CastingUntil") or 0) <= workspace:GetServerTimeNow() + 0.05 then user:SetAttribute("CastingUntil", nil) end
-	end)
-	task.delay(def.stunAt, function()
-		local now = ctx.rootOf(user)
-		if ctx.match ~= match or not now or user:GetAttribute("Seized") then return end
+		local now = workspace:GetServerTimeNow()
+		if (user:GetAttribute("CastingUntil") or 0) <= now + 0.05 then user:SetAttribute("CastingUntil", nil) end
+		if (user:GetAttribute("DeflectUntil") or 0) <= now + 0.05 then user:SetAttribute("DeflectUntil", nil) end
+		local root = ctx.rootOf(user)
+		if ctx.match ~= match or not root or user:GetAttribute("Seized") then return end
 		for _, monster in match.monsters do
-			if monster.pos and ((monster.pos - now.Position) * Vector3.new(1, 0, 1)).Magnitude <= def.range then
+			if monster.pos and ((monster.pos - root.Position) * Vector3.new(1, 0, 1)).Magnitude <= def.range then
 				match.stun(monster, def.stun)
 			end
 		end

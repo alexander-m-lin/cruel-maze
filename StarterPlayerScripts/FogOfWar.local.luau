@@ -18,6 +18,10 @@
 -- Line of sight = a FAN of rays from your eyes, spread across the cone. Each ray stops at the first
 -- wall, and every tile it passes over on the way is in view. (The old way, one ray per tile, is
 -- kept as SIGHT_MODE = "tiles" for comparison; it cast about ten times as many rays.)
+-- KAI'S SCANNER: while a survivor's scan is on ("ScanAt".."ScanUntil", see HeroAbilities.Kai), the
+-- survivors see its whole cone, walls or not, as ordinary sight.
+-- KAI'S ENCRYPT: an encrypted survivor ("EncryptedUntil") is never shown to the monster side, even
+-- revealed; his circuit indicators (tagged HiddenByFog) show like any object instead.
 -- Anything tagged "HiddenByFog" (like the monster) is only shown while its tile is in view,
 -- or when it's close with no wall between (then the fog clears in a small circle around it).
 --
@@ -499,12 +503,19 @@ local function updateHiddenObjects(visibleNow, eyes)
 				objects[other.Character] = (other:GetAttribute("RevealedUntil") or 0) > now
 				local root = other.Character:FindFirstChild("HumanoidRootPart")
 				if root and inSanctuary(root.Position) then sheltered[other.Character] = true end
+				if (other:GetAttribute("EncryptedUntil") or 0) > now then sheltered[other.Character] = true end
 			end
 		end
 		for _, bot in CollectionService:GetTagged("SurvivorBot") do   -- survivor bots (attributes on the model)
 			objects[bot] = (bot:GetAttribute("RevealedUntil") or 0) > now
 			local root = bot:FindFirstChild("HumanoidRootPart")
 			if root and inSanctuary(root.Position) then sheltered[bot] = true end
+			if (bot:GetAttribute("EncryptedUntil") or 0) > now then sheltered[bot] = true end
+		end
+		-- Kai's circuit indicators: like anything else, but never inside a sanctuary
+		for _, circuit in CollectionService:GetTagged("CircuitIndicator") do
+			local ok, pivot = pcall(circuit.GetPivot, circuit)
+			if ok and inSanctuary(pivot.Position) then sheltered[circuit] = true end
 		end
 	end
 	-- wards: the monster side's own; survivors see one like anything else, and always once spotted
@@ -766,9 +777,11 @@ local function monsterSideEyes()
 	local list = {}
 	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
 	for _, c in fixedSight do c.used = false end
+	local now = workspace:GetServerTimeNow()
 	for _, ward in CollectionService:GetTagged("WardEye") do
 		local center = ward:GetAttribute("Center")
-		if center and ward:IsDescendantOf(maze) then fixedEye(ward, center, Config.WARD_VISION_RADIUS, list) end
+		local disabled = (ward:GetAttribute("DisabledUntil") or 0) > now    -- (Kai's EMP)
+		if center and not disabled and ward:IsDescendantOf(maze) then fixedEye(ward, center, Config.WARD_VISION_RADIUS, list) end
 	end
 	-- crushing walls: their slabs carry their resting spot ("Home"); the pair's middle is the cell
 	local S = maze:GetAttribute("CellSize")
@@ -797,16 +810,62 @@ local function revealedSurvivors()
 	if sideOf(player:GetAttribute("Role")) ~= "monsters" then return list end
 	local now = workspace:GetServerTimeNow()
 	for _, other in Players:GetPlayers() do
-		if other:GetAttribute("Role") == Config.Roles.Survivor and (other:GetAttribute("RevealedUntil") or 0) > now and other.Character then
+		if other:GetAttribute("Role") == Config.Roles.Survivor and (other:GetAttribute("RevealedUntil") or 0) > now and other.Character
+			and (other:GetAttribute("EncryptedUntil") or 0) <= now then
 			table.insert(list, other.Character)
 		end
 	end
 	for _, bot in CollectionService:GetTagged("SurvivorBot") do
-		if (bot:GetAttribute("RevealedUntil") or 0) > now then table.insert(list, bot) end
+		if (bot:GetAttribute("RevealedUntil") or 0) > now and (bot:GetAttribute("EncryptedUntil") or 0) <= now then table.insert(list, bot) end
 	end
 	for i = #list, 1, -1 do                   -- not in a sanctuary
 		local ok, pivot = pcall(list[i].GetPivot, list[i])
 		if not ok or inSanctuary(pivot.Position) then table.remove(list, i) end
+	end
+	return list
+end
+
+-- KAI'S SCANNER (survivors only): every survivor's scan that's on now, as sight: the whole cone, no
+-- walls in the way. Cheap maths per tile (no rays), worked out once per scan.
+local scanSight = {}   -- [holder] = { at = its ScanAt, seen = {...}, maze }
+local function scans()
+	local list = {}
+	if sideOf(player:GetAttribute("Role")) ~= "survivors" then return list end
+	local now = workspace:GetServerTimeNow()
+	local holders = {}
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor then table.insert(holders, other) end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do table.insert(holders, bot) end
+	for _, holder in holders do
+		local at, untilT = holder:GetAttribute("ScanAt"), holder:GetAttribute("ScanUntil")
+		local from, dir = holder:GetAttribute("ScanFrom"), holder:GetAttribute("ScanDir")
+		if not (at and untilT and from and dir) or now < at or now >= untilT then
+			scanSight[holder] = nil
+			continue
+		end
+		local cached = scanSight[holder]
+		if not cached or cached.at ~= at or cached.maze ~= maze then
+			local range = holder:GetAttribute("ScanRange") or 70
+			local cos = math.cos(math.rad((holder:GetAttribute("ScanCone") or 90) / 2))
+			local seen = {}
+			local x1, x2 = tileRange(from.X - range, from.X + range)
+			local z1, z2 = tileRange(from.Z - range, from.Z + range)
+			for x = x1, x2 do
+				for z = z1, z2 do
+					local tile = tiles[x][z]
+					local offset = (tile.center - from) * Vector3.new(1, 0, 1)
+					local d = offset.Magnitude
+					if d <= range and (d < 1 or offset.Unit:Dot(dir) >= cos) then see(seen, tile, T_VISIBLE) end
+				end
+			end
+			cached = { at = at, seen = seen, maze = maze }
+			scanSight[holder] = cached
+		end
+		table.insert(list, cached.seen)
+	end
+	for holder in scanSight do
+		if typeof(holder) == "Instance" and not holder.Parent then scanSight[holder] = nil end
 	end
 	return list
 end
@@ -931,6 +990,11 @@ local function updateVisibility()
 		end
 	end
 	for _, seen in relicRings() do
+		for tile, t in seen do
+			if not merged[tile] or t > merged[tile] then merged[tile] = t end
+		end
+	end
+	for _, seen in scans() do
 		for tile, t in seen do
 			if not merged[tile] or t > merged[tile] then merged[tile] = t end
 		end

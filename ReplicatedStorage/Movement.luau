@@ -43,14 +43,17 @@ function Movement.held(who)
 	return pullAt ~= nil and now < pullAt + (who:GetAttribute("PullTime") or 0)
 end
 
--- Survivors (players and bots) who are feared right now: their HumanoidRootParts
+-- Survivors (players and bots) who are feared right now: their HumanoidRootParts. (Not anyone
+-- encrypted: Kai's Encrypt hides him, so no mark or pointer gives him away.)
 local NIGHTMARE_CONE = 60      -- degrees either side of straight at a feared survivor that count as "toward"
 function Movement.fearedRoots()
 	local now = workspace:GetServerTimeNow()
 	local roots = {}
 	local function consider(holder, character)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root and (holder:GetAttribute("FearedUntil") or 0) > now then table.insert(roots, root) end
+		if root and (holder:GetAttribute("FearedUntil") or 0) > now and (holder:GetAttribute("EncryptedUntil") or 0) <= now then
+			table.insert(roots, root)
+		end
 	end
 	for _, player in Players:GetPlayers() do
 		if player:GetAttribute("Role") == Config.Roles.Survivor then consider(player, player.Character) end

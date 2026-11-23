@@ -2,6 +2,8 @@
 --   - who's here, and the role each of them would like
 --   - your preferred role: Any, Survivor, Monster or Maze Master (you get it if a slot is free;
 --     contested slots go to one of those who asked, at random)
+--   - your survivor hero, if you're a survivor: Any, or one of them (Heroes.survivorIds). Survivors'
+--     heroes are all different; if two want the same one, one of them gets it, at random
 --   - Start: anyone can start the match. Empty slots are filled with bots.
 -- Everything is a button you can click or tap.
 
@@ -10,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
 local lobbyEvent = Net.event("Lobby")
 local match = ReplicatedStorage:WaitForChild("Match")
 local player = Players.LocalPlayer
@@ -46,13 +49,13 @@ backdrop.Parent = gui
 local panel = Instance.new("Frame")
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.Size = UDim2.new(0, 460, 0, 470)
+panel.Size = UDim2.new(0, 460, 0, 550)
 panel.BackgroundColor3 = PANEL
 panel.BorderSizePixel = 0
 panel.Parent = backdrop
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
 local sizeLimit = Instance.new("UISizeConstraint")    -- fits on a phone too
-sizeLimit.MaxSize = Vector2.new(460, 470)
+sizeLimit.MaxSize = Vector2.new(460, 550)
 sizeLimit.Parent = panel
 local padding = Instance.new("UIPadding")
 for _, side in { "PaddingTop", "PaddingBottom", "PaddingLeft", "PaddingRight" } do padding[side] = UDim.new(0, 18) end
@@ -130,6 +133,27 @@ for i, choice in CHOICES do
 end
 label("You get it if a slot is free. Empty slots are filled with bots.", 12, DIM, 342, 16)
 
+label("Your survivor", 15, TEXT, 370, 20, Enum.Font.GothamBold)
+local heroRow = Instance.new("Frame")
+heroRow.Position = UDim2.new(0, 0, 0, 394)
+heroRow.Size = UDim2.new(1, 0, 0, 40)
+heroRow.BackgroundTransparency = 1
+heroRow.Parent = panel
+local HERO_CHOICES = { { nil, "Any" } }
+for _, id in Heroes.survivorIds() do
+	local hero = Heroes.get(id)
+	table.insert(HERO_CHOICES, { id, ("%s (%s)"):format(hero.name, hero.title) })
+end
+local heroButtons = {}
+for i, choice in HERO_CHOICES do
+	local b, stroke = button(choice[2], heroRow)
+	b.Position = UDim2.new((i - 1) / #HERO_CHOICES, i == 1 and 0 or 3, 0, 0)
+	b.Size = UDim2.new(1 / #HERO_CHOICES, -4, 1, 0)
+	b.TextSize = 13
+	b.Activated:Connect(function() lobbyEvent:FireServer("preferHero", choice[1]) end)
+	heroButtons[i] = { stroke = stroke, hero = choice[1] }
+end
+
 local start = button("Start match", panel)
 start.Position = UDim2.new(0, 0, 1, -58)
 start.Size = UDim2.new(1, 0, 0, 52)
@@ -166,6 +190,8 @@ local function refresh()
 	for i = #players + 1, #rows do rows[i].Visible = false end
 	local mine = player:GetAttribute("PreferredRole")
 	for _, c in choiceButtons do c.stroke.Transparency = c.role == mine and 0 or 1 end
+	local myHero = player:GetAttribute("PreferredHero")
+	for _, c in heroButtons do c.stroke.Transparency = c.hero == myHero and 0 or 1 end
 	local enough = #players >= Config.MIN_PLAYERS
 	start.Text = enough and "Start match" or ("Waiting for %d more..."):format(Config.MIN_PLAYERS - #players)
 	start.AutoButtonColor = enough

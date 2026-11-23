@@ -20,7 +20,8 @@
 -- decides who and whether it lands). The windup and the dash are sent to the player's computer as
 -- "DevourAt" / "DevourGo" etc. on the body, which holds and carries them (MonsterControls).
 --
--- CHASE SPEED: while they can see a survivor (in their cone, in a clear line, not in a sanctuary),
+-- CHASE SPEED: while they can see a survivor (in their cone, in a clear line, not in a sanctuary;
+-- or one of Kai's circuit indicators, ServerStorage.Encrypt),
 -- a monster player speeds up, from nothing to Config.CHASE_BOOST_MAX over Config.CHASE_BOOST_RAMP
 -- seconds; losing sight for Config.CHASE_BOOST_GRACE seconds resets it. Published as the player's
 -- "ChaseBoost" attribute (Movement and SpeedCheck read it).
@@ -40,6 +41,8 @@ local MonsterAI = require(ServerStorage.MonsterAI)
 local Pull = require(ServerStorage.Pull)
 local SpeedCheck = require(ServerStorage.SpeedCheck)
 local Heroes = require(ReplicatedStorage.Heroes)
+local Abilities = require(ServerStorage.Abilities)
+local Encrypt = require(ServerStorage.Encrypt)
 local CATCH_GRACE = 4      -- seconds a just-caught survivor is ignored
 local LATENCY_SLACK = 0.3  -- the lunge's catch window stays open this much longer (positions arrive late)
 
@@ -279,6 +282,14 @@ function PlayerMonster:seesSurvivor(root, targets)
 		if d > Config.VIEW_NEAR and offset.Unit:Dot(look) < cos then continue end
 		if not self:wallBetween(root.Position, theirs.Position) then return true end
 	end
+	-- Kai's Encrypt: any circuit indicator in sight counts (his or a copy: they're all alike)
+	for _, p in Encrypt.positions() do
+		local offset = (p - root.Position) * Vector3.new(1, 0, 1)
+		local d = offset.Magnitude
+		if d > Config.VIEW_RANGE or self.isSafe(p) then continue end
+		if d > Config.VIEW_NEAR and offset.Unit:Dot(look) < cos then continue end
+		if not self:wallBetween(root.Position, p) then return true end
+	end
 	return false
 end
 
@@ -317,6 +328,7 @@ function PlayerMonster:wallBetween(a, b)
 end
 
 function PlayerMonster:catch(player, toThem, now)
+	if Abilities.refusesCatch(player) then return false end   -- (Flourish deflects it; Encrypt)
 	self.graceUntil[player] = now + CATCH_GRACE
 	self.lungeUntil, self.lungeHitFrom = nil, nil
 	self.devourToken = nil

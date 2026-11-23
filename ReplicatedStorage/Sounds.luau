@@ -39,6 +39,11 @@ local Sounds = {
 	WhipSpin       = { id = 9120972321, volume = 0.9, range = 90 },                    -- Sara's Flourish
 	DragScrape     = { id = 9120934304, volume = 0.8, range = 80, looped = true },     -- anyone being dragged by a whip (Pro Sound Effects: a paddle scraping through icy snow)
 	TreasureHunt   = { id = 90618709727045, volume = 0.7 },                            -- a relic found by Treasure hunt (only Sara's team hears it)
+	Deflect        = { id = 9119072660, volume = 0.9, range = 90 },                    -- a catch deflected by Sara's Flourish (Pro Sound Effects: shield clang)
+	ScanSweep      = { id = 98592637617650, volume = 0.6, range = 60 },                -- Kai's Scanner going out
+	EMPCharge      = { id = 9114277757, volume = 0.8, range = 120 },                   -- Kai's EMP charging (Pro Sound Effects: electric zaps)
+	EMPPulse       = { id = 9114277402, volume = 1.1, range = 160 },                   -- ...and going off
+	EncryptIn      = { id = 9114277338, volume = 0.7, range = 80, speed = 1.4 },       -- Kai dissolving into a circuit, and coming back
 
 	-- Background music: plays all the time, on a loop
 	Music          = { id = 138890398994853, volume = 0.1, looped = true },

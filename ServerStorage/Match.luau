@@ -28,7 +28,8 @@
 --   Sanctuary (the sanctuary they'll come back in), BaseSpeed (see Controls), Seized (held by a
 --   monster that's killing them: their controls stop), Killing (a monster player mid-kill: can't
 --   move), DevRole (Studio only: the role they asked for in the dev panel), RevealedUntil (server
---   time: shown to the monster side wherever they are), SlowUntil (a false relic)
+--   time: shown to the monster side wherever they are), SlowUntil (a false relic), Hero (their hero;
+--   survivors' are all different while the roster allows: pickSurvivorHero), PreferredHero (lobby)
 --
 -- Survivor bots fill empty survivor slots (Config.SURVIVOR_BOTS); they pass for players (SurvivorBot).
 --
@@ -61,6 +62,8 @@ local SpeedCheck = require(ServerStorage.SpeedCheck)
 local Sandbox = require(ServerStorage.Sandbox)
 local Fear = require(ServerStorage.Fear)
 local Heroes = require(ReplicatedStorage.Heroes)
+local Protection = require(ReplicatedStorage.Protection)
+local Encrypt = require(ServerStorage.Encrypt)
 
 local States, Roles = Config.States, Config.Roles
 
@@ -123,6 +126,7 @@ local sandbox = false            -- this match is the dev Sandbox (see Sandbox):
 local sandboxNext = false        -- the next match is (dev panel: "Sandbox"; "New match" clears it)
 local botCount = 0               -- survivor bots made this match (each gets the next number)
 local aiMonsterCount = 0         -- AI monsters made this match
+local heroesTaken = {}           -- [survivor hero id] = how many survivors have it this match
 local doors = nil        -- this match's doors (see Doors)
 local crushers = nil     -- this match's crushing walls (see Crushers)
 local wards = nil        -- the Maze Master's wards, floating eyes (see WardEyes)
@@ -164,11 +168,12 @@ local function survivorsInMatch()
 	return list
 end
 
--- Survivors the monsters may hunt right now: alive, not being killed, and not inside a protected sanctuary
+-- Survivors the monsters may hunt right now: alive, not being killed, not inside a protected sanctuary,
+-- and not encrypted (Kai's Encrypt: hidden and uncatchable; monster players chase his circuits instead)
 local function huntable()
 	local list = {}
 	for _, player in survivorsInMatch() do
-		local character = not player:GetAttribute("Seized") and aliveCharacter(player)
+		local character = not player:GetAttribute("Seized") and not Protection.encrypted(player) and aliveCharacter(player)
 		if character and not (objectives and objectives:IsSafe(character.HumanoidRootPart.Position)) then
 			table.insert(list, player)
 		end
@@ -350,8 +355,9 @@ end
 -- where they are, and watches them with wards.) Used by the AI Maze Master, and by AI monsters
 -- (spottedBySide) to go after survivors their side can see.
 local SIGHT_SLACK = 3
-local function monsterSideSees(position)
+local function monsterSideSees(position, survivor)
 	if objectives:IsSafe(position) then return false end   -- nobody sees into a sanctuary
+	if survivor and Protection.encrypted(survivor) then return false end   -- (Kai's Encrypt hides him)
 	local spot = { center = position }
 	for _, monster in monsters do
 		if monster.pos and monster.facing and objectives:CanSee(monster.pos, monster.facing, spot) then return true end
@@ -368,6 +374,7 @@ destroyWardEvent.OnServerEvent:Connect(function(player, wardId)
 	if state ~= States.Playing or not wards or typeof(wardId) ~= "number" then return end
 	if player:GetAttribute("Role") ~= Roles.Survivor or player:GetAttribute("Seized") then return end
 	wards:StartDestroying(player, wardId)
+	if wards:byId(wardId) and wards:byId(wardId).collector == player then Encrypt.stop(player) end   -- (interacting ends Encrypt)
 end)
 
 -- A monster player clicked to lunge (PlayerMonster checks it's allowed)
@@ -409,6 +416,8 @@ end)
 lobbyEvent.OnServerEvent:Connect(function(player, action, value)
 	if action == "prefer" and (value == nil or (typeof(value) == "string" and Config.ROLE_SLOTS[value])) then
 		player:SetAttribute("PreferredRole", value)
+	elseif action == "preferHero" and (value == nil or (typeof(value) == "string" and table.find(Heroes.survivorIds(), value))) then
+		player:SetAttribute("PreferredHero", value)
 	elseif action == "start" and state == States.Waiting then
 		startRequested = true
 	end
@@ -438,6 +447,7 @@ end)
 
 local function cleanUp()
 	Abilities.stop()
+	Encrypt.clear()
 	restartRequested = false    -- (a "New match" click during the countdown still ends that match, once it's playing)
 	for _, monster in monsters do monster:Destroy() end
 	table.clear(monsters)
@@ -458,7 +468,8 @@ local function cleanUp()
 	for _, player in Players:GetPlayers() do
 		player.ReplicationFocus = nil          -- (the Maze Master's; see runCountdown)
 		for _, name in { "Lives", "Out", "Respawning", "RespawnBy", "Sanctuary", "Killing", "RevealedUntil", "SlowUntil",
-			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo", "PullStyle" } do
+			"StunnedUntil", "CastingUntil", "PullAt", "PullTime", "PullFrom", "PullTo", "PullStyle",
+			"DeflectUntil", "EncryptedUntil", "ScanFrom", "ScanDir", "ScanCone", "ScanRange", "ScanAt", "ScanUntil" } do
 			player:SetAttribute(name, nil)
 		end
 	end
@@ -553,6 +564,22 @@ local function assignRoles()
 	return roles
 end
 
+-- A survivor's hero for this match: the one they'd like if nobody has it yet, otherwise the first
+-- free one (Heroes.ORDER). Only once every survivor hero is taken do they repeat (the least used).
+local function pickSurvivorHero(wanted)
+	local ids = Heroes.survivorIds()
+	local pick = nil
+	if wanted and table.find(ids, wanted) and (heroesTaken[wanted] or 0) == 0 then pick = wanted end
+	if not pick then
+		for _, id in ids do
+			if not pick or (heroesTaken[id] or 0) < (heroesTaken[pick] or 0) then pick = id end
+		end
+	end
+	pick = pick or Config.DEFAULT_SURVIVOR_HERO
+	heroesTaken[pick] = (heroesTaken[pick] or 0) + 1
+	return pick
+end
+
 -- An AI monster (a match's empty monster slots, or one the Sandbox panel adds). One a match uses
 -- its hero's other abilities too (a real match has no duplicate heroes: this keeps testing to one
 -- set). Not yet in `monsters`, and not active.
@@ -581,7 +608,7 @@ local function addBot()
 	bot:SetAttribute("Role", Roles.Survivor)
 	bot:SetAttribute("Lives", sandbox and Sandbox.LIVES or Config.LIVES)
 	bot:SetAttribute("Sanctuary", 1)
-	bot:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
+	bot:SetAttribute("Hero", pickSurvivorHero(nil))
 	bot:SetAttribute("BaseSpeed", state == States.Playing and Config.PLAYER_SPEED or 0)
 	bot:LoadCharacter()
 	setUpSurvivorCharacter(bot.Character)
@@ -600,6 +627,7 @@ end
 --   "ready"                           your abilities are ready again
 --   "lives"                           your lives back (and back in the start sanctuary if you were out)
 --   "clear"                           every bot and AI monster gone
+--   "hero"                            (a survivor) switch to the next survivor hero, abilities ready
 sandboxAction = function(player, action, at)
 	local spot = typeof(at) == "Vector3" and Vector3.new(at.X, maze.floorY, at.Z) or nil
 	local x, z = nil, nil
@@ -650,6 +678,14 @@ sandboxAction = function(player, action, at)
 			respawn(player)
 		end
 		return true, "Lives back"
+	elseif action == "hero" then
+		if player:GetAttribute("Role") ~= Roles.Survivor then return false, "Survivors only" end
+		local ids = Heroes.survivorIds()
+		local next = ids[(table.find(ids, player:GetAttribute("Hero")) or 0) % #ids + 1]
+		Encrypt.stop(player)
+		player:SetAttribute("Hero", next)
+		Abilities.resetCooldowns(player)
+		return true, "You're " .. Heroes.get(next).name
 	elseif action == "clear" then
 		for i = #monsters, 1, -1 do
 			local monster = monsters[i]
@@ -683,6 +719,7 @@ local function runCountdown()
 	sandbox = sandboxNext
 	status:SetAttribute("Sandbox", sandbox or nil)
 	botCount, aiMonsterCount = 0, 0
+	table.clear(heroesTaken)
 	maze = MazeBuilder.build(sandbox and { layout = Sandbox.layout() } or {
 		sanctuaries = Config.SANCTUARIES,
 		sanctuarySpacing = Config.SANCTUARY_SPACING,
@@ -706,6 +743,7 @@ local function runCountdown()
 			noticeEvent:FireAllClients(("%s collected a relic! (%d/%d)"):format(
 				player.DisplayName, objectives.collected, Config.RELICS_NEEDED))
 		end,
+		onInteract = function(player) Encrypt.stop(player) end,   -- (interacting ends Kai's Encrypt)
 		onCapture = function(player, sanctuary)
 			noticeEvent:FireAllClients(("%s captured a sanctuary!"):format(player.DisplayName))
 		end,
@@ -776,6 +814,23 @@ local function runCountdown()
 			objectives = objectives, monsters = monsters, survivors = survivorsInMatch, sees = monsterSideSees })
 	end
 
+	-- survivors' heroes: people first (those with a preference first, in random order), then bots
+	local heroOf = {}
+	local preferring, others = {}, {}
+	for player, role in roles do
+		if role == Roles.Survivor then
+			table.insert(player:GetAttribute("PreferredHero") and preferring or others, player)
+		end
+	end
+	for _, list in { preferring, others } do
+		for i = #list, 2, -1 do
+			local j = math.random(i)
+			list[i], list[j] = list[j], list[i]
+		end
+	end
+	local humanSurvivors = table.move(others, 1, #others, #preferring + 1, preferring)
+	for _, player in humanSurvivors do heroOf[player] = pickSurvivorHero(player:GetAttribute("PreferredHero")) end
+
 	-- survivor bots for the empty survivor slots (none in the Sandbox: its panel adds them)
 	if Config.SURVIVOR_BOTS and not sandbox then
 		local humans = 0
@@ -792,7 +847,7 @@ local function runCountdown()
 		player:SetAttribute("Respawning", nil)
 		player:SetAttribute("Killing", nil)
 		player:SetAttribute("Sanctuary", role == Roles.Survivor and 1 or nil)
-		player:SetAttribute("Hero", (role == Roles.Survivor and Config.DEFAULT_SURVIVOR_HERO)
+		player:SetAttribute("Hero", (role == Roles.Survivor and heroOf[player])
 			or (role == Roles.Monster and Config.DEFAULT_MONSTER_HERO) or nil)
 		if role == Roles.MazeMaster then
 			if player.Character then player.Character:Destroy() end   -- no body in the maze
@@ -828,7 +883,8 @@ local function runPlaying()
 	if mazeMasterAI then mazeMasterAI:Start() end
 	Abilities.start({ maze = maze, objectives = objectives, monsters = monsters, survivors = survivorsInMatch,
 		stun = function(monster, seconds) if monster.Stun then monster:Stun(seconds) end end,
-		monsterOf = function(player) return playerMonsters[player] end })
+		monsterOf = function(player) return playerMonsters[player] end,
+		doors = doors, crushers = crushers, wards = wards })
 	for _, player in Players:GetPlayers() do applySpeed(player) end
 
 	local hadSurvivors = #survivorsInMatch() > 0
@@ -914,7 +970,7 @@ local function onPlayerAdded(player)
 		player:SetAttribute("Role", Roles.Survivor)
 		player:SetAttribute("Lives", Config.LIVES)
 		player:SetAttribute("Sanctuary", 1)
-		player:SetAttribute("Hero", Config.DEFAULT_SURVIVOR_HERO)
+		player:SetAttribute("Hero", pickSurvivorHero(player:GetAttribute("PreferredHero")))
 	end
 	player:LoadCharacter()
 end
@@ -1022,6 +1078,7 @@ function Match.run()
 	RunService.Heartbeat:Connect(function(dt)
 		safely("speed check", SpeedCheck.step, dt)
 		safely("pulls", Pull.step)
+		safely("encrypt", Encrypt.step)
 		if doors then safely("doors", doors.Step, doors, dt) end
 		if crushers then safely("crushers", crushers.Step, crushers) end
 		if mazeMasterTools then safely("Maze Master tools", mazeMasterTools.Step, mazeMasterTools, dt) end

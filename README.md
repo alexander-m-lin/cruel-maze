@@ -52,18 +52,40 @@ Everything in the sandbox is the real game's code; only the maze and who's in it
   false relics (2, two a match: they look like relics, and a survivor who clicks one is revealed
   and slowed). Right-click or Esc cancels placing.
 
-**Heroes:** every survivor plays **Sara, the Cryptraider** and every monster **Fear Eater** for
-now (more heroes and a character select are coming). Survivors' abilities aim the way you face.
+**Heroes:** survivors play **Sara, the Cryptraider** or **Kai, the Hacker**; every monster plays
+**Fear Eater** for now. Pick your survivor in the lobby ("Your survivor"): survivors' heroes are
+all different in a match (if two of you want the same one, one gets it at random), repeating only
+while there are fewer survivor heroes than survivors. Survivors' abilities aim the way you face.
 
 Sara:
-- **Right mouse: Whip** (5 s; 2 s if it hits nothing). Lashes out 39 studs, catching monsters within 5 studs of it and
-  teammates within 4. A wall or relic pulls you to it; a teammate is
-  pulled to you; a monster is pulled to you and stunned for 1 second.
+- **Right mouse: Whip** (5 s; 2 s if it hits nothing). Lashes out 39 studs, catching monsters within
+  5 studs of it (teammates aren't hit: it passes them). A wall or relic pulls you to it; a monster
+  is pulled to you and stunned for 1 second.
 - **Q: Treasure hunt** (15 s). The nearest relic your team hasn't spotted (real or false) within
   110 studs is spotted, with a pillar of light over it.
 - **E: Flourish** (60 s). Spin the whip overhead for 1 second, standing still (a ring on the
-  floor shows its reach); half a second in, every monster within 20 studs is stunned for 3.5
-  seconds. Caught before then: no stun.
+  floor shows its reach). While you spin, any monster's catch on you is deflected (sparks and a
+  clang; it doesn't stun them); when the spin ends, every monster within 20 studs is stunned for
+  3.5 seconds. Only you are protected, and not from crushing walls. Whip a monster in, then
+  Flourish, and it's stunned on top of you.
+
+Kai (no grapple, no stun: information, the Maze Master's devices, and escaping by deception):
+- **Right mouse: Scanner** (15 s). A 90-degree cone the way you face, 70 studs, fixed when you
+  start it (shown on the floor to your team). After 1 second it sees through walls for 3 seconds,
+  shared with your team: relics and wards in it are spotted, and monsters, doors and crushing
+  walls in it show (monsters only while they're in it). False relics look as they always do.
+- **Q: EMP** (40 s). An electric pulse round where you cast it: half a second later, for 5
+  seconds, every door within 50 studs is jammed open (a shut one opens, the Maze Master can't
+  close it, and it closes again afterwards), crushing walls there can't go off (one that's
+  rumbling stops), and the wards it caught see nothing. A ward placed afterwards works. Everyone
+  sees the bright blue circle (its edge floats above the walls), so it gives away where you cast it.
+- **E: Encrypt** (60 s). For 5 seconds you can't be caught and the monster side can't see you, not
+  even if you're revealed: they see only a blue circuit on the floor of the cell you're in, which
+  slides to the next cell as you cross into it. Leaving a junction, copies of it run off down the
+  other ways out (up to 3), wandering like you would; nothing tells them apart, and every one
+  flickers in the last second. Monsters can follow any of them (their chase speed keeps building),
+  and you're catchable again the moment it ends. Using an ability, collecting a relic or
+  destroying a ward ends it early. Crushing walls still get you.
 A stunned monster can't move, lunge or catch (stars circle its head). Crushing walls stun
 monsters caught between them too. A monster in the middle of a kill can't be stunned or pulled.
 
@@ -150,15 +172,18 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `ServerStorage/SpeedCheck.luau` | ServerStorage (ModuleScript) | Server-side speed check: pulls back characters moving faster than allowed |
 | `ServerStorage/MazeMasterAI.luau` | ServerStorage (ModuleScript) | The AI Maze Master: uses the Maze Master's tools, knowing only what the monster side sees |
 | `ReplicatedStorage/Heroes.luau` | ReplicatedStorage (ModuleScript) | The list of heroes (loads each one's `HeroData`); how to add one |
-| `ReplicatedStorage/HeroData/<Hero>.luau` | ReplicatedStorage › HeroData (ModuleScripts) | One per hero: who they are and their abilities' numbers (Sara, FearEater) |
+| `ReplicatedStorage/HeroData/<Hero>.luau` | ReplicatedStorage › HeroData (ModuleScripts) | One per hero: who they are and their abilities' numbers (Sara, Kai, FearEater) |
+| `ReplicatedStorage/Protection.luau` | ReplicatedStorage (ModuleScript) | Who can't be caught right now: Flourish (deflecting) and Encrypt (encrypted) |
 | `ServerStorage/Abilities.luau` | ServerStorage (ModuleScript) | Hero abilities on the server, for survivors, monster players and AI monsters alike: checks, cooldowns, calling the hero's handlers |
-| `ServerStorage/HeroAbilities/<Hero>.luau` | ServerStorage › HeroAbilities (ModuleScripts) | One per hero: what each ability does (Sara's whip etc.; Fear Eater's Devour) |
+| `ServerStorage/HeroAbilities/<Hero>.luau` | ServerStorage › HeroAbilities (ModuleScripts) | One per hero: what each ability does (Sara's whip etc.; Kai's Scanner and EMP; Fear Eater's Devour) |
+| `ServerStorage/Encrypt.luau` | ServerStorage (ModuleScript) | Kai's Encrypt: his circuit indicator and its decoys, cell to cell |
 | `StarterPlayerScripts/HeroVisuals/<Hero>.luau` | StarterPlayerScripts › HeroVisuals (ModuleScripts) | One per hero: how they look on players' computers. FearEater: his floating, the Devour lunge and kill |
 | `StarterPlayerScripts/Victims.luau` | StarterPlayerScripts (ModuleScript) | Drawing a monster's victim: hiding, struggling, going limp, the body that drops |
 | `ServerStorage/Pull.luau` | ServerStorage (ModuleScript) | Pulling a player, bot or monster along a line (the whip) |
 | `StarterPlayerScripts/AbilityControls.local.luau` | StarterPlayer › StarterPlayerScripts | Ability keys (right mouse for survivors, left for monsters; Q, E) and the ability bar; hold-to-aim previews (a hero's `aim[slot]`, none at the moment) |
 | `ReplicatedStorage/DevourAim.luau` | ReplicatedStorage (ModuleScript) | Who Fear Eater's Devour targets and whether it lands: the server and the target ring share it |
-| `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
+| `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, deflect sparks, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
+| `StarterPlayerScripts/KaiEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Kai's effects: Scanner's cone, EMP's circle and sparking devices, Encrypt's circuit indicators and his see-through look to his team |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
 | `ServerStorage/Sandbox.luau` | ServerStorage (ModuleScript) | The dev sandbox's hand-made test maze (fed to `MazeBuilder.build`) and settings; Match runs the sandbox match and its panel's actions |
 | `ServerStorage/Fear.luau` | ServerStorage (ModuleScript) | Marking a survivor feared (Instill Fear, and the sandbox's feared spawns) |
@@ -222,8 +247,15 @@ Every hero, survivor or monster, is three modules named after the hero's id (e.g
    attribute names it. Any hero's module can also export `aim = { [slot] = { update, hide } }`:
    that ability's key then shows the preview while held and fires on release.
 
-Then add the id to `Heroes.ORDER`. Until there's a character select, `Config.DEFAULT_SURVIVOR_HERO`
-and `Config.DEFAULT_MONSTER_HERO` pick who everyone plays.
+Then add the id to `Heroes.ORDER`. Survivors' heroes come from the lobby pick and Match's
+`pickSurvivorHero`; every monster is `Config.DEFAULT_MONSTER_HERO` until there's a character select.
+(Sara's and Kai's visuals are LocalScripts for now, `HeroEffects` and `KaiEffects`, rather than
+`HeroVisuals` modules: a survivor needs a `HeroVisuals` module only for a hold-to-aim preview.)
+
+**Protection from catches** (`ReplicatedStorage/Protection.luau`): every monster catch (Devour, the
+stand-in's lunge and touch) asks `Abilities.refusesCatch` first. Flourish deflects
+("DeflectUntil"); Encrypt can't be caught and hides you ("EncryptedUntil": left out of who monsters
+hunt, Devour's targets, fear marks and pointers, and the monster side's fog).
 
 Other folders:
 - `assets/textures/`: the wall and floor texture images, Fear Eater's textures, and how they were made.

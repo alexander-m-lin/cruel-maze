@@ -1,7 +1,8 @@
 -- CRUSHING WALLS during a match (built into the maze by MazeBuilder; set off by the Maze Master).
 --
 --   local crushers = Crushers.new(maze, { onCrush = function(player) ... end })
---   crushers:Trigger(id)   -- set one off; false if it's already going
+--   crushers:Trigger(id)   -- set one off; false if it's already going (or jammed)
+--   crushers:Jam(id, seconds)  -- Kai's EMP: can't go off that long (one still only rumbling stops)
 --   crushers:Step()        -- every frame
 --
 -- A crusher goes: WARNING (Config.CRUSHER_WARNING seconds: the two walls rumble, nothing moves)
@@ -12,7 +13,7 @@
 -- one caught between them is stunned for Config.CRUSHER_STUN seconds.
 --
 -- Players' computers follow along through attributes on each slab: State ("idle", "warning",
--- "slam", "hold", "return"), WarnAt and SlamAt (server times).
+-- "slam", "hold", "return"), WarnAt and SlamAt (server times), JammedUntil (an EMP; server time).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -49,6 +50,7 @@ function Crushers:Trigger(id)
 	local crusher = self.list[id]
 	if not crusher or crusher.state ~= "idle" then return false end
 	local now = os.clock()
+	if (crusher.jamUntil or 0) > now then return false end
 	crusher.slamAt = now + Config.CRUSHER_WARNING
 	crusher.crushed = {}
 	crusher.stunned = {}
@@ -64,6 +66,22 @@ end
 local function placeSlabs(crusher, t)   -- t: 0 = in the walls, 1 = shut
 	for k, slab in crusher.slabs do
 		slab.CFrame = crusher.homes[k]:Lerp(crusher.shuts[k], t)
+	end
+end
+
+function Crushers:Jam(id, seconds)
+	local crusher = self.list[id]
+	if not crusher then return end
+	crusher.jamUntil = math.max(crusher.jamUntil or 0, os.clock() + seconds)
+	local untilServer = workspace:GetServerTimeNow() + (crusher.jamUntil - os.clock())
+	for _, slab in crusher.slabs do slab:SetAttribute("JammedUntil", untilServer) end
+	if crusher.state == "warning" then          -- still only rumbling: it stops
+		placeSlabs(crusher, 0)
+		for _, slab in crusher.slabs do
+			slab:SetAttribute("WarnAt", nil)
+			slab:SetAttribute("SlamAt", nil)
+		end
+		setState(crusher, "idle")
 	end
 end
 

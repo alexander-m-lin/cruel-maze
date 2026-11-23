@@ -21,6 +21,7 @@ local SpeedCheck = require(ServerStorage.SpeedCheck)
 local DevourAim = require(game:GetService("ReplicatedStorage").DevourAim)
 local Movement = require(game:GetService("ReplicatedStorage").Movement)
 local Fear = require(ServerStorage.Fear)
+local Protection = require(game:GetService("ReplicatedStorage").Protection)
 
 local handlers = {}
 
@@ -38,11 +39,14 @@ function handlers.Devour(ctx, cast)
 	if not (monster and monster.DevourStart and monster.pos) or not monster.active then return false end   -- (inactive: the countdown)
 	local objectives = ctx.match.objectives
 	local now = workspace:GetServerTimeNow()
-	-- who he could go for: not in a sanctuary, not already held; feared ones, and whether he sees the rest
+	-- who he could go for: not in a sanctuary, not already held, not encrypted (Kai: hidden, so no
+	-- giving away which circuit is him); feared ones, and whether he sees the rest. (Sara mid-Flourish
+	-- can be targeted: the catch is deflected.)
 	local candidates, survivorOf = {}, {}
 	for _, survivor in ctx.match.survivors() do
 		local root = ctx.rootOf(survivor)
-		if root and not survivor:GetAttribute("Seized") and not objectives:IsSafe(root.Position) then
+		if root and not survivor:GetAttribute("Seized") and not objectives:IsSafe(root.Position)
+			and not Protection.encrypted(survivor) then
 			local feared = (survivor:GetAttribute("FearedUntil") or 0) > now
 			table.insert(candidates, { root = root, feared = feared,
 				visible = feared or objectives:CanSee(monster.pos, cast.aim, { center = root.Position }) })
@@ -52,6 +56,7 @@ function handlers.Devour(ctx, cast)
 	local target, feared = DevourAim.pick(monster.pos, cast.aim, def, candidates, ctx.wallBetween)
 	if not target then return false, "Nobody in reach" end
 	local survivor = survivorOf[target]
+	local targetAt = target.Position
 	local token = {}
 	monster.devourToken = token
 	local toward = flat(target.Position - monster.pos)
@@ -64,9 +69,11 @@ function handlers.Devour(ctx, cast)
 	task.delay(def.windup, function()
 		if monster.devourToken ~= token or ctx.match ~= match or not monsterFree(monster) then return end
 		local root = ctx.rootOf(survivor)
+		-- (encrypted meanwhile: he lunges at where they were, giving nothing away)
+		if root and Protection.encrypted(survivor) then root = nil end
 		local hit = root ~= nil and not survivor:GetAttribute("Seized") and not objectives:IsSafe(root.Position)
 			and DevourAim.lands(monster.pos, root, def, feared, ctx.wallBetween)
-		local to = flat((root and root.Position or target.Position) - monster.pos)
+		local to = flat((root and root.Position or targetAt) - monster.pos)
 		local aim = to.Magnitude > 0.1 and to.Unit or toward
 		local distance = hit and math.max(0, to.Magnitude - 2.5) or math.min(to.Magnitude, def.missDistance)
 		local time = math.max(0.08, distance / def.dashSpeed)

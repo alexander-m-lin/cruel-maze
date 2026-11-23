@@ -77,6 +77,7 @@ function MazeMaster:Use(tool, target)
 		local door = typeof(target) == "number" and self.doors.list[target]
 		if not door then return false, "" end
 		if os.clock() < (door.restUntil or 0) then return false, "That door is resting" end
+		if os.clock() < (door.jamUntil or 0) then return false, "That door is jammed (EMP)" end
 		ok = self.doors:Request(target, not door.open)
 		if ok then
 			door.restUntil = os.clock() + Config.MAZE_MASTER_DOOR_COOLDOWN
@@ -103,6 +104,8 @@ function MazeMaster:Use(tool, target)
 	elseif tool == "Crusher" then
 		if typeof(target) ~= "number" then return false, "" end
 		if os.clock() < (self.crusherRest[target] or 0) then return false, "That crushing wall is resting" end
+		local jammed = self.crushers.list[target]
+		if jammed and os.clock() < (jammed.jamUntil or 0) then return false, "That crushing wall is jammed (EMP)" end
 		ok = self.crushers:Trigger(target)
 		if ok then
 			-- that wall rests (each on its own; the others can still be used)

@@ -9,10 +9,12 @@
 --                   slightly back), then the lash flies out the way she faces, rippling, with the
 --                   head following its tip. It cracks where it lands (dust off a wall, sparks off
 --                   a monster, a glint off a relic), then holds while she slides along it side-on,
---                   free arm out for balance, or drags whoever it caught back in.
+--                   free arm out for balance, or drags the monster it caught back in. A new whip
+--                   effect (another lash, or Flourish straight after) replaces the one under way.
 --   FLOURISH      - the hand circles over her head and the whip swings wide from it like a
---                   lasso, out to the stun's full range, faster and faster, over a faint disc showing its reach; a bright flash
---                   out to the edge as the stun goes out.
+--                   lasso, out to the stun's full range, faster and faster, over a faint disc showing its
+--                   reach the whole time; a bright flash out to the edge as the spin ends and the stun goes out.
+--   DEFLECT       - a catch on her during Flourish ("Deflect"): a burst of gold sparks and a clang.
 --   TREASURE HUNT - a hand to the brow, a gold pulse sweeping out from her, and a pillar of light
 --                   over the relic it found (survivors only).
 --   PULLED        - anyone being dragged (a whip) kicks up dust and scrapes along the floor.
@@ -139,7 +141,10 @@ end
 -- tip part the caller moves, which leaves a short streak behind it. Her right arm reaches for
 -- `armTarget` (by default the tip) and her head turns to the tip.
 -- Returns whip = { tip, armTarget, setCurve(sag, ripple), cleanup() }.
+local currentWhip = {}   -- [character] = the whip being drawn (a new one replaces it)
 local function makeWhip(character)
+	local previous = currentWhip[character]
+	if previous then previous.cleanup() end
 	local hand = handOf(character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not (hand and humanoid) then return nil end
@@ -257,7 +262,11 @@ local function makeWhip(character)
 		a1.WorldAxis = handle1.Unit
 		for _, beam in beams do beam.CurveSize0, beam.CurveSize1 = handle0.Magnitude, handle1.Magnitude end
 	end)
+	local cleaned = false
 	function whip.cleanup()
+		if cleaned then return end
+		cleaned = true
+		if currentWhip[character] == whip then currentWhip[character] = nil end
 		shaping:Disconnect()
 		tip:Destroy()
 		armTarget:Destroy()
@@ -266,6 +275,7 @@ local function makeWhip(character)
 		a0:Destroy()
 		for _, c in controls do c:Destroy() end
 	end
+	currentWhip[character] = whip
 	return whip
 end
 
@@ -338,8 +348,8 @@ local function whip(character, tipFloor, kind)
 		w.balanceAt = nil
 		local hand = handOf(character)
 		fly(w, hand and hand.Position or root.Position, 0.12, 0.6, 1)
-	elseif kind == "ally" or kind == "monster" then
-		-- drags whoever it caught back in, the arm hauling back
+	elseif kind == "monster" then
+		-- drags the monster it caught back in, the arm hauling back
 		local back = ((target - root.Position) * Vector3.new(1, 0, 1)).Magnitude / def.pullSpeed
 		w.followTip = false
 		w.armTarget.Position = root.Position - aim * 1 + Vector3.new(0, 1.5, 0)
@@ -372,16 +382,25 @@ local function flourish(character)
 	local def = SARA.Ultimate
 	sound("WhipSpin", root.Position)
 	-- the hand circles over her head and the whip swings wide from it, a little behind (like a
-	-- lasso), faster and faster; a faint disc shows the reach until the stun goes out
+	-- lasso), faster and faster; a faint disc shows the reach until the stun goes out, as the spin ends
 	w.followTip = false
 	local warning = floorRing(root.Position, def.range * 2, 0.82)
 	local t0 = os.clock()
 	local angle = 0
-	local flashed = false
-	while root.Parent do
+	while root.Parent and w.tip.Parent do
 		local dt = RunService.RenderStepped:Wait()
-		local elapsed = os.clock() - t0
-		if elapsed >= def.castTime or who:GetAttribute("Seized") or character:GetAttribute("FogState") == "hidden" then break end
+		local elapsed = (os.clock() - t0) / slow()
+		if elapsed >= def.castTime then
+			-- the spin ends: the stun goes out to the edge
+			local flash = floorRing(root.Position, 4, 0.3)
+			TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
+			Debris:AddItem(flash, 0.45)
+			sound("WhipCrack", w.tip.Position)
+			burst("sparks", w.tip.Position, Vector3.yAxis)
+			break
+		end
+		if who:GetAttribute("Seized") or character:GetAttribute("FogState") == "hidden" then break end
 		local k = math.min(1, elapsed / def.castTime)
 		angle += dt * (7 + 15 * k)
 		local overhead = root.Position + Vector3.new(0, 3.2, 0)
@@ -393,18 +412,8 @@ local function flourish(character)
 		w.tip.Position = overhead + Vector3.new(math.cos(lag) * reach, 1.2 + math.sin(angle * 2) * 0.3, math.sin(lag) * reach)
 		w.setCurve(2.5, math.sin(angle * 3) * 0.8)        -- drooping, with a little wave
 		warning.Position = Vector3.new(root.Position.X, warning.Position.Y, root.Position.Z)
-		if not flashed and elapsed >= def.stunAt then
-			flashed = true
-			warning:Destroy()
-			local flash = floorRing(root.Position, 4, 0.3)
-			TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Size = Vector3.new(0.2, def.range * 2, def.range * 2), Transparency = 1 }):Play()
-			Debris:AddItem(flash, 0.45)
-			sound("WhipCrack", w.tip.Position)
-			burst("sparks", w.tip.Position, Vector3.yAxis)
-		elseif not flashed then
-			warning.Transparency = 0.82 - 0.12 * math.abs(math.sin(os.clock() * 10))
-		end
+		-- the disc brightens as the stun nears
+		warning.Transparency = 0.8 - 0.25 * k - 0.1 * math.abs(math.sin(os.clock() * (10 + 10 * k)))
 	end
 	if warning.Parent then warning:Destroy() end
 	w.cleanup()
@@ -470,6 +479,13 @@ fxEvent.OnClientEvent:Connect(function(kind, userId, a, b)
 		task.spawn(flourish, character)
 	elseif kind == "TreasureHunt" then
 		treasureHunt(character, a)
+	elseif kind == "Deflect" and character and visible(character) then
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root then
+			burst("sparks", root.Position + Vector3.new(0, 1.5, 0), Vector3.yAxis)
+			burst("glint", root.Position + Vector3.new(0, 2.5, 0), Vector3.yAxis)
+			sound("Deflect", root.Position)
+		end
 	end
 end)
 
