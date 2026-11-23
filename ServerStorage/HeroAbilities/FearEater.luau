@@ -20,6 +20,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local SpeedCheck = require(ServerStorage.SpeedCheck)
 local DevourAim = require(game:GetService("ReplicatedStorage").DevourAim)
 local Movement = require(game:GetService("ReplicatedStorage").Movement)
+local Fear = require(ServerStorage.Fear)
 
 local handlers = {}
 
@@ -150,12 +151,7 @@ function handlers.InstillFear(ctx, cast)
 		if ctx.match ~= match then return end
 		-- still dreading: feared
 		local at = workspace:GetServerTimeNow()
-		for survivor in dreaded do
-			survivor:SetAttribute("DreadUntil", nil)
-			survivor:SetAttribute("FearSlow", def.fearSlow)
-			survivor:SetAttribute("FearedUntil", at + def.fearTime)
-			survivor:SetAttribute("RevealedUntil", math.max(survivor:GetAttribute("RevealedUntil") or 0, at + def.fearTime))
-		end
+		for survivor in dreaded do Fear.apply(survivor, def, at) end
 	end)
 	return true
 end

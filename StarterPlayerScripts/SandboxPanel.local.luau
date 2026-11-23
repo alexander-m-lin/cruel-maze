@@ -1,0 +1,173 @@
+-- THE SANDBOX PANEL: buttons down the left of the screen in the dev Sandbox match (see
+-- ServerStorage.Sandbox). Developers only; the server checks every request (Match's sandboxAction).
+--
+--   Place (click a button, then click the floor; right-click or Esc cancels):
+--     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic
+--   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters)
+-- The server's answer shows under the buttons.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+while player:GetAttribute("Dev") ~= true do player:GetAttributeChangedSignal("Dev"):Wait() end
+
+local Config = require(ReplicatedStorage:WaitForChild("Config"))
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local devEvent = Net.event("DevMatch")
+local match = ReplicatedStorage:WaitForChild("Match")
+
+local PLACE = {
+	{ id = "bot", name = "Bot" },
+	{ id = "dummy", name = "Dummy" },
+	{ id = "fearedDummy", name = "Feared dummy" },
+	{ id = "monster", name = "AI monster" },
+	{ id = "ward", name = "Ward" },
+	{ id = "falseRelic", name = "False relic" },
+}
+local NOW = {
+	{ id = "fearAll", name = "Fear all" },
+	{ id = "freeze", name = "Freeze AI" },
+	{ id = "ready", name = "Ready" },
+	{ id = "lives", name = "Lives" },
+	{ id = "clear", name = "Clear" },
+}
+local ACTIVE = Color3.fromRGB(120, 60, 170)
+local IDLE = Color3.fromRGB(40, 40, 46)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "SandboxPanel"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 10
+gui.Enabled = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local column = Instance.new("Frame")
+column.AnchorPoint = Vector2.new(0, 0.5)
+column.Position = UDim2.new(0, 12, 0.5, 0)
+column.Size = UDim2.fromOffset(130, 0)
+column.AutomaticSize = Enum.AutomaticSize.Y
+column.BackgroundTransparency = 1
+column.Parent = gui
+local list = Instance.new("UIListLayout")
+list.Padding = UDim.new(0, 4)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+list.Parent = column
+
+local order = 0
+local function label(text, size)
+	order += 1
+	local l = Instance.new("TextLabel")
+	l.LayoutOrder = order
+	l.Size = UDim2.fromOffset(130, size or 18)
+	l.BackgroundTransparency = 1
+	l.TextColor3 = Color3.fromRGB(235, 225, 255)
+	l.TextStrokeTransparency = 0.4
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 13
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Text = text
+	l.Parent = column
+	return l
+end
+local function button(text)
+	order += 1
+	local b = Instance.new("TextButton")
+	b.LayoutOrder = order
+	b.Size = UDim2.fromOffset(130, 26)
+	b.BackgroundColor3 = IDLE
+	b.BackgroundTransparency = 0.15
+	b.BorderSizePixel = 0
+	b.TextColor3 = Color3.fromRGB(230, 230, 230)
+	b.Font = Enum.Font.GothamMedium
+	b.TextSize = 13
+	b.Text = text
+	b.Parent = column
+	return b
+end
+
+label("SANDBOX")
+local result = nil
+local placing = nil       -- the PLACE entry being placed, or nil
+local placeButtons = {}
+
+-- a marker on the floor under the mouse while placing
+local marker = Instance.new("Part")
+marker.Name = "SandboxMarker"
+marker.Shape = Enum.PartType.Cylinder
+marker.Anchored, marker.CanCollide, marker.CanQuery, marker.CanTouch, marker.CastShadow = true, false, false, false, false
+marker.Material = Enum.Material.Neon
+marker.Color = ACTIVE
+marker.Transparency = 0.35
+marker.Size = Vector3.new(0.15, 5, 5)
+
+local function floorPoint()
+	local maze = workspace:FindFirstChild("Maze")
+	if not maze then return nil end
+	local y = maze:GetAttribute("FloorY") or 0
+	local mouse = UserInputService:GetMouseLocation()
+	local ray = workspace.CurrentCamera:ViewportPointToRay(mouse.X, mouse.Y)
+	if math.abs(ray.Direction.Y) < 1e-3 then return nil end
+	local t = (y - ray.Origin.Y) / ray.Direction.Y
+	if t < 0 then return nil end
+	return ray.Origin + ray.Direction * t
+end
+
+local function setPlacing(entry)
+	placing = entry
+	for id, b in placeButtons do b.BackgroundColor3 = (entry and entry.id == id) and ACTIVE or IDLE end
+	if entry then
+		result.Text = "Click the floor: " .. entry.name .. " (right-click / Esc cancels)"
+		ContextActionService:BindActionAtPriority("SandboxPlace", function(_, inputState, input)
+			if inputState ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Sink end
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				local at = floorPoint()
+				if at then devEvent:FireServer("sandboxAction", placing.id, at) end
+			end
+			setPlacing(nil)
+			return Enum.ContextActionResult.Sink
+		end, false, Enum.ContextActionPriority.High.Value + 100,
+			Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.KeyCode.Escape)
+	else
+		ContextActionService:UnbindAction("SandboxPlace")
+		marker.Parent = nil
+	end
+end
+
+label("Place", 16)
+for _, entry in PLACE do
+	local b = button(entry.name)
+	placeButtons[entry.id] = b
+	b.Activated:Connect(function() setPlacing(placing ~= entry and entry or nil) end)
+end
+label("Now", 16)
+for _, entry in NOW do
+	local b = button(entry.name)
+	b.Activated:Connect(function()
+		setPlacing(nil)
+		devEvent:FireServer("sandboxAction", entry.id)
+	end)
+end
+result = label("", 34)
+
+devEvent.OnClientEvent:Connect(function(kind, ok, message)
+	if kind ~= "sandboxResult" then return end
+	result.Text = (ok and "" or "No: ") .. tostring(message or "")
+end)
+
+RunService.RenderStepped:Connect(function()
+	local on = match:GetAttribute("Sandbox") == true and match:GetAttribute("State") == Config.States.Playing
+	gui.Enabled = on
+	if not on and placing then setPlacing(nil) end
+	if placing then
+		local at = floorPoint()
+		if at then
+			marker.CFrame = CFrame.new(at + Vector3.new(0, 0.1, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+			marker.Parent = workspace.CurrentCamera
+		end
+	end
+end)

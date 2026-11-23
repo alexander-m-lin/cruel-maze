@@ -255,9 +255,12 @@ end
 
 -- Builds the maze in the workspace (replacing any previous one).
 -- Returns a maze table (see the end): the layout, plus its sanctuaries and relics.
+-- options.layout: a fixed layout instead of a generated one (the dev Sandbox):
+--   { n, walls, sanctuaries, relics, doors, crushers } in the forms MazeLayout's planners return
 function MazeBuilder.build(options)
 	options = options or {}
-	local n, S, H, T = MazeBuilder.CELLS, MazeBuilder.CELL, MazeBuilder.WALL_H, MazeBuilder.WALL_T
+	local layout = options.layout
+	local n, S, H, T = layout and layout.n or MazeBuilder.CELLS, MazeBuilder.CELL, MazeBuilder.WALL_H, MazeBuilder.WALL_T
 	local base = workspace.Baseplate
 	local y0 = base.Position.Y + base.Size.Y / 2   -- top of the baseplate
 	local half = n * S / 2
@@ -302,29 +305,34 @@ function MazeBuilder.build(options)
 		MazeBuilder.GROUND_COLOR, MazeBuilder.GROUND_MATERIAL)
 	y0 += 1 -- everything else sits on the maze floor
 
-	-- The layout: maze, then sanctuaries, then relic rooms (see MazeLayout)
-	-- (a few tries for a maze whose start sanctuary gets 3 well-spread exits: not every maze has room)
-	local walls, sanctuaryPlans
-	for _ = 1, 10 do
-		walls = MazeBuilder.generate(n)
-		sanctuaryPlans = MazeLayout.carveSanctuaries(walls, n, options.sanctuaries or 4, options.sanctuarySpacing or 5, {
-			startSize = options.startSanctuarySize, size = options.sanctuarySize, exitSpacing = options.sanctuaryExitSpacing })
-		if #sanctuaryPlans[1].exits >= 3 then break end
+	-- The layout: a fixed one (the Sandbox), or maze, then sanctuaries, then relic rooms (see MazeLayout)
+	local walls, sanctuaryPlans, relicPlans, doorPlans, crusherPlans
+	if layout then
+		walls, sanctuaryPlans, relicPlans = layout.walls, layout.sanctuaries, layout.relics
+		doorPlans, crusherPlans = layout.doors or {}, layout.crushers or {}
+	else
+		-- (a few tries for a maze whose start sanctuary gets 3 well-spread exits: not every maze has room)
+		for _ = 1, 10 do
+			walls = MazeBuilder.generate(n)
+			sanctuaryPlans = MazeLayout.carveSanctuaries(walls, n, options.sanctuaries or 4, options.sanctuarySpacing or 5, {
+				startSize = options.startSanctuarySize, size = options.sanctuarySize, exitSpacing = options.sanctuaryExitSpacing })
+			if #sanctuaryPlans[1].exits >= 3 then break end
+		end
+		local blocked = {}      -- cells monsters can't enter
+		for _, sanctuary in sanctuaryPlans do
+			for k in sanctuary.cells do blocked[k] = true end
+		end
+		MazeLayout.connect(walls, n, blocked)
+		relicPlans = MazeLayout.pickRelics(walls, n, sanctuaryPlans,
+			options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
+		doorPlans = MazeLayout.placeDoors(walls, n, sanctuaryPlans, relicPlans, {
+			corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
+			spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
+			exitSpacing = options.sanctuaryExitSpacing,
+		})
+		crusherPlans = MazeLayout.placeCrushers(walls, n, sanctuaryPlans, relicPlans, doorPlans,
+			options.crushers or 0, options.crusherSpacing or 3)
 	end
-	local blocked = {}      -- cells monsters can't enter
-	for _, sanctuary in sanctuaryPlans do
-		for k in sanctuary.cells do blocked[k] = true end
-	end
-	MazeLayout.connect(walls, n, blocked)
-	local relicPlans = MazeLayout.pickRelics(walls, n, sanctuaryPlans,
-		options.relics or 9, options.relicSpacing or 4, options.relicsNearStart)
-	local doorPlans = MazeLayout.placeDoors(walls, n, sanctuaryPlans, relicPlans, {
-		corridors = options.doorCorridors or 0, shortcuts = options.doorShortcuts or 0,
-		spacing = options.doorSpacing or 3, minDetour = options.doorMinDetour or 6,
-		exitSpacing = options.sanctuaryExitSpacing,
-	})
-	local crusherPlans = MazeLayout.placeCrushers(walls, n, sanctuaryPlans, relicPlans, doorPlans,
-		options.crushers or 0, options.crusherSpacing or 3)
 	-- isDoor[x][z].E / .S: that side of the cell is a door slot (doors are always on an E or S side)
 	local isDoor = {}
 	for x = 1, n do isDoor[x] = {} for z = 1, n do isDoor[x][z] = {} end end

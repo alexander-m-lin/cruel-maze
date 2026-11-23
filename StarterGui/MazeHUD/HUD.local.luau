@@ -66,6 +66,8 @@ RunService.RenderStepped:Connect(function()
 		timerLabel.Text = ("Starting in %d"):format(math.max(1, math.ceil(endsAt - now)))
 	elseif state == States.Playing and endsAt then
 		timerLabel.Text = formatTime(endsAt - now)
+	elseif state == States.Playing then
+		timerLabel.Text = match:GetAttribute("Sandbox") and "Sandbox" or ""   -- (no timer)
 	elseif state == States.Results then
 		timerLabel.Text = "Match over"
 	elseif state == States.Waiting then
@@ -81,7 +83,8 @@ RunService.RenderStepped:Connect(function()
 		local role = player:GetAttribute("Role")
 		if role == Config.Roles.Survivor then
 			local lives = player:GetAttribute("Lives") or 0
-			statusLabel.Text = ("%s   ·   Lives %s"):format(relics, player:GetAttribute("Out") and "out" or string.rep("♥", lives))
+			local hearts = lives <= 5 and string.rep("♥", lives) or ("♥ x%d"):format(lives)   -- (the Sandbox's 99)
+			statusLabel.Text = ("%s   ·   Lives %s"):format(relics, player:GetAttribute("Out") and "out" or hearts)
 		else
 			statusLabel.Text = ("%s   ·   %s"):format(relics, role == Config.Roles.MazeMaster and "Maze Master" or "Monster")
 		end

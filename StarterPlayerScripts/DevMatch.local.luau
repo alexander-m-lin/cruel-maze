@@ -2,6 +2,9 @@
 --
 --   "Role: ..."  - click to cycle the role you want next match: Random, Survivor, Monster, Maze Master
 --   "New match"  - end this match now and start another (with your picked role)
+--   "Sandbox"    - the same, but into the dev Sandbox: a small test maze with a panel for spawning
+--                  bots, monsters and the rest (SandboxPanel; ServerStorage.Sandbox). "New match"
+--                  goes back to a normal match.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -25,10 +28,10 @@ gui.ResetOnSpawn = false
 gui.DisplayOrder = 10
 gui.Parent = player:WaitForChild("PlayerGui")
 
-local function button(text, x)
+local function button(text, x, row)
 	local b = Instance.new("TextButton")
 	b.AnchorPoint = Vector2.new(0, 1)
-	b.Position = UDim2.new(0, x, 1, -12)
+	b.Position = UDim2.new(0, x, 1, -12 - (row or 0) * 32)
 	b.Size = UDim2.fromOffset(120, 26)
 	b.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
 	b.BackgroundTransparency = 0.15
@@ -43,6 +46,7 @@ end
 
 local roleButton = button("", 88)       -- (the Doors button sits at x = 12)
 local restartButton = button("New match", 214)
+local sandboxButton = button("Sandbox", 214, 1)   -- (above New match: the ability bar is to the right)
 
 local function refresh()
 	local wanted = player:GetAttribute("DevRole")
@@ -58,3 +62,4 @@ roleButton.Activated:Connect(function()
 	devEvent:FireServer("role", nextRole or nil)
 end)
 restartButton.Activated:Connect(function() devEvent:FireServer("restart") end)
+sandboxButton.Activated:Connect(function() devEvent:FireServer("sandbox") end)

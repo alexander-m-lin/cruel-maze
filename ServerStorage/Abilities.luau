@@ -8,6 +8,7 @@
 --   Abilities.use(player, slot, aim)          -- a player (survivor or monster) uses an ability
 --   Abilities.useMonster(monster, slot, aim)  -- an AI monster does
 --   Abilities.ready(who, slot)                -- off cooldown? (who: a player or an AI monster)
+--   Abilities.resetCooldowns(who)             -- everything ready now (the dev Sandbox)
 --
 -- A player's computer sends "UseAbility" (slot, aim): slot is "Primary" / "Secondary" / "Ultimate",
 -- aim the flat direction they face. Checked here: a match is on, their hero has that slot, they're
@@ -111,6 +112,14 @@ end
 function ctx.shortenCooldown(who, slot, seconds)
 	local left = ((readyAt[who] or {})[slot] or 0) - os.clock()
 	if left > seconds then setCooldown(who, slot, seconds) end
+end
+
+-- Every ability ready again (the dev Sandbox's "Ready" button)
+function Abilities.resetCooldowns(who)
+	readyAt[who] = nil
+	if typeof(who) == "Instance" then
+		for _, slot in Heroes.SLOTS do who:SetAttribute("AbilityReady" .. slot, nil) end
+	end
 end
 
 function Abilities.ready(who, slot)

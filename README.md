@@ -25,7 +25,14 @@ person: it shuts doors ahead of chased survivors, sets off crushing walls as the
 wards watching relics and wherever survivors were last seen).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
-starts another straight away, and "Doors" opens the doors panel.
+starts another straight away, and "Doors" opens the doors panel. "Sandbox" starts the **sandbox**
+instead: a 6 x 6 test maze (an open square with a wall jutting in, a door in it, a crushing wall in
+a short corridor, one relic, one false relic and one sanctuary), with only the players in it, no
+timer, no end and 99 lives. A panel down the left places things where you click the floor (a
+roaming bot, a dummy bot held in place, a feared dummy, an AI monster, a ward, a false relic) and
+does things at once (fear every survivor, freeze or unfreeze AI monsters, make your abilities
+ready, give your lives back, clear the bots and AI monsters). "New match" goes back to a normal match.
+Everything in the sandbox is the real game's code; only the maze and who's in it differ.
 - **Monster:** move as usual; left-click is your hero's main ability (Fear Eater: Devour). While
   you can see a survivor you speed up, to +20% after 3 seconds; lose sight of them all for a
   second and it starts again. You see what your
@@ -149,6 +156,9 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `ReplicatedStorage/DevourAim.luau` | ReplicatedStorage (ModuleScript) | Who Fear Eater's Devour targets and whether it lands: the server and the target ring share it |
 | `StarterPlayerScripts/HeroEffects.local.luau` | StarterPlayer › StarterPlayerScripts | Sara's effects (the whip, Flourish's spin, Treasure hunt's light; to move into `HeroVisuals/Sara`), and stun stars and pull dust for everyone |
 | `ServerStorage/Dev.luau` | ServerStorage (ModuleScript) | Who gets the developer controls (Studio, or the experience's owner) |
+| `ServerStorage/Sandbox.luau` | ServerStorage (ModuleScript) | The dev sandbox's hand-made test maze (fed to `MazeBuilder.build`) and settings; Match runs the sandbox match and its panel's actions |
+| `ServerStorage/Fear.luau` | ServerStorage (ModuleScript) | Marking a survivor feared (Instill Fear, and the sandbox's feared spawns) |
+| `StarterPlayerScripts/SandboxPanel.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only, in the sandbox: the panel for placing bots, monsters, wards and false relics, and the quick actions |
 | `ServerStorage/WardEyes.luau` | ServerStorage (ModuleScript) | Wards: placing, spotting and destroying the Maze Master's floating eyes |
 | `ServerStorage/Crushers.luau` | ServerStorage (ModuleScript) | Crushing walls: warning, slam, crushing survivors between, sliding back |
 | `ReplicatedStorage/Config.luau` | ReplicatedStorage (ModuleScript) | Settings shared by the server and players' computers: speeds, vision, match length, relics, lives, sanctuaries |
