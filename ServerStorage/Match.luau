@@ -824,7 +824,7 @@ end)
 --   "crushers"              -> { [id] = { center, state } }
 --   "crush", id             -> set that crusher off (no dark mana needed)
 --   "falseRelic", x, z      -> place a false relic in cell (x, z); -> its id, or nil
---   "monsters", on          -> switch every monster on or off (off: they stand still and catch nobody)
+--   "monsters", on[, "ai"]  -> switch every monster (or only the AI ones) on or off (off: they stand still and catch nobody)
 --   "ward", x, z            -> place a ward in cell (x, z) (no Maze Master needed); -> its id, or nil
 --   "sees", position        -> can the monster side see that spot right now?
 --   "reveal", userId, secs  -> reveal that survivor to the monster side (as a false relic does)
@@ -842,7 +842,9 @@ if RunService:IsStudio() then
 		elseif action == "crush" and crushers then
 			return crushers:Trigger(a)
 		elseif action == "monsters" then
-			for _, monster in monsters do monster.active = a == true end
+			for _, monster in monsters do
+				if b ~= "ai" or not playerMonsters[monster.player] then monster.active = a == true end
+			end
 			return true
 		elseif action == "ward" and wards then
 			local ward = wards:Add(a, b)

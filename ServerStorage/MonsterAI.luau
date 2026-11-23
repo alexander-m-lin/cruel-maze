@@ -711,11 +711,12 @@ end
 -- DEVOUR's steps (HeroAbilities.FearEater runs them). Players' computers draw it from "DevourAt"
 -- (server time the windup starts), "DevourWindup", then "DevourGo" (the lunge starts), "DevourAim"
 -- (direction times distance) and "DevourTime".
--- 1: stands still facing them for def.windup
-function MonsterAI:DevourStart(toward, def)
+-- 1: stands still facing them for def.windup (and keeps facing `victim` through the lunge)
+function MonsterAI:DevourStart(toward, def, victim)
 	local now = os.clock()
 	self.facing = toward
 	self.path = {}
+	self.devourVictim = victim
 	self.dash = { holding = true, giveUpAt = now + def.windup + 1 }
 	self.mode = "chase"
 	self.model:SetAttribute("DevourAim", toward * def.range)
@@ -744,6 +745,12 @@ end
 
 function MonsterAI:stepDash(now)
 	local dash = self.dash
+	-- turned toward the victim the whole time
+	local victimRoot = self.devourVictim and rootOf(self.devourVictim)
+	if victimRoot then
+		local to = Vector3.new(victimRoot.Position.X - self.pos.X, 0, victimRoot.Position.Z - self.pos.Z)
+		if to.Magnitude > 0.5 then self.facing = to.Unit end
+	end
 	if dash.holding then                                         -- gathering itself
 		if now > dash.giveUpAt then self.dash = nil end          -- (called off and never told)
 		return
@@ -758,7 +765,7 @@ function MonsterAI:stepDash(now)
 		end
 	end
 	if k >= 1 then
-		self.dash = nil
+		self.dash, self.devourVictim = nil, nil
 		self.path = {}                                           -- re-plan from wherever it ended up
 	end
 end

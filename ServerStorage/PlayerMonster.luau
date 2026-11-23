@@ -149,11 +149,13 @@ function PlayerMonster:Lunge()
 	return true
 end
 
--- DEVOUR, step 1: held still facing them for def.windup (their computer holds them: "DevourAt")
-function PlayerMonster:DevourStart(toward, def)
+-- DEVOUR, step 1: held still facing them for def.windup (their computer holds them: "DevourAt",
+-- and keeps them turned toward "DevourVictim", the victim's UserId, until the lunge is over)
+function PlayerMonster:DevourStart(toward, def, victim)
 	self.facing = toward
 	self.mode = "chase"
 	local model = self.model
+	model:SetAttribute("DevourVictim", victim and victim.UserId or nil)
 	model:SetAttribute("DevourAim", toward * def.range)
 	model:SetAttribute("DevourWindup", def.windup)
 	model:SetAttribute("DevourTime", def.range / def.dashSpeed)
@@ -172,6 +174,7 @@ function PlayerMonster:DevourDash(aim, distance, time)
 	self:publish()
 	task.delay(time + 0.2, function()
 		if self.mode == "chase" and not self.killUntil then self.mode = "roam" end
+		if self.model then self.model:SetAttribute("DevourVictim", nil) end
 	end)
 end
 

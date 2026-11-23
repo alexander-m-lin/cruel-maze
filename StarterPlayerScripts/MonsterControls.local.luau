@@ -26,6 +26,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
+local Characters = require(ReplicatedStorage:WaitForChild("Characters"))
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local match = ReplicatedStorage:WaitForChild("Match")
@@ -88,41 +90,68 @@ local function lunge()
 	spring(root, facing, Config.LUNGE_DISTANCE, Config.LUNGE_TIME)
 end
 
--- A hero's dash, started by the server on your monster body: first held still, facing the target...
-local holdToken = nil
-local function hold(model)
-	local aim, windup = model:GetAttribute("DevourAim"), model:GetAttribute("DevourWindup") or 0.3
+-- A hero's dash, started by the server on your monster body. From the windup until the lunge is
+-- over you're held ("Lunging": no walking, no turning to the mouse) and kept turned toward the
+-- victim ("DevourVictim" on the body, a UserId), every frame.
+local devourToken = nil
+
+local function faceVictim(model)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	if typeof(aim) == "Vector3" and (aim * Vector3.new(1, 0, 1)).Magnitude > 0.1 then
-		local flat = aim * Vector3.new(1, 0, 1)
-		root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
-	end
-	local token = {}
-	holdToken = token
-	player:SetAttribute("Lunging", true)
-	task.delay(windup + 0.6, function()                 -- (called off: never told to go)
-		if holdToken == token then
-			holdToken = nil
-			player:SetAttribute("Lunging", nil)
-		end
-	end)
+	local victim = Characters.of(model:GetAttribute("DevourVictim"))
+	local theirs = victim and victim:FindFirstChild("HumanoidRootPart")
+	if not (root and theirs) then return end
+	local flat = (theirs.Position - root.Position) * Vector3.new(1, 0, 1)
+	if flat.Magnitude > 0.5 then root.CFrame = CFrame.lookAt(root.Position, root.Position + flat) end
 end
 
--- ...then the lunge itself
-local function dash(model)
-	holdToken = nil
+local function endDevour(token)
+	if devourToken ~= token then return end
+	devourToken = nil
 	player:SetAttribute("Lunging", nil)
+end
+
+local function startDevour(model)
+	local token = {}
+	devourToken = token
+	player:SetAttribute("Lunging", true)
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid then humanoid.AutoRotate = false end   -- (Controls sets it back afterwards)
+	RunService:UnbindFromRenderStep("DevourFacing")
+	RunService:BindToRenderStep("DevourFacing", Enum.RenderPriority.Camera.Value + 3, function()
+		if devourToken ~= token then
+			RunService:UnbindFromRenderStep("DevourFacing")
+			return
+		end
+		faceVictim(model)
+		-- caught them: the kill holds you from here, still turned toward them
+		if player:GetAttribute("Killing") then endDevour(token) end
+	end)
+	return token
+end
+
+-- ...first held still for the windup...
+local function hold(model)
+	local token = startDevour(model)
+	faceVictim(model)
+	local windup = model:GetAttribute("DevourWindup") or 0.3
+	task.delay(windup + 0.6, function() if not model:GetAttribute("DevourGo") or model:GetAttribute("DevourGo") < (model:GetAttribute("DevourAt") or 0) then endDevour(token) end end)
+end
+
+-- ...then the lunge itself (still facing them)
+local function dash(model)
+	local token = devourToken or startDevour(model)
 	local aim, seconds = model:GetAttribute("DevourAim"), model:GetAttribute("DevourTime")
-	if typeof(aim) ~= "Vector3" or not seconds then return end
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root or player:GetAttribute("Killing") then return end
-	local flat = aim * Vector3.new(1, 0, 1)
-	if flat.Magnitude < 0.1 then return end
-	root.CFrame = CFrame.lookAt(root.Position, root.Position + flat)
+	local flat = typeof(aim) == "Vector3" and aim * Vector3.new(1, 0, 1) or Vector3.zero
+	if not root or not seconds or player:GetAttribute("Killing") or flat.Magnitude < 0.1 then
+		task.delay(0.15, endDevour, token)
+		return
+	end
 	spring(root, flat, flat.Magnitude, seconds)
+	-- held until the server's catch arrives (it waits for you to reach them), or a miss is clear
+	task.delay(seconds + 0.6, endDevour, token)
 end
 
 local function watchBody(model)

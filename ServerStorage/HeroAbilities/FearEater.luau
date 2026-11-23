@@ -55,7 +55,7 @@ function handlers.Devour(ctx, cast)
 	monster.devourToken = token
 	local toward = flat(target.Position - monster.pos)
 	toward = toward.Magnitude > 0.1 and toward.Unit or cast.aim
-	monster:DevourStart(toward, def)
+	monster:DevourStart(toward, def, survivor)   -- (he keeps facing them, through the lunge too)
 	survivor:SetAttribute("DevourTargetAt", now)       -- their screen warns them (FearMarks)
 	survivor:SetAttribute("DevourWindup", def.windup)
 	local match = ctx.match
