@@ -83,7 +83,7 @@ sleeves; left click does nothing for him):
   Every survivor outside a sanctuary, wherever they are, feels **dread**: a 5-second countdown to
   reach a sanctuary or get within 10 studs of another survivor (bots count). Anyone who doesn't
   is **feared** for 5 seconds: revealed to the monster side and slowed to 80%.
-  A survivor under dread has a violet ring at their feet that wears away clockwise from its
+  A survivor under dread has a red ring at their feet that wears away clockwise from its
   bottom as the countdown runs, gone once they're safe or feared.
 - **E: Living Nightmare** (60 s). For 7 seconds he goes half see-through, trailing dark mist, and
   passes through the maze's inner walls and doors (not the outer wall, and never into a

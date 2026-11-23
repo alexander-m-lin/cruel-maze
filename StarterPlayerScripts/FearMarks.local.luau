@@ -113,7 +113,7 @@ end
 ---------------------------------------------------------------- dread ring
 local DREAD_SEGMENTS = 40
 local DREAD_RADIUS = 3            -- studs
-local DREAD_COLOR = Color3.fromRGB(160, 100, 235)
+local DREAD_COLOR = Color3.fromRGB(230, 30, 40)    -- (the same red as the feared mark)
 local DREAD_TIME = Heroes.list.FearEater.abilities.Secondary.dreadTime
 
 local dreadRings = {}   -- [character] = { model, segments = { part, ... } }
