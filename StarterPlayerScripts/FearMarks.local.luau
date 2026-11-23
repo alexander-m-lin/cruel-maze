@@ -7,6 +7,10 @@
 --                  (ARROW_LEAD seconds or less), or running, a wide red triangle round him points
 --                  straight at each feared survivor, wherever they are (off screen too). They
 --                  float just above the walls, so walls and fog never hide them.
+--   DREAD RING  - every survivor under dread ("DreadUntil", players and bots) has a ring at their
+--                  feet that starts full and wears away clockwise round the circle, from its
+--                  bottom point on the screen, as the dread runs out (Instill Fear's dreadTime). Gone the moment they're
+--                  feared or safe (the server clears "DreadUntil"). Shown like the feared mark.
 --   DEVOUR TARGET - for a Fear Eater player, while Devour is ready: a ring on the floor under the
 --                  survivor a click would go for (DevourAim, the server's own choice; only
 --                  survivors you can see count). Red for a feared survivor (a sure catch).
@@ -103,6 +107,94 @@ local function updateMarks(feared)
 	end
 	for character in marks do
 		if not wanted[character] or not character.Parent then dropMark(character) end
+	end
+end
+
+---------------------------------------------------------------- dread ring
+local DREAD_SEGMENTS = 40
+local DREAD_RADIUS = 3            -- studs
+local DREAD_COLOR = Color3.fromRGB(160, 100, 235)
+local DREAD_TIME = Heroes.list.FearEater.abilities.Secondary.dreadTime
+
+local dreadRings = {}   -- [character] = { model, segments = { part, ... } }
+
+local function makeDreadRing()
+	local model = Instance.new("Model")
+	model.Name = "DreadRing"
+	local segments = {}
+	local length = 2 * math.pi * DREAD_RADIUS / DREAD_SEGMENTS + 0.05
+	for i = 1, DREAD_SEGMENTS do
+		local p = Instance.new("Part")
+		p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
+		p.Material = Enum.Material.Neon
+		p.Color = DREAD_COLOR
+		p.Transparency = 0.15
+		p.Size = Vector3.new(length, 0.1, 0.35)
+		p.Parent = model
+		segments[i] = p
+	end
+	return { model = model, segments = segments }
+end
+
+-- survivors under dread right now: [character] = seconds left
+local function dreaded()
+	local now = workspace:GetServerTimeNow()
+	local list = {}
+	local function consider(holder, character)
+		local left = (holder:GetAttribute("DreadUntil") or 0) - now
+		if character and left > 0 then list[character] = left end
+	end
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == Config.Roles.Survivor then consider(other, other.Character) end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do consider(bot, bot) end   -- (a bot's attributes are on its body)
+	return list
+end
+
+local function updateDreadRings()
+	local maze = workspace:FindFirstChild("Maze")
+	local floorY = maze and maze:GetAttribute("FloorY") or 0
+	local list = maze and dreaded() or {}
+	-- the screen's "down" and "right" across the floor
+	local camera = workspace.CurrentCamera
+	local down = -(camera.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit
+	local right = (camera.CFrame.RightVector * Vector3.new(1, 0, 1)).Unit
+	for character, left in list do
+		local root = character:FindFirstChild("HumanoidRootPart")
+		local shown = root ~= nil and (character == player.Character or character:GetAttribute("FogState") ~= "hidden")
+		local ring = dreadRings[character]
+		if not shown then
+			if ring then ring.model.Parent = nil end
+			continue
+		end
+		if not ring then
+			ring = makeDreadRing()
+			dreadRings[character] = ring
+		end
+		-- segment i sits (i - 0.5)/N of the way clockwise (on the screen) round the circle from its
+		-- bottom point; the ones nearest the start of that sweep go first
+		local remaining = math.clamp(left / DREAD_TIME, 0, 1)
+		local center = Vector3.new(root.Position.X, floorY + 0.12, root.Position.Z)
+		for i, part in ring.segments do
+			local t = (i - 0.5) / DREAD_SEGMENTS
+			if t < 1 - remaining then
+				part.Transparency = 1
+			else
+				local angle = t * 2 * math.pi
+				local dir = down * math.cos(angle) - right * math.sin(angle)
+				local at = center + dir * DREAD_RADIUS
+				local tangent = Vector3.new(-dir.Z, 0, dir.X)
+				part.CFrame = CFrame.lookAt(at, at + tangent) * CFrame.Angles(0, math.pi / 2, 0)
+				part.Transparency = 0.15
+			end
+		end
+		ring.model.Parent = workspace.CurrentCamera
+	end
+	for character, ring in dreadRings do
+		if not list[character] or not character.Parent then
+			ring.model:Destroy()
+			dreadRings[character] = nil
+		end
 	end
 end
 
@@ -291,6 +383,7 @@ end
 RunService.RenderStepped:Connect(function()
 	local feared = Movement.fearedRoots()
 	updateMarks(feared)
+	updateDreadRings()
 	updateArrow(feared)
 	updateTarget(feared)
 	updateWarning()

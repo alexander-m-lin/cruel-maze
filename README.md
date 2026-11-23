@@ -83,6 +83,8 @@ sleeves; left click does nothing for him):
   Every survivor outside a sanctuary, wherever they are, feels **dread**: a 5-second countdown to
   reach a sanctuary or get within 10 studs of another survivor (bots count). Anyone who doesn't
   is **feared** for 5 seconds: revealed to the monster side and slowed to 80%.
+  A survivor under dread has a violet ring at their feet that wears away clockwise from its
+  bottom as the countdown runs, gone once they're safe or feared.
 - **E: Living Nightmare** (60 s). For 7 seconds he goes half see-through, trailing dark mist, and
   passes through the maze's inner walls and doors (not the outer wall, and never into a
   sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
@@ -183,7 +185,7 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
-| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, his Living Nightmare pointers to each feared survivor, the ring under Devour's target, and the targeted survivor's red flash |
+| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: the dread ring at survivors' feet, a red glow and wisps round feared survivors' heads, his Living Nightmare pointers to each feared survivor, the ring under Devour's target, and the targeted survivor's red flash |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |
