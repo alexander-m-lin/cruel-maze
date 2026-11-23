@@ -60,13 +60,14 @@ Fear Eater (a floating wraith in a tattered black cloak, huge pale arms reaching
 sleeves; left click does nothing for him):
 - **Right mouse: Devour** (5 s). Hold right click to aim: the area it would catch in is painted
   blue on the floor (brighter when it would lock on to a feared survivor); let go to Devour.
-  Aim assist: a survivor within 30 degrees either side of where he faces and close enough to
-  reach (23 studs, clear line) turns the dash straight at them (same range and reach). He gathers himself for a moment, then lunges 14 studs the way he
+  Aim assist: a survivor within 45 degrees either side of where he faces and close enough to
+  reach (25 studs, clear line) turns the dash straight at them (same range and reach). He gathers himself for a moment, then lunges 16 studs the way he
   faces; the first survivor his hands reach is caught (within 9 studs ahead, 7 to the sides). He holds them up facing away, struggling,
   winds his head back, lifts them flat and draws their head into his hood, where they keep
   struggling until it dies away; then he draws them back out and drops the body, which lies there
-  for 4 seconds. Aimed at a *feared* survivor (within 20°
-  of where he faces, in a clear line), the lunge heads straight for them and reaches 35 studs.
+  for 4 seconds. Aimed at a *feared* survivor (within 30°
+  of where he faces, in a clear line), the lunge heads straight for them and reaches 40 studs.
+  A feared survivor has a red glow and red wisps round their head, for anyone who can see them.
 - **Q: Instill Fear** (25 s). He rears up, arms flung wide, and a dark ring sweeps out from him.
   Every survivor outside a sanctuary, wherever they are, feels **dread**: a 5-second countdown to
   reach a sanctuary or get within 10 studs of another survivor (bots count). Anyone who doesn't
@@ -75,7 +76,9 @@ sleeves; left click does nothing for him):
   passes through the maze's inner walls and doors (not the outer wall, and never into a
   sanctuary), moving 60% faster while heading toward a feared survivor (within 60° of straight at
   them), and Devour recharges in 1 second (casting it cuts Devour's wait to 1 s too). Ending
-  inside a wall pushes him out into the middle of that cell.
+  inside a wall pushes him out into the middle of that cell. While it's ready (or 2 seconds from
+  ready) and while it runs, a wide red arrow on the floor round him points straight at the
+  nearest feared survivor, wherever they are, drawn over walls and fog.
 AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range. One
 AI monster a match (`Config.AI_MONSTERS_CASTING`) also casts Instill Fear whenever it's ready,
 and Living Nightmare whenever it's ready and a survivor is feared (then it goes straight through
@@ -166,6 +169,7 @@ inner walls after feared survivors, faster). The cast animations are simple stan
 | `StarterPlayerScripts/FalseRelicAlert.local.luau` | StarterPlayer › StarterPlayerScripts | The red border and "FALSE RELIC" when you click one |
 | `StarterPlayerScripts/WardView.local.luau` | StarterPlayer › StarterPlayerScripts | Wards bobbing and peering about, and the monster side's alarm while one is destroyed |
 | `StarterPlayerScripts/FearAlert.local.luau` | StarterPlayer › StarterPlayerScripts | Instill Fear on your screen: the dread countdown, then "FEARED" (or "Safe") |
+| `StarterPlayerScripts/FearMarks.local.luau` | StarterPlayer › StarterPlayerScripts | Fear Eater's fear made easy to read: a red glow and wisps round feared survivors' heads, and his Living Nightmare arrow to the nearest feared survivor |
 | `StarterPlayerScripts/LobbyUI.local.luau` | StarterPlayer › StarterPlayerScripts | The lobby between matches: who's in, preferred role, Start |
 | `StarterPlayerScripts/DevMatch.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: force your role for the next match, start a new match |
 | `StarterPlayerScripts/DevDoors.local.luau` | StarterPlayer › StarterPlayerScripts | Developers only: a panel to work the doors (and G toggles the door under the mouse) |
