@@ -84,7 +84,7 @@ Kai (no grapple, no stun: information, the Maze Master's devices, and escaping b
   even if you're revealed: they see only a small square of flickering blue tiles in the middle of
   the cell you're in, which slides to the next cell as you cross into it, leaving a thin line of
   tiles behind it that soon fades. Leaving a junction, copies of it run off down the
-  other ways out (up to 3), wandering like you would; nothing tells them apart, and every one
+  other ways out (up to 3), wandering like you would but keeping off the way you really went; nothing tells them apart, and every one
   flickers in the last second. Monsters can follow any of them (their chase speed keeps building),
   and you're catchable again the moment it ends. Using an ability, collecting a relic or
   destroying a ward ends it early. Crushing walls still get you.

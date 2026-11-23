@@ -294,7 +294,9 @@ end
 -- One circuit drawing: a small square of bright blue tiles in the middle of its cell, every tile
 -- flickering on its own (its see-through-ness drifting smoothly but quickly). Each move to the next
 -- cell lays a LINE of the same tiles, one tile wide, behind it from the old cell to the new one,
--- which lingers a moment after it arrives and fades. Every indicator is drawn the same way.
+-- which lingers a moment after it arrives and fades. Every tile is two LAYERS: the tile, and a smaller,
+-- paler one on top of it, each flickering on its own, so the two shimmer through each other. Every
+-- indicator is drawn the same way.
 local TILE = 1.1             -- studs: a tile's width
 local PITCH = 1.35           -- studs from one tile to the next (the gaps show the tiles)
 local SQUARE_TILES = 4       -- the square is this many tiles a side
@@ -302,24 +304,48 @@ local FLICKER_RATE = 6       -- how fast the tiles flicker (higher: quicker)
 local TRAIL_HOLD = 0.5       -- seconds a line stays after the circuit arrives...
 local TRAIL_FADE = 0.6       -- ...then fades over this
 local SQUARE_HALF = ((SQUARE_TILES - 1) * PITCH + TILE) / 2   -- studs from the square's middle to its edge
+-- the layers, bottom first: color, size (of TILE), how far above the floor, flicker speed (of
+-- FLICKER_RATE), and how see-through at its brightest and dimmest
+local LAYERS = {
+	{ color = BLUE, scale = 1, lift = 0, rate = 1, clear = { 0.05, 0.75 } },
+	{ color = BRIGHT, scale = 0.6, lift = 0.05, rate = 1.35, clear = { 0.1, 0.95 } },
+}
 
 local circuits = {}   -- [model] = { square = { tile }, trails = { trail }, lastMove }
-                      --   tile = { part, seed }; trail = { tiles = { tile + d }, from, dir, length, startAt, moveTime }
+                      --   tile = { parts (one a layer), seeds }; trail = { tiles = { tile + d }, from, dir, length, startAt, moveTime }
 
-local function newTile(size)
-	return { part = part("CircuitTile", size, BLUE, 1), seed = math.random() * 1000 }
+local function newTile(height)
+	local tile = { parts = {}, seeds = {} }
+	for i, layer in LAYERS do
+		tile.parts[i] = part("CircuitTile", Vector3.new(TILE * layer.scale, height, TILE * layer.scale), layer.color, 1)
+		tile.seeds[i] = math.random() * 1000
+	end
+	return tile
 end
 
--- a tile's see-through-ness now: smooth noise, quick
-local function flicker(tile, clock)
-	local n = math.clamp(0.5 + math.noise(clock * FLICKER_RATE, tile.seed) * 1.6, 0, 1)
-	return 0.05 + 0.7 * n
+-- a tile layer's see-through-ness now: smooth noise, quick
+local function flicker(tile, i, clock)
+	local layer = LAYERS[i]
+	local n = math.clamp(0.5 + math.noise(clock * FLICKER_RATE * layer.rate, tile.seeds[i]) * 1.6, 0, 1)
+	return layer.clear[1] + (layer.clear[2] - layer.clear[1]) * n
+end
+
+-- a tile shown at `cf` (on the floor), `strength` 1 to 0 as it fades
+local function showTile(tile, cf, clock, strength)
+	for i, p in tile.parts do
+		p.CFrame = cf + Vector3.yAxis * LAYERS[i].lift
+		p.Transparency = 1 - (1 - flicker(tile, i, clock)) * strength
+	end
+end
+
+local function hideTile(tile)
+	for _, p in tile.parts do p.Transparency = 1 end
 end
 
 local function buildCircuit()
 	local c = { square = {}, trails = {} }
 	for i = 1, SQUARE_TILES * SQUARE_TILES do
-		local tile = newTile(Vector3.new(TILE, 0.06, TILE))
+		local tile = newTile(0.06)
 		tile.ix, tile.iz = (i - 1) % SQUARE_TILES, (i - 1) // SQUARE_TILES
 		c.square[i] = tile
 	end
@@ -344,7 +370,7 @@ local function newTrail(from, to, startAt, moveTime, how)
 	local trail = { tiles = {}, from = from, dir = flat.Unit, length = length, startAt = startAt, moveTime = moveTime, ease = how }
 	local count = math.max(1, math.round(length / PITCH))
 	for i = 1, count do
-		local tile = newTile(Vector3.new(TILE, 0.05, TILE))
+		local tile = newTile(0.05)
 		tile.d = (i - 1) * length / count
 		trail.tiles[i] = tile
 	end
@@ -353,11 +379,13 @@ end
 
 local function destroyTiles(tiles, fade)
 	for _, tile in tiles do
-		if fade then
-			TweenService:Create(tile.part, TweenInfo.new(0.3), { Transparency = 1 }):Play()
-			Debris:AddItem(tile.part, 0.35)
-		else
-			tile.part:Destroy()
+		for _, p in tile.parts do
+			if fade then
+				TweenService:Create(p, TweenInfo.new(0.3), { Transparency = 1 }):Play()
+				Debris:AddItem(p, 0.35)
+			else
+				p:Destroy()
+			end
 		end
 	end
 end
@@ -401,10 +429,9 @@ RunService.RenderStepped:Connect(function()
 		local offset = (SQUARE_TILES - 1) / 2
 		for _, tile in c.square do
 			if shown then
-				tile.part.CFrame = CFrame.new(origin + Vector3.new((tile.ix - offset) * PITCH, 0, (tile.iz - offset) * PITCH))
-				tile.part.Transparency = flicker(tile, clock)
+				showTile(tile, CFrame.new(origin + Vector3.new((tile.ix - offset) * PITCH, 0, (tile.iz - offset) * PITCH)), clock, 1)
 			else
-				tile.part.Transparency = 1
+				hideTile(tile)
 			end
 		end
 
@@ -425,10 +452,9 @@ RunService.RenderStepped:Connect(function()
 				local p = trail.from + trail.dir * tile.d
 				local under = origin and math.abs(p.X - origin.X) < SQUARE_HALF and math.abs(p.Z - origin.Z) < SQUARE_HALF
 				if shown and tile.d <= k * trail.length + 0.01 and not under then
-					tile.part.CFrame = CFrame.new(p.X, y, p.Z) * look
-					tile.part.Transparency = 1 - (1 - flicker(tile, clock)) * (1 - fade)
+					showTile(tile, CFrame.new(p.X, y, p.Z) * look, clock, 1 - fade)
 				else
-					tile.part.Transparency = 1
+					hideTile(tile)
 				end
 			end
 		end

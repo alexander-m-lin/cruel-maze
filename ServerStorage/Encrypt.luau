@@ -17,6 +17,8 @@
 -- then up or down (the other way round only if a wall's in the way). When it leaves a junction (3+ ways on), copies run off down the other ways out (at most
 -- def.decoys at once, at most one junction every def.decoyEvery seconds), and wander from cell to
 -- cell along open corridors at the same pace, now and then stopping for a moment as a person would.
+-- Copies keep off his real path where they can (the cells his circuit has been through or is heading
+-- for), so they don't cross his trail and give away which way he went.
 --
 -- Every indicator is the same: a model "Circuit<random number>" in the maze, tagged "HiddenByFog"
 -- (so each player's fog shows it only where their side can see) and "CircuitIndicator", with an
@@ -138,7 +140,7 @@ function Encrypt.start(user, def, maze, objectives)
 	Encrypt.stop(user)
 	local endsAtServer = workspace:GetServerTimeNow() + def.duration
 	local state = { def = def, maze = maze, objectives = objectives, endsAt = os.clock() + def.duration,
-		endsAtServer = endsAtServer, decoys = {}, nextDecoyAt = 0, queue = {} }
+		endsAtServer = endsAtServer, decoys = {}, nextDecoyAt = 0, queue = {}, path = {} }
 	state.real = newIndicator(state, x, z, center(maze, x, z))
 	active[user] = state
 	user:SetAttribute("EncryptedUntil", endsAtServer)
@@ -158,6 +160,11 @@ function Encrypt.clear()
 	for user in active do Encrypt.stop(user) end
 end
 
+-- On his real path: a cell his circuit has been through, or is heading for
+local function onPath(state, cell)
+	return state.path[MazeLayout.key(cell[1], cell[2])] == true
+end
+
 -- The real one leaves cell A for B: at a junction, copies run off down A's other ways out
 local function branch(state, ind, toX, toZ, now)
 	if now < state.nextDecoyAt or #state.decoys >= state.def.decoys then return end
@@ -168,7 +175,7 @@ local function branch(state, ind, toX, toZ, now)
 	for _, w in ways do
 		if #state.decoys >= state.def.decoys then break end
 		local back = ind.cameFrom and w[1] == ind.cameFrom[1] and w[2] == ind.cameFrom[2]
-		if not back and not (w[1] == toX and w[2] == toZ) then
+		if not back and not (w[1] == toX and w[2] == toZ) and not onPath(state, w) then
 			local decoy = newIndicator(state, ind.x, ind.z, from)
 			moveTo(state, decoy, w[1], w[2], now)
 			table.insert(state.decoys, decoy)
@@ -190,8 +197,18 @@ local function stepDecoy(state, decoy, now)
 	for _, w in ways do
 		if not (decoy.cameFrom and w[1] == decoy.cameFrom[1] and w[2] == decoy.cameFrom[2]) then table.insert(onward, w) end
 	end
-	if #onward == 0 then onward = ways end          -- a dead end: back the way it came
-	local pick = onward[math.random(math.max(1, #onward))]
+	-- off his real path if it can: onward, or else back the way it came; only then onto his path
+	local function offPath(list)
+		local out = {}
+		for _, w in list do
+			if not onPath(state, w) then table.insert(out, w) end
+		end
+		return out
+	end
+	local choices = offPath(onward)
+	if #choices == 0 then choices = offPath(ways) end
+	if #choices == 0 then choices = #onward > 0 and onward or ways end
+	local pick = choices[math.random(math.max(1, #choices))]
 	if pick then moveTo(state, decoy, pick[1], pick[2], now) end
 end
 
@@ -207,6 +224,7 @@ function Encrypt.step()
 		-- one neighbour at a time
 		local ind = state.real
 		local queue = state.queue
+		state.path[MazeLayout.key(ind.x, ind.z)] = true
 		local x, z = state.objectives:CellOf(root.Position)
 		local last = queue[#queue] or { ind.x, ind.z }
 		local _, arrived = positionOf(ind, now)
@@ -219,11 +237,14 @@ function Encrypt.step()
 				else
 					table.insert(queue, { x, z })
 				end
+				state.path[MazeLayout.key(x, z)] = true
 			elseif math.abs(dx) == 1 and math.abs(dz) == 1 then
 				-- a corner cut: across, then up or down (the other way round if across is walled)
 				local corner = isExit(state, last[1], last[2], x, last[2]) and { x, last[2] } or { last[1], z }
 				table.insert(queue, { corner[1], corner[2], fast = true, ease = "in" })
 				table.insert(queue, { x, z, fast = true, ease = "out" })
+				state.path[MazeLayout.key(corner[1], corner[2])] = true
+				state.path[MazeLayout.key(x, z)] = true
 			else                                            -- (moved some other way: it jumps there)
 				table.clear(queue)
 				ind.x, ind.z = x, z
