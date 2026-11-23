@@ -31,7 +31,9 @@ a short corridor, one relic, one false relic and one sanctuary), with only the p
 timer, no end and 99 lives. A panel down the left places things where you click the floor (a
 roaming bot, a dummy bot held in place, a feared dummy, an AI monster, a ward, a false relic) and
 does things at once (fear every survivor, freeze or unfreeze AI monsters, make your abilities
-ready, give your lives back, clear the bots and AI monsters). "New match" goes back to a normal match.
+ready, give your lives back, clear the bots and AI monsters). At its top a tracker shows where you
+are (studs and maze cell) and how fast you're moving, next to the walk speed you're allowed right
+now. "New match" goes back to a normal match.
 Everything in the sandbox is the real game's code; only the maze and who's in it differ.
 - **Monster:** move as usual; left-click is your hero's main ability (Fear Eater: Devour). While
   you can see a survivor you speed up, to +20% after 3 seconds; lose sight of them all for a

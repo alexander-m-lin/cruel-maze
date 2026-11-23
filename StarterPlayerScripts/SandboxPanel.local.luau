@@ -5,6 +5,8 @@
 --     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic
 --   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters)
 -- The server's answer shows under the buttons.
+-- At the top, a TRACKER: where you are (studs, and the maze cell) and how fast you're moving
+-- (across the floor, smoothed a little), next to the walk speed the movement rules allow you now.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -91,6 +93,10 @@ local function button(text)
 end
 
 label("SANDBOX")
+local tracker = label("", 46)
+tracker.Font = Enum.Font.Code
+tracker.TextSize = 12
+tracker.Size = UDim2.fromOffset(180, 46)   -- (wider than the buttons, so a line fits)
 local result = nil
 local placing = nil       -- the PLACE entry being placed, or nil
 local placeButtons = {}
@@ -159,8 +165,30 @@ devEvent.OnClientEvent:Connect(function(kind, ok, message)
 	result.Text = (ok and "" or "No: ") .. tostring(message or "")
 end)
 
-RunService.RenderStepped:Connect(function()
+-- the tracker
+local shownSpeed = 0
+local function updateTracker(dt)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local maze = workspace:FindFirstChild("Maze")
+	if not (root and humanoid and maze) then
+		tracker.Text = "Position -\nSpeed -"
+		return
+	end
+	local p = root.Position
+	local n, size = maze:GetAttribute("Cells") or 1, maze:GetAttribute("CellSize") or 20
+	local half = n * size / 2
+	local cx = math.clamp(math.floor((p.X + half) / size) + 1, 1, n)
+	local cz = math.clamp(math.floor((p.Z + half) / size) + 1, 1, n)
+	local speed = (root.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude
+	shownSpeed += (speed - shownSpeed) * math.min(1, dt * 8)
+	tracker.Text = ("Pos  %6.1f, %6.1f\nCell %d, %d\nSpeed %4.1f  walk %4.1f"):format(p.X, p.Z, cx, cz, shownSpeed, humanoid.WalkSpeed)
+end
+
+RunService.RenderStepped:Connect(function(dt)
 	local on = match:GetAttribute("Sandbox") == true and match:GetAttribute("State") == Config.States.Playing
+	if on then updateTracker(dt) end
 	gui.Enabled = on
 	if not on and placing then setPlacing(nil) end
 	if placing then
