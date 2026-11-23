@@ -15,7 +15,7 @@
 --              small square of flickering bright blue tiles in the middle of its cell, sliding cell
 --              to cell ("From", "To", "MoveAt", "MoveTime") and laying a thinner line of the same
 --              tiles from the old cell to the new one, which then fades. Shown wherever the fog
---              lets you see it; in
+--              lets you see it (and to Kai himself everywhere, drawn above the fog); in
 --              its last "WarnTime" seconds every one flickers alike. To his own team he stays in
 --              view, see-through and outlined blue.
 
@@ -331,9 +331,9 @@ local function flicker(tile, i, clock)
 end
 
 -- a tile shown at `cf` (on the floor), `strength` 1 to 0 as it fades
-local function showTile(tile, cf, clock, strength)
+local function showTile(tile, cf, clock, strength, lift)
 	for i, p in tile.parts do
-		p.CFrame = cf + Vector3.yAxis * LAYERS[i].lift
+		p.CFrame = cf + lift + Vector3.yAxis * LAYERS[i].lift
 		p.Transparency = 1 - (1 - flicker(tile, i, clock)) * strength
 	end
 end
@@ -398,10 +398,22 @@ local function circuitPosition(model, now)
 	return from:Lerp(to, ease(k, model:GetAttribute("Ease")))
 end
 
+-- Kai himself, while encrypted, sees all his circuits (his and the copies) wherever they are, fog or
+-- not: drawn just above the fog and the walls, and shifted back toward the camera by as much as
+-- they're raised, so on his screen each still sits on the floor of its cell
+local ABOVE_FOG = 2   -- studs above the wall tops
+
 RunService.RenderStepped:Connect(function()
 	local now = workspace:GetServerTimeNow()
 	local clock = os.clock()
 	local y = floorY() + 0.1
+	local mine = (player:GetAttribute("EncryptedUntil") or 0) > now
+	local lift = Vector3.zero
+	if mine then
+		local raise = wallTop() + ABOVE_FOG - y
+		local d = Config.CAMERA_DIRECTION
+		lift = Vector3.new(d.X, 0, d.Z) * (raise / d.Y) + Vector3.yAxis * raise
+	end
 	local seen = {}
 	for _, model in CollectionService:GetTagged("CircuitIndicator") do
 		seen[model] = true
@@ -420,7 +432,7 @@ RunService.RenderStepped:Connect(function()
 		end
 		local at = circuitPosition(model, now)
 		local endsAt, warn = model:GetAttribute("EndsAt") or math.huge, model:GetAttribute("WarnTime") or 1
-		local shown = at ~= nil and model:GetAttribute("FogState") ~= "hidden" and model:GetAttribute("FogState") ~= nil
+		local shown = at ~= nil and (mine or model:GetAttribute("FogState") ~= "hidden" and model:GetAttribute("FogState") ~= nil)
 		-- the last seconds: flickering on and off, all alike
 		if endsAt - now < warn and math.floor(clock * 12) % 2 == 0 then shown = false end
 
@@ -429,7 +441,7 @@ RunService.RenderStepped:Connect(function()
 		local offset = (SQUARE_TILES - 1) / 2
 		for _, tile in c.square do
 			if shown then
-				showTile(tile, CFrame.new(origin + Vector3.new((tile.ix - offset) * PITCH, 0, (tile.iz - offset) * PITCH)), clock, 1)
+				showTile(tile, CFrame.new(origin + Vector3.new((tile.ix - offset) * PITCH, 0, (tile.iz - offset) * PITCH)), clock, 1, lift)
 			else
 				hideTile(tile)
 			end
@@ -452,7 +464,7 @@ RunService.RenderStepped:Connect(function()
 				local p = trail.from + trail.dir * tile.d
 				local under = origin and math.abs(p.X - origin.X) < SQUARE_HALF and math.abs(p.Z - origin.Z) < SQUARE_HALF
 				if shown and tile.d <= k * trail.length + 0.01 and not under then
-					showTile(tile, CFrame.new(p.X, y, p.Z) * look, clock, 1 - fade)
+					showTile(tile, CFrame.new(p.X, y, p.Z) * look, clock, 1 - fade, lift)
 				else
 					hideTile(tile)
 				end
