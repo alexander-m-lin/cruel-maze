@@ -82,7 +82,7 @@ sleeves; left click does nothing for him):
   them), and Devour recharges in 1 second (casting it cuts Devour's wait to 1 s too). Ending
   inside a wall pushes him out into the middle of that cell. While it's ready (or 2 seconds from
   ready) and while it runs, a wide red triangle round him points straight at each feared
-  survivor, wherever they are (drawn on the screen, so walls and fog never hide them).
+  survivor, wherever they are (floating just above the walls, so walls and fog never hide them).
 AI monsters are Fear Eater too: they Devour whoever they're chasing once they're in range. One
 AI monster a match (`Config.AI_MONSTERS_CASTING`) also casts Instill Fear whenever it's ready,
 and Living Nightmare whenever it's ready and a survivor is feared (then it goes straight through

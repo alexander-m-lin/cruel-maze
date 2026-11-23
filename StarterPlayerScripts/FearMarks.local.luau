@@ -5,8 +5,8 @@
 --                  themselves and their teammates too.
 --   NIGHTMARE POINTERS - for a Fear Eater player: while Living Nightmare is ready, nearly ready
 --                  (ARROW_LEAD seconds or less), or running, a wide red triangle round him points
---                  straight at each feared survivor, wherever they are (off screen too). Drawn on
---                  the screen, so walls and fog never hide them.
+--                  straight at each feared survivor, wherever they are (off screen too). They
+--                  float just above the walls, so walls and fog never hide them.
 --   DEVOUR TARGET - for a Fear Eater player, while Devour is ready: a ring on the floor under the
 --                  survivor a click would go for (DevourAim, the server's own choice; only
 --                  survivors you can see count). Red for a feared survivor (a sure catch).
@@ -107,36 +107,38 @@ local function updateMarks(feared)
 end
 
 ---------------------------------------------------------------- nightmare pointers
--- Drawn on the screen (so walls and fog can never hide them): one red triangle per feared
--- survivor, just out from his feet, pointing the way they are. Each is a square turned into a
--- diamond with half of it faded out by a gradient, which leaves a solid triangle.
+-- One flat red triangle per feared survivor, round him, pointing the way they are. They float
+-- just above the walls (and the fog, which reaches a stud above them), so nothing hides them.
 local ARROW_LEAD = 2          -- seconds before Living Nightmare is ready that the pointers appear
-local POINTER_SIZE = 62       -- pixels: the square's side (the triangle is 1.41x this wide)
-local POINTER_OUT = 62        -- pixels from his feet to the triangle's base
-local POINTER_BOB = 6         -- pixels it pushes out and back, so it reads as pointing
+local POINTER_START = 7       -- studs from his middle to a pointer's base (clear of his body)
+local POINTER_LENGTH = 8      -- base to tip
+local POINTER_HALF_WIDTH = 6  -- (the base is twice this wide)
+local POINTER_ABOVE = 1.3     -- studs above the top of the walls
+local THICK = 0.2
 
-local pointerGui = Instance.new("ScreenGui")
-pointerGui.Name = "NightmarePointers"
-pointerGui.ResetOnSpawn = false
-pointerGui.IgnoreGuiInset = true    -- (positions are viewport points)
-pointerGui.DisplayOrder = 1
-pointerGui.Parent = player:WaitForChild("PlayerGui")
-local pointers = {}
+local arrows = Instance.new("Model")
+arrows.Name = "NightmarePointers"
+local function wedge()
+	local p = Instance.new("WedgePart")
+	p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
+	p.Material = Enum.Material.Neon
+	p.Color = RED
+	p.Transparency = 0.1
+	p.Parent = arrows
+	return p
+end
+local pointers = {}   -- reused: { left, right } wedges each
 
-local function newPointer()
-	local f = Instance.new("Frame")
-	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Size = UDim2.fromOffset(POINTER_SIZE, POINTER_SIZE)
-	f.BackgroundColor3 = RED
-	f.BackgroundTransparency = 0.1
-	f.BorderSizePixel = 0
-	local g = Instance.new("UIGradient")
-	g.Rotation = -45      -- (with the frame turned angle + 45: keeps the half toward `angle`)
-	g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 1),
-		NumberSequenceKeypoint.new(0.501, 0), NumberSequenceKeypoint.new(1, 0) })
-	g.Parent = f
-	f.Parent = pointerGui
-	return f
+-- A flat right triangle: its right angle at `corner`, one leg `along` (unit) for `length` studs,
+-- the other `side` (unit, flat, perpendicular) for `width` studs. A WedgePart's right angle is at
+-- its bottom back edge: local +Y runs up the back to the top, local -Z along the bottom to the
+-- front; local X is its thickness (here: up).
+local function placeHalf(part, corner, along, side, length, width)
+	part.Size = Vector3.new(THICK, length, width)
+	local center = corner + along * (length / 2) + side * (width / 2)
+	local localZ = -side
+	local localX = along:Cross(localZ)
+	part.CFrame = CFrame.fromMatrix(center, localX, along, localZ)
 end
 
 local function nightmareSoon()
@@ -153,31 +155,33 @@ end
 local function updateArrow(feared)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local camera = workspace.CurrentCamera
+	local maze = workspace:FindFirstChild("Maze")
 	local used = 0
-	if root and #feared > 0 and not player:GetAttribute("Seized") and nightmareSoon() then
-		local feet = root.Position - Vector3.new(0, 2.5, 0)
-		local at = camera:WorldToViewportPoint(feet)
-		local center = Vector2.new(at.X, at.Y)
-		local bob = POINTER_BOB * math.sin(os.clock() * 5)
+	if root and maze and #feared > 0 and not player:GetAttribute("Seized") and nightmareSoon() then
+		local y = (maze:GetAttribute("FloorY") or 0) + (maze:GetAttribute("WallHeight") or 7) + POINTER_ABOVE
+		local base = Vector3.new(root.Position.X, y, root.Position.Z)
+		local bob = 0.8 * math.sin(os.clock() * 5)      -- a gentle push outward, so they read as pointing
 		for _, r in feared do
 			local to = (r.Position - root.Position) * Vector3.new(1, 0, 1)
 			if to.Magnitude < 1 then continue end
-			-- the way they are, on the screen
-			local ahead = camera:WorldToViewportPoint(feet + to.Unit * 10)
-			local dir = Vector2.new(ahead.X, ahead.Y) - center
-			if dir.Magnitude < 0.5 then continue end
-			dir = dir.Unit
 			used += 1
-			local f = pointers[used] or newPointer()
-			pointers[used] = f
-			local p = center + dir * (POINTER_OUT + bob)
-			f.Position = UDim2.fromOffset(p.X, p.Y)
-			f.Rotation = math.deg(math.atan2(dir.Y, dir.X)) + 45
-			f.Visible = true
+			local pointer = pointers[used]
+			if not pointer then
+				pointer = { wedge(), wedge() }
+				pointers[used] = pointer
+			end
+			local f = to.Unit
+			local s = f:Cross(Vector3.yAxis)
+			local corner = base + f * (POINTER_START + bob)
+			placeHalf(pointer[1], corner, f, s, POINTER_LENGTH, POINTER_HALF_WIDTH)
+			placeHalf(pointer[2], corner, f, -s, POINTER_LENGTH, POINTER_HALF_WIDTH)
+			pointer[1].Parent, pointer[2].Parent = arrows, arrows
 		end
 	end
-	for n = used + 1, #pointers do pointers[n].Visible = false end
+	for n = used + 1, #pointers do                  -- spare ones put away
+		pointers[n][1].Parent, pointers[n][2].Parent = nil, nil
+	end
+	arrows.Parent = used > 0 and workspace.CurrentCamera or nil
 end
 
 ---------------------------------------------------------------- Devour target
