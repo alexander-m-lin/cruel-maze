@@ -26,8 +26,9 @@ wards watching relics and wherever survivors were last seen).
 Developers (anyone in Studio, and the experience's owner in the published game) also get buttons
 at the bottom left: "Role" forces their role for the next match, "New match" ends this one and
 starts another straight away, and "Doors" opens the doors panel. "Sandbox" starts the **sandbox**
-instead: a 6 x 6 test maze (an open square with a wall jutting in, a door in it, a crushing wall in
-a short corridor, one relic, one false relic and one sanctuary), with only the players in it, no
+instead: a 9 x 9 test maze (an open square with a wall jutting in, a door in it, a crushing wall in
+a short corridor, one relic, one false relic and one sanctuary, wrapped round the top corner by
+winding hallways like the real maze's), with only the players in it, no
 timer, no end and 99 lives. A panel down the left places things where you click the floor (a
 roaming bot, a dummy bot held in place, a feared dummy, an AI monster, a ward, a false relic) and
 does things at once (fear every survivor, freeze or unfreeze AI monsters, make your abilities
