@@ -12,8 +12,10 @@
 --              "DisabledUntil") spits blue sparks meanwhile.
 --   ENCRYPT  - a burst of blue as he dissolves (and again as he comes back). Every CIRCUIT
 --              INDICATOR (tagged "CircuitIndicator": his and the copies, all drawn the same) is a
---              square of glowing blue circuit traces on the floor of its cell, sliding cell to cell
---              ("From", "To", "MoveAt", "MoveTime"), shown wherever the fog lets you see it; in
+--              small square of flickering bright blue tiles in the middle of its cell, sliding cell
+--              to cell ("From", "To", "MoveAt", "MoveTime") and laying a thinner line of the same
+--              tiles from the old cell to the new one, which then fades. Shown wherever the fog
+--              lets you see it; in
 --              its last "WarnTime" seconds every one flickers alike. To his own team he stays in
 --              view, see-through and outlined blue.
 
@@ -36,7 +38,6 @@ local fxEvent = Net.event("AbilityFx")
 local BLUE = Color3.fromRGB(60, 170, 255)
 local BRIGHT = Color3.fromRGB(170, 230, 255)
 local EDGE = Color3.fromRGB(20, 110, 255)      -- (neon brightens: a deep blue reads as bright blue)
-local DEEP = Color3.fromRGB(20, 70, 160)
 local SPARKLE = "rbxasset://textures/particles/sparkles_main.dds"
 local EDGE_ABOVE = 1.3       -- studs above the walls the EMP's edge floats (as the nightmare pointers)
 local EDGE_SEGMENTS = 64
@@ -290,32 +291,65 @@ local function dissolveBurst(at)
 	Debris:AddItem(ring, 0.6)
 end
 
--- One circuit drawing: a dim square with traces and chips, all identical (the same pattern)
-local TRACES = {   -- in units of the square's half-size: { x1, z1, x2, z2 }
-	{ -0.9, -0.5, 0.2, -0.5 }, { 0.2, -0.5, 0.2, 0.3 }, { 0.2, 0.3, 0.9, 0.3 },
-	{ -0.6, 0.8, -0.6, -0.1 }, { -0.6, -0.1, -0.1, -0.1 }, { -0.9, 0.5, -0.6, 0.5 },
-	{ 0.6, -0.9, 0.6, -0.2 }, { 0.6, 0.6, 0.6, 0.9 }, { -0.2, 0.6, 0.6, 0.6 },
-}
-local CHIPS = { { 0.2, -0.5 }, { -0.6, -0.1 }, { 0.6, 0.6 }, { 0.6, -0.2 }, { -0.2, 0.6 } }
-local HALF = 6   -- studs: half the square's width
+-- One circuit drawing: a small square of bright blue tiles in the middle of its cell, every tile
+-- flickering on its own (its see-through-ness drifting smoothly but quickly). Each move to the next
+-- cell lays a LINE of the same tiles, one tile wide, behind it from the old cell to the new one,
+-- which lingers a moment after it arrives and fades. Every indicator is drawn the same way.
+local TILE = 1.1             -- studs: a tile's width
+local PITCH = 1.35           -- studs from one tile to the next (the gaps show the tiles)
+local SQUARE_TILES = 4       -- the square is this many tiles a side
+local FLICKER_RATE = 6       -- how fast the tiles flicker (higher: quicker)
+local TRAIL_HOLD = 0.5       -- seconds a line stays after the circuit arrives...
+local TRAIL_FADE = 0.6       -- ...then fades over this
+local SQUARE_HALF = ((SQUARE_TILES - 1) * PITCH + TILE) / 2   -- studs from the square's middle to its edge
 
-local circuits = {}   -- [model] = { parts, traces = {...}, chips = {...}, plate }
+local circuits = {}   -- [model] = { square = { tile }, trails = { trail }, lastMove }
+                      --   tile = { part, seed }; trail = { tiles = { tile + d }, from, dir, length, startAt, moveTime }
+
+local function newTile(size)
+	return { part = part("CircuitTile", size, BLUE, 1), seed = math.random() * 1000 }
+end
+
+-- a tile's see-through-ness now: smooth noise, quick
+local function flicker(tile, clock)
+	local n = math.clamp(0.5 + math.noise(clock * FLICKER_RATE, tile.seed) * 1.6, 0, 1)
+	return 0.05 + 0.7 * n
+end
 
 local function buildCircuit()
-	local c = { parts = {}, traces = {}, chips = {} }
-	c.plate = part("CircuitPlate", Vector3.new(HALF * 2, 0.05, HALF * 2), DEEP, 0.7)
-	table.insert(c.parts, c.plate)
-	for i, t in TRACES do
-		local p = part("Trace", Vector3.new(0.35, 0.06, 1), BLUE, 0.2)
-		c.traces[i] = { part = p, t = t }
-		table.insert(c.parts, p)
-	end
-	for i, ch in CHIPS do
-		local p = part("Chip", Vector3.new(1, 0.1, 1), BRIGHT, 0.1)
-		c.chips[i] = { part = p, at = ch }
-		table.insert(c.parts, p)
+	local c = { square = {}, trails = {} }
+	for i = 1, SQUARE_TILES * SQUARE_TILES do
+		local tile = newTile(Vector3.new(TILE, 0.06, TILE))
+		tile.ix, tile.iz = (i - 1) % SQUARE_TILES, (i - 1) // SQUARE_TILES
+		c.square[i] = tile
 	end
 	return c
+end
+
+-- a line of tiles from `from` to `to` (floor points), drawn as the circuit travels along it
+local function newTrail(from, to, startAt, moveTime)
+	local flat = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+	local length = flat.Magnitude
+	if length < 0.5 then return nil end
+	local trail = { tiles = {}, from = from, dir = flat.Unit, length = length, startAt = startAt, moveTime = moveTime }
+	local count = math.max(1, math.round(length / PITCH))
+	for i = 1, count do
+		local tile = newTile(Vector3.new(TILE, 0.05, TILE))
+		tile.d = (i - 0.5) * length / count
+		trail.tiles[i] = tile
+	end
+	return trail
+end
+
+local function destroyTiles(tiles, fade)
+	for _, tile in tiles do
+		if fade then
+			TweenService:Create(tile.part, TweenInfo.new(0.3), { Transparency = 1 }):Play()
+			Debris:AddItem(tile.part, 0.35)
+		else
+			tile.part:Destroy()
+		end
+	end
 end
 
 local function circuitPosition(model, now)
@@ -339,40 +373,61 @@ RunService.RenderStepped:Connect(function()
 			c = buildCircuit()
 			circuits[model] = c
 		end
+		-- a new move: a new line, from where it set off to the next cell
+		local moveAt = model:GetAttribute("MoveAt")
+		if moveAt and moveAt ~= c.lastMove then
+			c.lastMove = moveAt
+			local from, to = model:GetAttribute("From"), model:GetAttribute("To")
+			local trail = from and to and newTrail(from, to, moveAt, model:GetAttribute("MoveTime") or 0)
+			if trail then table.insert(c.trails, trail) end
+		end
 		local at = circuitPosition(model, now)
 		local endsAt, warn = model:GetAttribute("EndsAt") or math.huge, model:GetAttribute("WarnTime") or 1
 		local shown = at ~= nil and model:GetAttribute("FogState") ~= "hidden" and model:GetAttribute("FogState") ~= nil
-		-- the last seconds: flickering, all alike
-		local warning = endsAt - now < warn
-		if warning and math.floor(clock * 12) % 2 == 0 then shown = false end
-		if not shown then
-			for _, p in c.parts do p.Transparency = 1 end
-			continue
+		-- the last seconds: flickering on and off, all alike
+		if endsAt - now < warn and math.floor(clock * 12) % 2 == 0 then shown = false end
+
+		-- the square
+		local origin = at and Vector3.new(at.X, y + 0.03, at.Z)
+		local offset = (SQUARE_TILES - 1) / 2
+		for _, tile in c.square do
+			if shown then
+				tile.part.CFrame = CFrame.new(origin + Vector3.new((tile.ix - offset) * PITCH, 0, (tile.iz - offset) * PITCH))
+				tile.part.Transparency = flicker(tile, clock)
+			else
+				tile.part.Transparency = 1
+			end
 		end
-		local origin = Vector3.new(at.X, y, at.Z)
-		c.plate.CFrame = CFrame.new(origin)
-		c.plate.Transparency = 0.7
-		c.plate.Color = warning and BLUE or DEEP
-		for i, tr in c.traces do
-			local t = tr.t
-			local a = origin + Vector3.new(t[1], 0, t[2]) * HALF + Vector3.yAxis * 0.03
-			local b = origin + Vector3.new(t[3], 0, t[4]) * HALF + Vector3.yAxis * 0.03
-			tr.part.Size = Vector3.new(0.35, 0.06, (b - a).Magnitude + 0.35)
-			tr.part.CFrame = CFrame.lookAt((a + b) / 2, b)
-			-- a pulse of light running along the traces
-			tr.part.Transparency = 0.15 + 0.6 * (0.5 + 0.5 * math.sin(clock * 6 - i * 0.8))
-		end
-		for i, ch in c.chips do
-			ch.part.CFrame = CFrame.new(origin + Vector3.new(ch.at[1], 0, ch.at[2]) * HALF + Vector3.yAxis * 0.05)
-			ch.part.Transparency = 0.1 + 0.3 * (0.5 + 0.5 * math.sin(clock * 4 + i))
+
+		-- the lines: drawn up to where the circuit's got to, then lingering and fading
+		for i = #c.trails, 1, -1 do
+			local trail = c.trails[i]
+			local elapsed = now - trail.startAt
+			local k = trail.moveTime > 0 and math.clamp(elapsed / trail.moveTime, 0, 1) or 1
+			k = k * k * (3 - 2 * k)   -- (the same easing as the square's slide)
+			local fade = math.clamp((elapsed - trail.moveTime - TRAIL_HOLD) / TRAIL_FADE, 0, 1)
+			if fade >= 1 then
+				destroyTiles(trail.tiles)
+				table.remove(c.trails, i)
+				continue
+			end
+			local look = CFrame.lookAt(Vector3.zero, trail.dir)
+			for _, tile in trail.tiles do
+				-- (up to the square's edge: none under it)
+				if shown and tile.d <= k * trail.length - SQUARE_HALF then
+					local p = trail.from + trail.dir * tile.d
+					tile.part.CFrame = CFrame.new(p.X, y, p.Z) * look
+					tile.part.Transparency = 1 - (1 - flicker(tile, clock)) * (1 - fade)
+				else
+					tile.part.Transparency = 1
+				end
+			end
 		end
 	end
 	for model, c in circuits do
 		if not seen[model] then
-			for _, p in c.parts do
-				TweenService:Create(p, TweenInfo.new(0.3), { Transparency = 1 }):Play()
-				Debris:AddItem(p, 0.35)
-			end
+			destroyTiles(c.square, true)
+			for _, trail in c.trails do destroyTiles(trail.tiles, true) end
 			circuits[model] = nil
 		end
 	end
