@@ -632,6 +632,9 @@ end
 --                                     it comes back there after being caught), or held and feared
 --   "monster"                         an AI monster there (Fear Eater)
 --   "ward" / "falseRelic"             the Maze Master's ward or false relic there (their own rules)
+--   "concepts"                        a copy of every model in ServerStorage.ModelConcepts (character
+--                                     models being designed), in a row centred there, facing the
+--                                     camera, anchored and not solid; "clear" removes them
 --   "fearAll"                         every survivor feared (as Instill Fear does)
 --   "freeze"                          AI monsters stop / start again
 --   "ready"                           your abilities are ready again
@@ -663,6 +666,37 @@ sandboxAction = function(player, action, at)
 	elseif action == "falseRelic" then
 		local ok = x ~= nil and objectives:AddFalseRelic(x, z) ~= nil
 		return ok, ok and "False relic" or "Can't put a false relic there (needs 2-3 ways out)"
+	elseif action == "concepts" then
+		local source = ServerStorage:FindFirstChild("ModelConcepts")
+		local models = source and source:GetChildren() or {}
+		if not spot then return false, "Click the floor" end
+		if #models == 0 then return false, "No models in ServerStorage.ModelConcepts" end
+		local holder = workspace:FindFirstChild("SandboxConcepts") or Instance.new("Folder")
+		holder.Name = "SandboxConcepts"
+		holder.Parent = workspace
+		local toCamera = Vector3.new(Config.CAMERA_DIRECTION.X, 0, Config.CAMERA_DIRECTION.Z).Unit
+		local across = Vector3.new(-toCamera.Z, 0, toCamera.X)
+		local GAP = 3
+		local widths, total = {}, 0
+		for i, model in models do
+			local _, size = model:GetBoundingBox()
+			widths[i] = math.max(size.X, size.Z)
+			total += widths[i] + (i > 1 and GAP or 0)
+		end
+		local offset = -total / 2
+		for i, model in models do
+			local copy = model:Clone()
+			for _, part in copy:GetDescendants() do
+				if part:IsA("BasePart") then part.Anchored, part.CanCollide, part.CanQuery = true, false, false end
+			end
+			copy.Parent = holder
+			local box, size = copy:GetBoundingBox()
+			local centre = spot + across * (offset + widths[i] / 2) + Vector3.new(0, size.Y / 2, 0)
+			-- a concept's front is its bounding box's -Z (LookVector), as models are made facing
+			copy:PivotTo(CFrame.lookAt(centre, centre + toCamera) * box:ToObjectSpace(copy:GetPivot()))
+			offset += widths[i] + GAP
+		end
+		return true, ("%d concept%s"):format(#models, #models == 1 and "" or "s")
 	elseif action == "fearAll" then
 		for _, survivor in survivorsInMatch() do Fear.apply(survivor, fearDef) end
 		return true, "Feared"
@@ -706,6 +740,8 @@ sandboxAction = function(player, action, at)
 		end
 		for _, bot in bots do bot:Destroy() end
 		table.clear(bots)
+		local concepts = workspace:FindFirstChild("SandboxConcepts")
+		if concepts then concepts:Destroy() end
 		return true, "Cleared"
 	end
 	return false, "Unknown"
@@ -728,6 +764,8 @@ end
 local function runCountdown()
 	sandbox = sandboxNext
 	status:SetAttribute("Sandbox", sandbox or nil)
+	local concepts = workspace:FindFirstChild("SandboxConcepts")   -- (the Sandbox panel's "Concepts")
+	if concepts then concepts:Destroy() end
 	botCount, aiMonsterCount = 0, 0
 	table.clear(heroesTaken)
 	maze = MazeBuilder.build(sandbox and { layout = Sandbox.layout() } or {
