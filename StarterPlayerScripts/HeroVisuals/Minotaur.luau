@@ -10,7 +10,7 @@
 --   TEAR ASUNDER - ("DevourAt"/"DevourGo", as Devour) rears back with his arms spread wide for the
 --              windup, then lunges, arms closing.
 --   THE KILL - ("KillStart"/"KillVictim") he grabs them and lifts them overhead, lying face up
---              across his fists: his left fist under their shoulders, his right under their knees
+--              in his fists: his left fist round their upper chest, his right round their shins
 --              (his arms close in to fit them: gripSpread). They struggle as he pulls his fists
 --              apart, and they're torn in two (Victims.tear), arms flung apart.
 --   DEVASTATING CHARGE - ("ChargeAt" ...) for the windup he lowers his horns and paws the floor,
@@ -66,9 +66,10 @@ local FLING_SPEED = 45      -- how fast someone he tramples is flung (studs per 
 local RED = Color3.fromRGB(255, 45, 30)
 local DUST = Color3.fromRGB(150, 130, 105)
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
--- THE GRIP: the victim lies on his fists, the middle of their body this many studs above the grip
--- point on each fist (the fist reaches about 1.1 above it; half a head's depth is about 0.6)
-local GRIP_LIFT   = 1.9
+-- THE GRIP: the victim is held in his fists, the middle of their body this many studs above the grip
+-- point on each fist (the fist reaches about 1.1 above it): their body runs through the top half of
+-- each fist, so the knuckles close round their back
+local GRIP_LIFT   = 0.5
 local FLAIL_POWER = 0.6     -- how wildly they struggle up there (1 = Victims.flail's full thrashing,
                             -- which swings their feet down into his arms)
 local GRIP_STRAIN = 0.06    -- his fists pull this much further apart (of the grip's span) before the rip
@@ -402,9 +403,9 @@ function animate.pose(model, s, dt)
 end
 
 ---------------------------------------------------------------- the victim
--- Held on his fists, face up, head toward his left fist: their shoulders on his left fist and their
--- knees on his right (near their ends, so little hangs past his fists into his arms), their back
--- resting on top. -> their root's CFrame, and the way their head is
+-- Held in his fists, face up, head toward his left fist: his left fist round their upper chest, just
+-- below the neck, and his right round their shins (near their ends, so only the head and feet stick
+-- out past his fists, clear of his arms). -> their root's CFrame, and the way their head is
 local function gripFrame(mt, v)
 	local l, r = fistAt(mt, "Left"), fistAt(mt, "Right")
 	if not (l and r) then return nil end
@@ -425,18 +426,20 @@ local function updateVictim(model, mt)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root then
 			character.Archivable = true
-			-- where he grips them, in their root's space, along their spine: the top of their chest
-			-- (the shoulders), and the bottom of their thighs (the knees)
-			local function edge(name, top)
-				local p = character:FindFirstChild(name)
-				if not p then return nil end
-				local c = root.CFrame:PointToObjectSpace(p.Position)
-				return c.Y + (top and 1 or -1) * p.Size.Y / 2
+			-- where he grips them, in their root's space, along their spine: the upper chest (just below
+			-- the top of the torso), and the shins (the middle of the lower legs; R6: low on the legs)
+			local function y(name) local p = character:FindFirstChild(name) return p and root.CFrame:PointToObjectSpace(p.Position).Y, p and p.Size.Y end
+			local torsoY, torsoH = y("UpperTorso")
+			if not torsoY then torsoY, torsoH = y("Torso") end
+			local upper = torsoY and (torsoY + torsoH / 2 - 0.45) or 1.4
+			local shinL, shinR = y("LeftLowerLeg"), y("RightLowerLeg")
+			if not (shinL and shinR) then
+				local legL, legH = y("Left Leg")
+				shinL = legL and legL - legH / 4
+				shinR = shinL
 			end
-			local shoulders = edge("UpperTorso", true) or edge("Torso", true) or 1.6
-			local kneeL, kneeR = edge("LeftUpperLeg", false) or edge("Left Leg", false), edge("RightUpperLeg", false) or edge("Right Leg", false)
-			local knees = kneeL and kneeR and (kneeL + kneeR) / 2 or -2
-			local chest, thighs = Vector3.new(0, shoulders - 0.3, 0), Vector3.new(0, knees + 0.3, 0)
+			local shins = shinL and shinR and (shinL + shinR) / 2 or -2.2
+			local chest, thighs = Vector3.new(0, upper, 0), Vector3.new(0, shins, 0)
 			mt.victim = { character = character, root = root, from = root.CFrame, copy = character:Clone(),
 				start = killStart, joints = Victims.joints(character),
 				gripMid = (chest + thighs) / 2, span = math.max(1.5, chest.Y - thighs.Y) }
