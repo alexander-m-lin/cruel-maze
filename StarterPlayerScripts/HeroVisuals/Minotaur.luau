@@ -9,8 +9,10 @@
 --              when standing. Chasing ("Mode" chase), he drops his head, horns first, arms out.
 --   TEAR ASUNDER - ("DevourAt"/"DevourGo", as Devour) rears back with his arms spread wide for the
 --              windup, then lunges, arms closing.
---   THE KILL - ("KillStart"/"KillVictim") he grabs them, lifts them overhead between his fists,
---              struggling, and tears them in two (Victims.tear), arms flung apart.
+--   THE KILL - ("KillStart"/"KillVictim") he grabs them and lifts them overhead, lying face up
+--              across his fists: his left fist under their chest, his right under their thighs
+--              (his arms close in to fit them: gripSpread). They struggle as he pulls his fists
+--              apart, and they're torn in two (Victims.tear), arms flung apart.
 --   DEVASTATING CHARGE - ("ChargeAt" ...) for the windup he lowers his horns and paws the floor,
 --              and a red LANE shows his path to the wall (anyone who can see him sees it; his side
 --              always); then he gallops along it, kicking up dust; at the wall ("ChargeEnd") a
@@ -64,6 +66,10 @@ local FLING_SPEED = 45      -- how fast someone he tramples is flung (studs per 
 local RED = Color3.fromRGB(255, 45, 30)
 local DUST = Color3.fromRGB(150, 130, 105)
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
+-- THE GRIP: the victim lies on his fists, their back this many studs above each fist's middle
+-- (the fist's radius plus half their body's depth, less a little: the fingers close round them)
+local GRIP_LIFT   = 1.1
+local GRIP_STRAIN = 0.06    -- his fists pull this much further apart (of the grip's span) before the rip
 
 local function lerp(a, b, t) return a + (b - a) * t end
 local function smooth(x) x = math.clamp(x, 0, 1) return x * x * (3 - 2 * x) end
@@ -160,13 +166,38 @@ function animate.setup(model, s)
 	local hip = mt.joints.LeftHip
 	mt.legLength = hip and ((hip.Part0.CFrame * hip.C0).Position.Y - bottom) or 5 * scale
 	mt.floor = bottom - model:GetPivot().Position.Y            -- (his root's height off the floor, negated)
+	local pivot = model:GetPivot()
 	for _, side in { "Left", "Right" } do
 		local arm = model:FindFirstChild(side .. "Arm")
-		if arm then
-			mt.fists[side] = { part = arm, offset = Vector3.new(0, -(arm.Size.Y / 2 - 0.9 * scale), -0.3 * scale) }
+		local shoulder = mt.joints[side .. "Shoulder"]
+		if arm and shoulder then
+			local offset = Vector3.new(0, -(arm.Size.Y / 2 - 0.9 * scale), -0.3 * scale)
+			local at = pivot:PointToObjectSpace((shoulder.Part0.CFrame * shoulder.C0).Position)
+			-- (in his own space, the rest pose: the shoulder, and the fist from it)
+			mt.fists[side] = { part = arm, offset = offset, shoulder = at,
+				reach = pivot:PointToObjectSpace(arm.CFrame * offset) - at }
 		end
 	end
 	s.mt = mt
+end
+
+-- How far out (the shoulders' sideways angle, both arms alike: the left goes out with -out) his
+-- arms must be, raised to `pitch`, for his fists to be `span` studs apart. Both arms hang off his
+-- torso, so the distance between the fists doesn't depend on how the rest of him is tilted.
+local function gripSpread(mt, pitch, span)
+	local l, r = mt.fists.Left, mt.fists.Right
+	if not (l and r) then return 0.12 end
+	local function apart(out)
+		local a = l.shoulder + CFrame.Angles(pitch, 0, -out):VectorToWorldSpace(l.reach)
+		local b = r.shoulder + CFrame.Angles(pitch, 0, out):VectorToWorldSpace(r.reach)
+		return (a - b).Magnitude
+	end
+	local lo, hi = -0.9, 0.9                 -- (further out = further apart)
+	for _ = 1, 24 do
+		local mid = (lo + hi) / 2
+		if apart(mid) < span then lo = mid else hi = mid end
+	end
+	return (lo + hi) / 2
 end
 
 local function fistAt(mt, side)
@@ -336,8 +367,12 @@ function animate.pose(model, s, dt)
 		shL, shR = lerp(shL, 1.35, grab), lerp(shR, 1.35, grab)
 		outL, outR = lerp(outL, -0.1, grab), lerp(outR, -0.1, grab)
 		-- holding them up: arms straight overhead, a little apart, pulling outward harder and harder
+		-- (the fists as far apart as the victim's chest from their thighs, then pulling wider)
+		local v = mt.victim
+		local span = (v and v.span or 2.6) * (1 + GRIP_STRAIN * strain)
+		local out = gripSpread(mt, 2.75, span)
 		shL, shR = lerp(shL, 2.75 + shake, hold), lerp(shR, 2.75 - shake, hold)
-		outL, outR = lerp(outL, 0.12 + strain * 0.12, hold), lerp(outR, 0.12 + strain * 0.12, hold)
+		outL, outR = lerp(outL, out, hold), lerp(outR, out, hold)
 		-- the rip: arms flung down and out to the sides
 		shL, shR = lerp(shL, 1.9, fling), lerp(shR, 1.9, fling)
 		outL, outR = lerp(outL, 1.35, fling), lerp(outR, 1.35, fling)
@@ -365,15 +400,18 @@ function animate.pose(model, s, dt)
 end
 
 ---------------------------------------------------------------- the victim
--- Held overhead between his fists: lying across them, head toward his left fist, face up
-local function gripFrame(mt)
+-- Held on his fists, face up, head toward his left fist: their chest on his left fist and their
+-- thighs on his right, their back resting on top. -> their root's CFrame, and the way their head is
+local function gripFrame(mt, v)
 	local l, r = fistAt(mt, "Left"), fistAt(mt, "Right")
 	if not (l and r) then return nil end
 	local along = (l - r).Magnitude > 0.1 and (l - r).Unit or Vector3.xAxis
-	local back = -Vector3.yAxis - along * along:Dot(-Vector3.yAxis)
+	local back = -Vector3.yAxis - along * along:Dot(-Vector3.yAxis)        -- their back: toward the floor
 	back = back.Magnitude > 0.01 and back.Unit or Vector3.zAxis
-	local at = (l + r) / 2 + Vector3.new(0, 1.2, 0) - along * 0.8   -- (the root sits at the hips, below the middle)
-	return CFrame.fromMatrix(at, along:Cross(back), along, back), along
+	local frame = CFrame.fromMatrix(Vector3.zero, along:Cross(back), along, back)
+	-- the middle of their grip (between chest and thighs) on the middle of his fists, lifted onto them
+	local held = (l + r) / 2 - back * GRIP_LIFT
+	return CFrame.new(held - frame:VectorToWorldSpace(v.gripMid)) * frame, along
 end
 
 local function updateVictim(model, mt)
@@ -384,8 +422,15 @@ local function updateVictim(model, mt)
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root then
 			character.Archivable = true
+			-- where he grips them, in their root's space: the chest, and the thighs
+			local function at(name) local p = character:FindFirstChild(name) return p and root.CFrame:PointToObjectSpace(p.Position) end
+			local chest = at("UpperTorso") or at("Torso") or Vector3.new(0, 1.3, 0)
+			local thighL, thighR = at("LeftUpperLeg") or at("Left Leg"), at("RightUpperLeg") or at("Right Leg")
+			local thighs = thighL and thighR and (thighL + thighR) / 2 or Vector3.new(0, -1.3, 0)
+			chest, thighs = Vector3.new(0, chest.Y, 0), Vector3.new(0, thighs.Y, 0)   -- (along their spine)
 			mt.victim = { character = character, root = root, from = root.CFrame, copy = character:Clone(),
-				start = killStart, joints = Victims.joints(character) }
+				start = killStart, joints = Victims.joints(character),
+				gripMid = (chest + thighs) / 2, span = math.max(1.5, chest.Y - thighs.Y) }
 		end
 	end
 	local v = mt.victim
@@ -398,7 +443,7 @@ local function updateVictim(model, mt)
 			v.hidden = monsterHidden
 			Victims.hide(v.character, monsterHidden)
 		end
-		local grip, along = gripFrame(mt)
+		local grip, along = gripFrame(mt, v)
 		if grip then
 			v.root.CFrame = v.from:Lerp(grip, smooth(k / K.GRAB))
 			v.side = along
