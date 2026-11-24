@@ -22,7 +22,8 @@
 --              slams them down as he lands. For the last moments a red RING shows where, drawn
 --              above the fog and the walls, to his side and to survivors near it; at the impact a
 --              shockwave runs out over it ("CrushImpact").
---   AIMING CRUSH - (hold E) a faint circle shows his range and a ring where he'd land.
+--   AIMING CRUSH - (hold E) a thin circle shows his range and a ring where he'd land, both drawn
+--              above the fog and the walls (so you can aim into places you can't see).
 --
 -- Joints (ServerStorage.MinotaurRig): Root (the root to the torso), Neck, Left/RightShoulder,
 -- Left/RightHip, all Motor6Ds whose frames are lined up with the body (facing -Z), so Transform
@@ -643,9 +644,12 @@ fxEvent.OnClientEvent:Connect(function(kind, userId, a, b)
 end)
 
 ---------------------------------------------------------------- aiming Crush (hold E)
-local aimRange = part("CrushRange", nil, RED, 1)
-aimRange.Shape = Enum.PartType.Cylinder
-aimRange.Parent = nil
+local AIM_SEGMENTS = 72
+local aimRange = {}            -- his range: an outline (a filled circle that size, above the fog, would tint the whole screen)
+for i = 1, AIM_SEGMENTS do
+	aimRange[i] = part("CrushRange", nil, RED, 0.45)
+	aimRange[i].Parent = nil
+end
 local aimSpot = part("CrushAim", nil, RED, 1)
 aimSpot.Shape = Enum.PartType.Cylinder
 aimSpot.Parent = nil
@@ -659,10 +663,6 @@ Minotaur.aim = {
 			if not root then return end
 			local y = floorY() + 0.1
 			local at = Vector3.new(root.Position.X, y, root.Position.Z)
-			aimRange.Size = Vector3.new(0.1, def.range * 2, def.range * 2)
-			aimRange.CFrame = CFrame.new(at) * CFrame.Angles(0, 0, math.pi / 2)
-			aimRange.Transparency = 0.9
-			aimRange.Parent = folder
 			-- where he'd land: the mouse on the floor, brought within range
 			local target = at + root.CFrame.LookVector * Vector3.new(1, 0, 1) * def.range
 			if UserInputService.MouseEnabled then
@@ -675,13 +675,22 @@ Minotaur.aim = {
 			end
 			local offset = (target - at) * Vector3.new(1, 0, 1)
 			if offset.Magnitude > def.range then offset = offset.Unit * def.range end
+			-- (both drawn above the fog and the walls, lined up with the floor on screen)
+			local lift = aboveFog(y)
+			local center = at + lift
+			for i, p in aimRange do
+				local a1, a2 = (i - 1) / AIM_SEGMENTS * math.pi * 2, i / AIM_SEGMENTS * math.pi * 2
+				bar(p, center + Vector3.new(math.cos(a1), 0, math.sin(a1)) * def.range,
+					center + Vector3.new(math.cos(a2), 0, math.sin(a2)) * def.range, 0.35)
+				p.Parent = folder
+			end
 			aimSpot.Size = Vector3.new(0.12, def.radius * 2, def.radius * 2)
-			aimSpot.CFrame = CFrame.new(at + offset + Vector3.new(0, 0.02, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+			aimSpot.CFrame = CFrame.new(at + offset + lift + Vector3.new(0, 0.02, 0)) * CFrame.Angles(0, 0, math.pi / 2)
 			aimSpot.Transparency = 0.6
 			aimSpot.Parent = folder
 		end,
 		hide = function()
-			aimRange.Parent = nil
+			for _, p in aimRange do p.Parent = nil end
 			aimSpot.Parent = nil
 		end,
 	},
