@@ -70,25 +70,15 @@ local REMAINS_TIME = 6      -- seconds the pieces lie about
 local FLING_SPEED = 45      -- how fast someone he tramples is flung (studs per second, his way)
 local RED = Color3.fromRGB(255, 45, 30)
 local DUST = Color3.fromRGB(150, 130, 105)
--- The charge lane's HORNS: his own head, seen from above, drawn flat on it again and again, horns
--- pointing the way he'll charge and drifting that way through the windup. Strokes of thick bars, in
--- the head's own space: x across, z ahead (studs, before HORN_SCALE). Like his real head: a broad,
--- rounded skull narrowing to the muzzle behind, and stout horns going almost straight out from it,
--- only their ends hooking forward to blunt tips.
-local HORN_STROKES = {
-	-- the skull, brow to muzzle (widths: each stretch, in order)
-	{ points = { Vector3.new(0, 0, 0.9), Vector3.new(0, 0, -0.3), Vector3.new(0, 0, -1.6), Vector3.new(0, 0, -2.6) },
-		widths = { 3.2, 2.7, 1.9 } },
-	-- a horn (the left; mirrored for the right): out from the skull, then hooking forward
-	{ points = { Vector3.new(-1.2, 0, 0.3), Vector3.new(-2.6, 0, 0.35), Vector3.new(-3.7, 0, 0.75),
-		Vector3.new(-4.4, 0, 1.6), Vector3.new(-4.6, 0, 2.5) },
-		widths = { 1.7, 1.5, 1.2, 0.75 }, mirror = true },
-}
-local HORN_SCALE   = 1.3       -- (about 13 studs across the horn tips: most of the lane's 14)
-local HORN_FRONT   = 2.9       -- how far ahead of its middle the shape reaches (the tips), and...
-local HORN_BACK    = 2.6       -- ...behind it (the muzzle), before scaling
-local HORN_EVERY   = 10        -- studs between them
-local HORN_START   = 8         -- studs ahead of him the first one's middle can be
+-- The charge lane's HORNS: his own head seen from above - a broad skull and stout horns hooking
+-- forward - drawn flat on it again and again, horns pointing the way he'll charge, drifting that way
+-- through the windup. A smooth silhouette (assets/textures/Minotaur/charge_horns.png, made by
+-- tools/textures/charge_horns.py: white, so it's tinted here), one flat decal per mark.
+local HORN_IMAGE   = "rbxassetid://85352954011119"
+local HORN_SIZE    = Vector2.new(13.2, 6.6)   -- studs across (the lane is 14) and deep (its picture is 2:1)
+local HORN_COLOR   = Color3.fromRGB(255, 45, 25)   -- (a decal doesn't glow like the neon lane: deeper and more opaque)
+local HORN_EVERY   = 10        -- studs between their middles
+local HORN_START   = 7         -- studs ahead of him the first one's middle can be
 local HORN_SCROLL  = 12        -- studs a second they drift forward
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
 -- THE GRIP: the victim is held in his fists, the middle of their body this many studs above the grip
@@ -576,48 +566,36 @@ local function chargeEffects(model, mt)
 		-- the horns, repeated along it (fading in at his end and out at the far end)
 		mt.laneHorns = mt.laneHorns or {}
 		local length = (b - a):Dot(dir)
-		local across = Vector3.new(-dir.Z, 0, dir.X)
-		local front = HORN_FRONT * HORN_SCALE
+		local front = HORN_SIZE.Y / 2
 		local used = 0
-		-- a stroke's stretch: a bar from p1 to p2, run on a little past each end (not past a tip) so
-		-- the bends don't show notches
-		local function hornBar(p1, p2, width, transparency, tip)
-			used += 1
-			local piece = mt.laneHorns[used]
-			if not piece then
-				piece = part("ChargeHorn", nil, RED, 0.3)
-				mt.laneHorns[used] = piece
-			end
-			piece.Parent = folder
-			local u = (p2 - p1).Magnitude > 0.01 and (p2 - p1).Unit or dir
-			bar(piece, p1 - u * width * 0.3, tip and p2 or p2 + u * width * 0.3, width)
-			piece.Transparency = transparency
-		end
 		local first = HORN_START + (now * HORN_SCROLL) % HORN_EVERY
 		local at = first
 		while at + front <= length - 1 do
-			local origin = a + dir * at + Vector3.new(0, 0.02, 0)
-			local function world(v) return origin + across * (v.X * HORN_SCALE) + dir * (v.Z * HORN_SCALE) end
-			local fade = math.min(1, (at - HORN_START) / 4, (length - 1 - at - front) / 4)
-			local transparency = 1 - (0.55 + 0.35 * k) * math.clamp(fade, 0, 1)
-			for _, stroke in HORN_STROKES do
-				for side = 1, stroke.mirror and 2 or 1 do
-					local flip = side == 2 and -1 or 1
-					local pts = stroke.points
-					for i = 1, #pts - 1 do
-						local p1 = Vector3.new(pts[i].X * flip, 0, pts[i].Z)
-						local p2 = Vector3.new(pts[i + 1].X * flip, 0, pts[i + 1].Z)
-						hornBar(world(p1), world(p2), stroke.widths[i] * HORN_SCALE, transparency, stroke.mirror and i == #pts - 1)
-					end
-				end
+			used += 1
+			local mark = mt.laneHorns[used]
+			if not mark then
+				local piece = part("ChargeHorn", Vector3.new(HORN_SIZE.X, 0.05, HORN_SIZE.Y), HORN_COLOR, 1)
+				local decal = Instance.new("Decal")
+				decal.Texture = HORN_IMAGE
+				decal.Face = Enum.NormalId.Top
+				decal.Color3 = HORN_COLOR
+				decal.Parent = piece
+				mark = { part = piece, decal = decal }
+				mt.laneHorns[used] = mark
 			end
+			local center = a + dir * at + Vector3.new(0, 0.03, 0)
+			-- (on a part's top face, the picture's top is toward the part's back: so it looks backwards)
+			mark.part.CFrame = CFrame.lookAt(center, center - dir)
+			mark.part.Parent = folder
+			local fade = math.min(1, (at - HORN_START) / 4, (length - 1 - at - front) / 4)
+			mark.decal.Transparency = 1 - (0.75 + 0.25 * k) * math.clamp(fade, 0, 1)
 			at += HORN_EVERY
 		end
-		for i = used + 1, #mt.laneHorns do mt.laneHorns[i].Parent = nil end
+		for i = used + 1, #mt.laneHorns do mt.laneHorns[i].part.Parent = nil end
 	elseif mt.lane then
 		for _, p in mt.lane do p:Destroy() end
 		mt.lane = nil
-		for _, p in mt.laneHorns or {} do p:Destroy() end
+		for _, mark in mt.laneHorns or {} do mark.part:Destroy() end
 		mt.laneHorns = nil
 	end
 
