@@ -3,7 +3,7 @@
 --
 --   Place (click a button, then click the floor; right-click or Esc cancels):
 --     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic,
---     Concepts (every model in ServerStorage.ModelConcepts, in a row facing the camera)
+--     Concepts (every model in ServerStorage.ModelConcepts, in a row, each gliding round a small square)
 --   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters),
 --            Hero (a survivor: switch to the next survivor hero, e.g. Sara -> Kai)
 -- The server's answer shows under the buttons.

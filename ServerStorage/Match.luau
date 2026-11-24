@@ -633,8 +633,8 @@ end
 --   "monster"                         an AI monster there (Fear Eater)
 --   "ward" / "falseRelic"             the Maze Master's ward or false relic there (their own rules)
 --   "concepts"                        a copy of every model in ServerStorage.ModelConcepts (character
---                                     models being designed), in a row centred there, facing the
---                                     camera, anchored and not solid; "clear" removes them
+--                                     models being designed), in a row centred there, each gliding
+--                                     round a small square to show every side; "clear" removes them
 --   "fearAll"                         every survivor feared (as Instill Fear does)
 --   "freeze"                          AI monsters stop / start again
 --   "ready"                           your abilities are ready again
@@ -669,6 +669,7 @@ sandboxAction = function(player, action, at)
 	elseif action == "concepts" then
 		local source = ServerStorage:FindFirstChild("ModelConcepts")
 		local models = source and source:GetChildren() or {}
+		table.sort(models, function(m1, m2) return m1.Name < m2.Name end)   -- (A, B, C... left to right)
 		if not spot then return false, "Click the floor" end
 		if #models == 0 then return false, "No models in ServerStorage.ModelConcepts" end
 		local holder = workspace:FindFirstChild("SandboxConcepts") or Instance.new("Folder")
@@ -676,13 +677,19 @@ sandboxAction = function(player, action, at)
 		holder.Parent = workspace
 		local toCamera = Vector3.new(Config.CAMERA_DIRECTION.X, 0, Config.CAMERA_DIRECTION.Z).Unit
 		local across = Vector3.new(-toCamera.Z, 0, toCamera.X)
-		local GAP = 3
+		local GAP, SIDE, SPEED, TURN = 9, 6, 8, 6   -- studs between, the square walked (studs), studs/s, turn rate
 		local widths, total = {}, 0
 		for i, model in models do
 			local _, size = model:GetBoundingBox()
 			widths[i] = math.max(size.X, size.Z)
 			total += widths[i] + (i > 1 and GAP or 0)
 		end
+		-- each walks (glides: no animation) round a small square about its place in the row, turning to
+		-- face the way it goes, so it's seen from every side
+		local corners = {
+			-across - toCamera, across - toCamera, across + toCamera, -across + toCamera,
+		}
+		local walkers = {}
 		local offset = -total / 2
 		for i, model in models do
 			local copy = model:Clone()
@@ -691,11 +698,31 @@ sandboxAction = function(player, action, at)
 			end
 			copy.Parent = holder
 			local box, size = copy:GetBoundingBox()
-			local centre = spot + across * (offset + widths[i] / 2) + Vector3.new(0, size.Y / 2, 0)
 			-- a concept's front is its bounding box's -Z (LookVector), as models are made facing
-			copy:PivotTo(CFrame.lookAt(centre, centre + toCamera) * box:ToObjectSpace(copy:GetPivot()))
+			table.insert(walkers, {
+				model = copy,
+				boxToPivot = box:ToObjectSpace(copy:GetPivot()),
+				centre = spot + across * (offset + widths[i] / 2) + Vector3.new(0, size.Y / 2, 0),
+				walked = (i - 1) * SIDE * 0.7,   -- not all in step
+				look = toCamera,
+			})
 			offset += widths[i] + GAP
 		end
+		local connection
+		connection = RunService.Heartbeat:Connect(function(dt)
+			if not holder.Parent then connection:Disconnect() return end
+			for _, w in walkers do
+				if w.model.Parent ~= holder then continue end
+				w.walked += SPEED * dt
+				local along = w.walked / SIDE
+				local edge = math.floor(along) % 4
+				local from, to = corners[edge + 1], corners[(edge + 1) % 4 + 1]
+				local pos = w.centre + from:Lerp(to, along % 1) * (SIDE / 2)
+				local heading = (to - from).Unit
+				w.look = w.look:Lerp(heading, math.min(1, TURN * dt)).Unit
+				w.model:PivotTo(CFrame.lookAt(pos, pos + w.look) * w.boxToPivot)
+			end
+		end)
 		return true, ("%d concept%s"):format(#models, #models == 1 and "" or "s")
 	elseif action == "fearAll" then
 		for _, survivor in survivorsInMatch() do Fear.apply(survivor, fearDef) end
