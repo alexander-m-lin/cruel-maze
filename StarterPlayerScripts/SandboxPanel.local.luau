@@ -4,7 +4,8 @@
 --   Place (click a button, then click the floor; right-click or Esc cancels):
 --     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic,
 --     Concepts (every model in ServerStorage.ModelConcepts, in a row, each gliding round a small square)
---   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters),
+--   At once: Fear all, Freeze AI, Ready (your cooldowns), Auto-ready (a toggle: every cooldown 1 s),
+--            Lives, Clear (bots and AI monsters),
 --            Hero (switch to the next hero of your role, e.g. Sara -> Kai, Fear Eater -> Minotaur)
 -- The server's answer shows under the buttons.
 -- At the top, a TRACKER: where you are (studs, and the maze cell) and how fast you're moving
@@ -37,6 +38,7 @@ local NOW = {
 	{ id = "fearAll", name = "Fear all" },
 	{ id = "freeze", name = "Freeze AI" },
 	{ id = "ready", name = "Ready" },
+	{ id = "autoReady", name = "Auto-ready: off" },   -- (its label follows the "AutoReady" attribute)
 	{ id = "lives", name = "Lives" },
 	{ id = "clear", name = "Clear" },
 	{ id = "hero", name = "Hero" },
@@ -161,6 +163,15 @@ for _, entry in NOW do
 		setPlacing(nil)
 		devEvent:FireServer("sandboxAction", entry.id)
 	end)
+	if entry.id == "autoReady" then
+		local function show()
+			local on = player:GetAttribute("AutoReady") == true
+			b.Text = on and "Auto-ready: on" or "Auto-ready: off"
+			b.BackgroundColor3 = on and ACTIVE or IDLE
+		end
+		player:GetAttributeChangedSignal("AutoReady"):Connect(show)
+		show()
+	end
 end
 result = label("", 34)
 

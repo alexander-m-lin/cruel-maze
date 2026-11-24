@@ -10,6 +10,7 @@
 --   Abilities.useMonster(monster, slot, aim)  -- an AI monster does
 --   Abilities.ready(who, slot)                -- off cooldown? (who: a player or an AI monster)
 --   Abilities.resetCooldowns(who)             -- everything ready now (the dev Sandbox)
+--   (a player with the "AutoReady" attribute - the Sandbox's toggle - has every cooldown cut to 1 s)
 --   Abilities.refusesCatch(survivor)          -- a monster is about to catch them: protected?
 --                                             --   (Protection: Flourish deflects it, with sparks;
 --                                             --   Encrypt can't be caught). Every catch asks.
@@ -109,7 +110,11 @@ function Abilities.stop()
 	table.clear(readyAt)
 end
 
+-- (the dev Sandbox's "Auto-ready": a player with "AutoReady" set waits at most this long for any ability)
+local AUTO_READY_COOLDOWN = 1
+
 local function setCooldown(who, slot, seconds)
+	if typeof(who) == "Instance" and who:GetAttribute("AutoReady") then seconds = math.min(seconds, AUTO_READY_COOLDOWN) end
 	readyAt[who] = readyAt[who] or {}
 	readyAt[who][slot] = os.clock() + seconds
 	if typeof(who) == "Instance" then

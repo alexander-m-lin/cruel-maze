@@ -665,6 +665,7 @@ end
 --   "fearAll"                         every survivor feared (as Instill Fear does)
 --   "freeze"                          AI monsters stop / start again
 --   "ready"                           your abilities are ready again
+--   "autoReady"                       toggles "AutoReady" on you: every cooldown 1 s (until the next match)
 --   "lives"                           your lives back (and back in the start sanctuary if you were out)
 --   "clear"                           every bot and AI monster gone
 --   "hero"                            switch to the next survivor hero (a survivor) or monster hero
@@ -771,6 +772,11 @@ sandboxAction = function(player, action, at)
 	elseif action == "ready" then
 		Abilities.resetCooldowns(player)
 		return true, "Abilities ready"
+	elseif action == "autoReady" then
+		local on = not player:GetAttribute("AutoReady")
+		player:SetAttribute("AutoReady", on or nil)     -- (Abilities cuts every cooldown to 1 s)
+		Abilities.resetCooldowns(player)
+		return true, on and "Auto-ready on: every cooldown 1 s" or "Auto-ready off"
 	elseif action == "lives" then
 		if player:GetAttribute("Role") ~= Roles.Survivor then return false, "Survivors only" end
 		player:SetAttribute("Lives", Sandbox.LIVES)
@@ -843,6 +849,7 @@ end
 local function runCountdown()
 	sandbox = sandboxNext
 	status:SetAttribute("Sandbox", sandbox or nil)
+	for _, player in Players:GetPlayers() do player:SetAttribute("AutoReady", nil) end   -- (the Sandbox's toggle)
 	local concepts = workspace:FindFirstChild("SandboxConcepts")   -- (the Sandbox panel's "Concepts")
 	if concepts then concepts:Destroy() end
 	botCount, aiMonsterCount = 0, 0

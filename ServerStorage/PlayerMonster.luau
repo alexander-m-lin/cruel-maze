@@ -222,7 +222,7 @@ end
 function PlayerMonster:ChargeEnd(at, recovery)
 	local now = workspace:GetServerTimeNow()
 	self.player:SetAttribute("CastingUntil", now + recovery)
-	SpeedCheck.exempt(self.player, 0.4)
+	SpeedCheck.exempt(self.player, 0.6)      -- (their computer may still be finishing the last stretch)
 	if self.model then
 		self.model:SetAttribute("ChargeStopAt", at)
 		self.model:SetAttribute("ChargeRecovery", recovery)

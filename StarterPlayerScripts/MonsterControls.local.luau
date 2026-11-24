@@ -21,7 +21,8 @@
 -- THE MINOTAUR'S CHARGE: "ChargeAt" on your body: you're turned the way it goes ("ChargeDir") and
 -- held there; "ChargeGo": you're carried toward "ChargeTo" at the charge's speed (steered at it
 -- every frame, so you end where the server planned, even if your computer was a little off);
--- "ChargeEnd": stopped dead. The server decides who it tramples.
+-- "ChargeEnd": carried on to where the server's charge stopped ("ChargeStopAt") if you're not
+-- there yet (you set off a moment after it did), for at most 0.35 s, then stopped dead. The server decides who it tramples.
 --
 -- THE MINOTAUR'S CRUSH (a leap): "LeapAt": crouched for "LeapCrouch" seconds, then carried in an
 -- arc ("LeapHeight" studs up, over the walls) to "LeapTo", landing "LeapWindup" seconds after
@@ -199,6 +200,10 @@ local function chargeWindup(model)
 		-- carried toward where it ends, at the charge's speed
 		if token.push and token.to then
 			local left = (token.to - root.Position) * Vector3.new(1, 0, 1)
+			if token.finishBy and (left.Magnitude < 0.5 or left:Dot(token.dir) < 0 or os.clock() > token.finishBy) then
+				stopCharge()                                -- (over, and he's got there)
+				return
+			end
 			if left.Magnitude < 0.5 or left:Dot(token.dir) < 0 then
 				token.push.PlaneVelocity = Vector2.zero
 			else
@@ -275,8 +280,18 @@ local function watchBody(model)
 	model:GetAttributeChangedSignal("DevourGo"):Connect(function() task.spawn(dash, model) end)
 	model:GetAttributeChangedSignal("ChargeAt"):Connect(function() chargeWindup(model) end)
 	model:GetAttributeChangedSignal("ChargeGo"):Connect(function() chargeGo(model) end)
+	-- over: your computer started a moment after the server (the news takes a while to arrive), so
+	-- you may not be there yet - carried on to where it stopped ("ChargeStopAt"), briefly, then stopped
 	model:GetAttributeChangedSignal("ChargeEnd"):Connect(function()
-		if charge and charge.model == model then stopCharge() end
+		if not (charge and charge.model == model) then return end
+		local stopAt = model:GetAttribute("ChargeStopAt")
+		local root = rootAndHumanoid()
+		if charge.push and typeof(stopAt) == "Vector3" and root then
+			charge.to = Vector3.new(stopAt.X, root.Position.Y, stopAt.Z)
+			charge.finishBy = os.clock() + 0.35
+		else
+			stopCharge()
+		end
 	end)
 	model:GetAttributeChangedSignal("LeapAt"):Connect(function() task.spawn(leap, model) end)
 	model.Destroying:Connect(function()

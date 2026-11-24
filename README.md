@@ -34,7 +34,8 @@ winding hallways like the real maze's), with only the players in it, no
 timer, no end and 99 lives. A panel down the left places things where you click the floor (a
 roaming bot, a dummy bot held in place, a feared dummy, an AI monster, a ward, a false relic) and
 does things at once (fear every survivor, freeze or unfreeze AI monsters, make your abilities
-ready, give your lives back, clear the bots and AI monsters). At its top a tracker shows where you
+ready, Auto-ready (a toggle: every ability you use recharges in 1 second), give your lives back,
+clear the bots and AI monsters). At its top a tracker shows where you
 are (studs and maze cell) and how fast you're moving, next to the walk speed you're allowed right
 now. "New match" goes back to a normal match.
 Everything in the sandbox is the real game's code; only the maze and who's in it differ.
@@ -133,8 +134,11 @@ slow, heavy stomp; the chase boost still applies), so the Charge and Crush are h
   floor while a red lane shows his path, straight ahead to the first wall or shut door (anyone
   who can see him sees it; his side always). Then he charges along it at 120 studs a second and
   can't steer or stop. Every survivor within 7 studs of his path (most of a corridor) is caught
-  and flung aside as he runs on, several in one charge if they're lined up. A door shutting in
-  front of him stops him there; a stun calls it off. At the wall he reels for 0.6 seconds.
+  and flung aside as he runs on, several in one charge if they're lined up; nobody past where he
+  stops. A door counts as shut from the moment its slab starts to rise: if he hasn't reached its
+  middle by then he stops a body's width short of it, otherwise he carries on through. A shut door
+  that finishes opening before he gets there lets him through. A stun calls it off. At the wall he
+  reels for 0.6 seconds.
 - **E: Crush** (60 s). Hold E to see his 100-stud range and where he'd land (under the mouse);
   let go and he crouches, leaps in a high arc (over walls if need be) and lands 1.5 seconds
   later. For the last 0.7 seconds a red ring shows where, drawn above the fog and the walls, to
