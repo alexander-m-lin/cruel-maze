@@ -187,7 +187,11 @@ end
 -- Also published as the player's "BaseSpeed" attribute: the Controls script on their computer
 -- scales it down when they move a different way from where they're facing.
 local function applySpeed(player)
-	local full = player:GetAttribute("Role") == Roles.Monster and Config.MONSTER_SPEED or Config.PLAYER_SPEED
+	local full = Config.PLAYER_SPEED
+	if player:GetAttribute("Role") == Roles.Monster then
+		local hero = Heroes.get(player:GetAttribute("Hero"))
+		full = Config.MONSTER_SPEED * (hero and hero.speed or 1)   -- (a hero's own pace: the Minotaur's slower)
+	end
 	local speed = (state == States.Countdown) and 0 or full
 	player:SetAttribute("BaseSpeed", speed)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -794,6 +798,7 @@ sandboxAction = function(player, action, at)
 		playerMonsters[player] = monster
 		table.insert(monsters, monster)
 		player:SetAttribute("Hero", next)
+		applySpeed(player)
 		Abilities.resetCooldowns(player)
 		return true, "You're " .. Heroes.get(next).name
 	elseif action == "hero" then

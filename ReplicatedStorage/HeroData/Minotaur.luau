@@ -14,6 +14,8 @@ return {
 	rig = "MinotaurRig",       -- ServerStorage model
 	rigScale = 1.25,           -- (the rig is concept B at its generated size; he's meant to loom)
 	lunge = false,             -- no stand-in lunge: Tear Asunder is the catch
+	speed = 0.7,               -- walks at this fraction of a monster's speed (Config.MONSTER_SPEED; AI
+	                           -- monsters' too): slow and heavy, so his Charge and Crush are how he closes in
 
 	-- TEAR ASUNDER's kill, in seconds from the catch: he grabs them, lifts them overhead and tears
 	-- them in two. The server holds the victim (and him) this long; HeroVisuals.Minotaur draws it.

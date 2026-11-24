@@ -122,7 +122,8 @@ sleeves; left click does nothing for him):
   ready) and while it runs, a wide red triangle round him points straight at each feared
   survivor, wherever they are (floating just above the walls, so walls and fog never hide them).
 The Minotaur (a massive horned juggernaut in bronze armour, a head taller than Fear Eater; his
-attacks are devastating but telegraphed, and commit him):
+attacks are devastating but telegraphed, and commit him). He walks at 70% of a monster's speed (a
+slow, heavy stomp; the chase boost still applies), so the Charge and Crush are how he closes in:
 - **Left click: Tear Asunder** (5 s). Like Devour without the fear: the nearest survivor he can see
   in front of him within 10 studs (ringed while it's ready), a 0.3-second windup (rearing back,
   arms spread; their screen flashes red), then a lunge that catches them if they're still within

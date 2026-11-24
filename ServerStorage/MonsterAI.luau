@@ -238,6 +238,7 @@ function MonsterAI.new(maze, options)
 	local primary = heroDef and heroDef.abilities.Primary
 	self.devourDef = primary and primary.autoTarget and primary or nil   -- (Devour, Tear Asunder: AutoCatch)
 	self.castsAbilities = options.castsAbilities == true
+	self.speedFactor = heroDef and heroDef.speed or 1
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
 	self.pos = self:centerOf(start[1], start[2])
@@ -639,6 +640,7 @@ function MonsterAI:Step(dt, targets)
 	else
 		speed = (self.mode == "search" and SEARCH_SPEED) or ROAM_SPEED
 	end
+	speed *= self.speedFactor          -- (its hero's own pace: the Minotaur's slower)
 
 	-- 3. MOVE toward the goal
 	if goal then

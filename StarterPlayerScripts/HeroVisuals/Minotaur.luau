@@ -50,14 +50,17 @@ local player = Players.LocalPlayer
 local fxEvent = Net.event("AbilityFx")
 
 ---------------------------------------------------------------- tuning
-local STRIDE      = 13      -- studs travelled per full walk cycle (both legs)
-local LEG_SWING   = 0.38    -- radians the legs swing walking...
-local LEG_RUN     = 0.5     -- ...and at full speed
+local LEG_SWING   = 0.5     -- radians the legs swing walking...
+local LEG_RUN     = 0.6     -- ...and at full speed (the stride follows: a planted hoof sweeps back
+                            -- 2 x leg length x sin(swing) a step, so it doesn't slide)
 local ARM_SWING   = 0.3     -- radians the arms swing against them
 local ARMS_OUT    = 0.1     -- radians the arms hang out from his sides (they're huge)
-local FULL_SPEED  = 28      -- speed that counts as "full speed" (a chase boost on top of 24)
+local FULL_SPEED  = 20      -- speed that counts as "full speed" (his walk is 70% of 24, about 17, and a
+                            -- chase boost goes on top)
 local LEAN        = 0.14    -- radians he leans in at full speed
-local ROLL        = 0.05    -- radians his weight rolls side to side each step
+local ROLL        = 0.07    -- radians his weight rocks onto the planted leg each step: his legs can't
+                            -- bend, so that's what lifts the other hip, and its hoof clears the floor
+                            -- as it swings forward (a lumbering waddle)
 local REACH_EASE  = 4       -- how quickly the chase pose comes and goes
 local HEAD_DOWN   = 0.35    -- radians his head drops chasing (horns forward)
 local GALLOP_RATE = 3.2     -- full leg cycles a second, charging
@@ -169,6 +172,7 @@ function animate.setup(model, s)
 	local bottom = box.Position.Y - size.Y / 2
 	local hip = mt.joints.LeftHip
 	mt.legLength = hip and ((hip.Part0.CFrame * hip.C0).Position.Y - bottom) or 5 * scale
+	mt.hipOut = hip and math.abs(model:GetPivot():PointToObjectSpace((hip.Part0.CFrame * hip.C0).Position).X) or 1.6 * scale
 	mt.floor = bottom - model:GetPivot().Position.Y            -- (his root's height off the floor, negated)
 	local pivot = model:GetPivot()
 	for _, side in { "Left", "Right" } do
@@ -220,22 +224,61 @@ function animate.pose(model, s, dt)
 	local move = math.clamp(speed / 4, 0, 1)
 	local run = math.clamp(speed / FULL_SPEED, 0, 1)
 	local L = mt.legLength
-	mt.phase = (mt.phase + dt * speed / STRIDE) % 1
-	local cycle = math.sin(mt.phase * math.pi * 2)
+	local swing = lerp(LEG_SWING, LEG_RUN, run)
+	local footReach = L * math.sin(swing) * move                -- how far ahead/behind the hip a hoof gets
+	local stride = math.max(2, 4 * L * math.sin(swing))       -- studs per full cycle (both legs)
+	-- which way he's moving, in his own space (he faces where he aims, not where he walks): the legs
+	-- swing along it - forward, back, sideways - so a planted hoof stays put whichever way he goes.
+	-- The cycle runs on the distance his body has actually moved since the last pose (not speed x
+	-- time), so it's in step with where he's drawn.
+	local pivot = model:GetPivot()
+	local moved = (pivot.Position - (mt.lastPos or pivot.Position)) * Vector3.new(1, 0, 1)
+	mt.lastPos = pivot.Position
+	if moved.Magnitude > 20 then moved = Vector3.zero end      -- (teleported)
+	local localMove = pivot:VectorToObjectSpace(moved)
+	if localMove.Magnitude > 0.02 then
+		mt.moveDir = (mt.moveDir or Vector3.new(0, 0, -1)):Lerp(localMove.Unit, math.min(1, localMove.Magnitude * 0.5))
+	end
+	-- (slower than walking pace the steps shrink with `move`, so the cycle goes round faster to match)
+	mt.phase = (mt.phase + moved.Magnitude / (stride * math.max(move, 0.3))) % 1
 	mt.reach += ((s.mode == "chase" and 1 or 0) - mt.reach) * math.min(1, dt * REACH_EASE)
 	local reach = mt.reach
 
 	-- WALKING: the pose everything else starts from
-	local legSwing = cycle * lerp(LEG_SWING, LEG_RUN, run) * move
-	local hipL, hipR = legSwing, -legSwing
+	local dir = mt.moveDir or Vector3.new(0, 0, -1)
+	local ahead, aside = -dir.Z, dir.X              -- (about X swings a foot forward; about Z, out to +X)
+	-- Each hoof goes round a loop: PLANTED for the first half of its cycle, sliding straight back from
+	-- +reach to -reach (the cycle runs on distance travelled, so it goes back exactly as fast as he
+	-- goes forward: in the world it stays put), then SWINGING forward in an arc. His legs can't bend,
+	-- so a leg's angle is what puts its hoof there, the body drops to keep the planted one on the
+	-- floor, and he rocks onto it, lifting the swinging leg's hip so that hoof clears the floor.
+	local function footAt(phase)       -- -> how far ahead of the hip, and how far into its swing (0..1, planted: nil)
+		if phase < 0.5 then return footReach * (1 - 4 * phase), nil end
+		local q = (phase - 0.5) / 0.5
+		return -footReach * math.cos(math.pi * q), q
+	end
+	local phaseL, phaseR = mt.phase, (mt.phase + 0.5) % 1
+	local xL, swingL = footAt(phaseL)
+	local xR, swingR = footAt(phaseR)
+	local legL = math.asin(math.clamp(xL / L, -1, 1))
+	local legR = math.asin(math.clamp(xR / L, -1, 1))
+	local planted = swingL and legR or legL
+	local hipL, hipR = legL * ahead, legR * ahead
+	local sideL, sideR = legL * aside, legR * aside
+	local legSwing = legL                                     -- (for the "walking" check below)
 	local spreadL, spreadR = 0, 0
 	local breathe = math.sin(mt.t * 1.8) * 0.06 * (1 - move)
-	local y = breathe
+	-- (a negative roll raises his left side: the left leg is swinging while swingL is set)
+	local lift = math.sin(math.pi * (swingL or swingR or 0)) * ROLL * move
+	local rock = swingL and -lift or lift
+	local y = breathe - L * (1 - math.cos(planted)) + mt.hipOut * math.abs(math.sin(rock))
+	-- the planted leg turns back against the rock, so it stays upright and its hoof doesn't shift
+	if swingL then spreadR -= rock else spreadL -= rock end
 	local pitch = -LEAN * run
-	local roll = cycle * ROLL * move
-	local yaw = legSwing * 0.12
+	local roll = rock
+	local yaw = legL * 0.12
 	local neck, neckYaw = -HEAD_DOWN * reach + LEAN * run * 0.5, 0
-	local armSwing = -cycle * ARM_SWING * move
+	local armSwing = -math.cos(mt.phase * math.pi * 2) * ARM_SWING * move   -- (left arm back as the left hoof lands ahead)
 	local idleSway = math.sin(mt.t * 1.1) * 0.05 * (1 - move)
 	local shL = armSwing + idleSway + 0.25 * reach
 	local shR = -armSwing - idleSway + 0.25 * reach
@@ -393,8 +436,10 @@ function animate.pose(model, s, dt)
 	if j.Neck then j.Neck.Transform = CFrame.Angles(neck, neckYaw, 0) end
 	if j.LeftShoulder then j.LeftShoulder.Transform = CFrame.Angles(shL, 0, -outL) end
 	if j.RightShoulder then j.RightShoulder.Transform = CFrame.Angles(shR, 0, outR) end
-	if j.LeftHip then j.LeftHip.Transform = CFrame.Angles(hipL, 0, spreadL) end
-	if j.RightHip then j.RightHip.Transform = CFrame.Angles(hipR, 0, spreadR) end
+	-- (the sideways part of the walk fades out wherever another pose has taken the legs over)
+	local walking = math.clamp(1 - math.abs(hipL - legSwing * ahead) * 4, 0, 1)   -- (left leg as the walk left it?)
+	if j.LeftHip then j.LeftHip.Transform = CFrame.Angles(hipL, 0, spreadL + sideL * walking) end
+	if j.RightHip then j.RightHip.Transform = CFrame.Angles(hipR, 0, spreadR + sideR * walking) end
 
 	-- the victim struggling in his grip until the rip
 	local v = mt.victim
@@ -593,6 +638,10 @@ end
 
 function animate.victim(model, s)
 	local mt = s.mt
+	-- (posed again now, straight after MonsterAnimate has moved his body for this frame and before
+	-- it's drawn: otherwise the frame shows the body moved on with the legs still where they were,
+	-- and his hooves slide. Nothing that runs on time moves with dt = 0.)
+	animate.pose(model, s, 0)
 	chargeEffects(model, mt)
 	crushEffects(model, mt)
 	updateVictim(model, mt)
