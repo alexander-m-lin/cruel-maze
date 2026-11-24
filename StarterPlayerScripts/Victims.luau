@@ -10,6 +10,9 @@
 --   Victims.corpse(character, copy, lifetime) -- `copy` (a clone made earlier) takes the body's
 --                                             -- place, posed the same, and falls loose; it fades
 --                                             -- after `lifetime` seconds
+--   Victims.tear(character, copy, side, speed, lifetime) -- `copy` takes the body's place, torn at
+--                                             -- the waist: the top half thrown along `side`, the
+--                                             -- legs the other way, every limb coming loose
 
 local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
@@ -198,6 +201,71 @@ function Victims.corpse(character, copy, lifetime)
 		end)
 	end)
 	Debris:AddItem(copy, lifetime + 3)
+	return copy
+end
+
+-- TORN IN TWO: swap the body for a copy posed exactly the same, split it at the waist, and throw the
+-- halves apart (top half along `side`, legs the other way) at about `speed` studs a second. Every
+-- joint is undone, so the limbs drift apart from each other as they fly. Gone after `lifetime`.
+local UPPER_BODY = { Head = true, UpperTorso = true, LeftUpperArm = true, LeftLowerArm = true,
+	LeftHand = true, RightUpperArm = true, RightLowerArm = true, RightHand = true,
+	Torso = true, ["Left Arm"] = true, ["Right Arm"] = true }   -- (R6 names too)
+function Victims.tear(character, copy, side, speed, lifetime)
+	for _, d in copy:GetDescendants() do
+		-- Body joints come in two kinds: classic Motor6Ds, or (newer avatars) AnimationConstraints
+		-- with BallSocketConstraints for ragdolling. Undo them all; only the welds that hold
+		-- accessories on (hats, hair) stay.
+		local joint = d:IsA("Motor6D") or d:IsA("AnimationConstraint") or d:IsA("BallSocketConstraint")
+			or d:IsA("HingeConstraint")
+		if joint or d:IsA("Script") or d:IsA("LocalScript") or d:IsA("IKControl") or d:IsA("Sound") then
+			d:Destroy()
+		end
+	end
+	local humanoid = copy:FindFirstChildOfClass("Humanoid")   -- kept: it's what shows their clothes
+	if humanoid then
+		humanoid.EvaluateStateMachine = false
+		humanoid.RequiresNeck = false
+		humanoid.BreakJointsOnDeath = false
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	end
+	local copyRoot = copy:FindFirstChild("HumanoidRootPart")
+	if copyRoot then copyRoot:Destroy() end
+
+	local parts = {}
+	for _, part in copy:GetDescendants() do
+		if part:IsA("BasePart") then
+			local original = character:FindFirstChild(part.Name, true)
+			if original and original:IsA("BasePart") then part.CFrame = original.CFrame end
+			part.CanQuery, part.CanTouch = false, false
+			part.CanCollide = part:FindFirstAncestorOfClass("Accessory") == nil
+			table.insert(parts, part)
+		end
+	end
+	copy.Name = "Remains"
+	copy.Parent = workspace
+	Victims.hide(character)
+	for _, part in parts do
+		part.Anchored = false
+		if part:FindFirstAncestorOfClass("Accessory") then continue end   -- hats stay welded to the head
+		-- The Humanoid keeps arms and legs from colliding (even in a copy), so they'd fall through
+		-- the floor: give each piece an invisible solid box of its own size, welded on
+		local box = Instance.new("Part")
+		box.Name = "Collider"
+		box.Size, box.CFrame = part.Size, part.CFrame
+		box.Transparency = 1
+		box.CanQuery, box.CanTouch = false, false
+		box.CastShadow = false
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0, weld.Part1 = part, box
+		weld.Parent = box
+		box.Parent = part
+		local away = UPPER_BODY[part.Name] and side or -side
+		local scatter = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 14
+		part.AssemblyLinearVelocity = away * speed * (0.8 + math.random() * 0.5) + scatter
+			+ Vector3.new(0, 8 + math.random() * 10, 0)
+		part.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 25
+	end
+	Debris:AddItem(copy, lifetime)
 	return copy
 end
 

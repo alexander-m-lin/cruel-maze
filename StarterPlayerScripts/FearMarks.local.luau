@@ -11,7 +11,8 @@
 --                  feet that starts full and wears away clockwise round the circle, from its
 --                  bottom point on the screen, as the dread runs out (Instill Fear's dreadTime). Gone the moment they're
 --                  feared or safe (the server clears "DreadUntil"). Shown like the feared mark.
---   DEVOUR TARGET - for a Fear Eater player, while Devour is ready: a ring on the floor under the
+--   DEVOUR TARGET - for a Fear Eater player, while Devour is ready (or a Minotaur's Tear Asunder:
+--                  any auto-targeted Primary): a ring on the floor under the
 --                  survivor a click would go for (DevourAim, the server's own choice; only
 --                  survivors you can see count). Red for a feared survivor (a sure catch).
 --   DEVOUR WARNING - the survivor Devour is coming for ("DevourTargetAt" on you, server time):
@@ -295,7 +296,7 @@ local function updateTarget(feared)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local maze = workspace:FindFirstChild("Maze")
-	if player:GetAttribute("Role") ~= Config.Roles.Monster or not def or def.id ~= "Devour" or not root or not maze
+	if player:GetAttribute("Role") ~= Config.Roles.Monster or not def or not def.autoTarget or not root or not maze
 		or (player:GetAttribute("AbilityReadyPrimary") or 0) > workspace:GetServerTimeNow()
 		or player:GetAttribute("Killing") or player:GetAttribute("Lunging") then
 		ring.Parent = nil

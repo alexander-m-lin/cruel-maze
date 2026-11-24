@@ -5,6 +5,8 @@
 --   SpeedCheck.step(dt)              -- every frame (Match)
 --   SpeedCheck.moved(player)         -- the server just moved them itself (spawn, door nudge...)
 --   SpeedCheck.grant(player, studs)  -- allow this much extra once (a monster's lunge)
+--   SpeedCheck.exempt(player, seconds) -- don't check them for a while: the server moves them along
+--                                       -- a path it planned itself (the Minotaur's Charge and Crush)
 --
 -- How: each player has an ALLOWANCE of studs, refilling at their base speed (the "BaseSpeed"
 -- attribute, the most the facing rule ever allows) times SLACK, and banking up to BANK seconds'
@@ -67,6 +69,11 @@ function SpeedCheck.grant(player, studs)
 	if w then w.allowance += studs end
 end
 
+function SpeedCheck.exempt(player, seconds)
+	local w = watched[player]
+	if w then w.exemptUntil = math.max(w.exemptUntil or 0, os.clock() + seconds) end
+end
+
 function SpeedCheck.step(dt)
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
@@ -79,6 +86,14 @@ function SpeedCheck.step(dt)
 		if not w or w.character ~= character then      -- a new character: start watching afresh
 			reset(player, character, root)
 			continue
+		end
+		if w.exemptUntil then
+			if os.clock() < w.exemptUntil then
+				w.last, w.timer = root.Position, 0
+				continue
+			end
+			w.exemptUntil = nil
+			w.allowance = cap(player)
 		end
 		w.timer += dt
 		if w.timer < SAMPLE then continue end

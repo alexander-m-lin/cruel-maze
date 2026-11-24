@@ -4,6 +4,7 @@
 --     contested slots go to one of those who asked, at random)
 --   - your survivor hero, if you're a survivor: Any, or one of them (Heroes.survivorIds). Survivors'
 --     heroes are all different; if two want the same one, one of them gets it, at random
+--   - your monster hero, if you're a monster: Any, or one of them (Heroes.monsterIds), the same way
 --   - Start: anyone can start the match. Empty slots are filled with bots.
 -- Everything is a button you can click or tap.
 
@@ -49,13 +50,13 @@ backdrop.Parent = gui
 local panel = Instance.new("Frame")
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.Size = UDim2.new(0, 460, 0, 550)
+panel.Size = UDim2.new(0, 460, 0, 620)
 panel.BackgroundColor3 = PANEL
 panel.BorderSizePixel = 0
 panel.Parent = backdrop
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
 local sizeLimit = Instance.new("UISizeConstraint")    -- fits on a phone too
-sizeLimit.MaxSize = Vector2.new(460, 550)
+sizeLimit.MaxSize = Vector2.new(460, 620)
 sizeLimit.Parent = panel
 local padding = Instance.new("UIPadding")
 for _, side in { "PaddingTop", "PaddingBottom", "PaddingLeft", "PaddingRight" } do padding[side] = UDim.new(0, 18) end
@@ -154,6 +155,27 @@ for i, choice in HERO_CHOICES do
 	heroButtons[i] = { stroke = stroke, hero = choice[1] }
 end
 
+label("Your monster", 15, TEXT, 442, 20, Enum.Font.GothamBold)
+local monsterRow = Instance.new("Frame")
+monsterRow.Position = UDim2.new(0, 0, 0, 466)
+monsterRow.Size = UDim2.new(1, 0, 0, 40)
+monsterRow.BackgroundTransparency = 1
+monsterRow.Parent = panel
+local MONSTER_CHOICES = { { nil, "Any" } }
+for _, id in Heroes.monsterIds() do
+	local hero = Heroes.get(id)
+	table.insert(MONSTER_CHOICES, { id, ("%s (%s)"):format(hero.name, hero.title) })
+end
+local monsterButtons = {}
+for i, choice in MONSTER_CHOICES do
+	local b, stroke = button(choice[2], monsterRow)
+	b.Position = UDim2.new((i - 1) / #MONSTER_CHOICES, i == 1 and 0 or 3, 0, 0)
+	b.Size = UDim2.new(1 / #MONSTER_CHOICES, -4, 1, 0)
+	b.TextSize = 13
+	b.Activated:Connect(function() lobbyEvent:FireServer("preferMonsterHero", choice[1]) end)
+	monsterButtons[i] = { stroke = stroke, hero = choice[1] }
+end
+
 local start = button("Start match", panel)
 start.Position = UDim2.new(0, 0, 1, -58)
 start.Size = UDim2.new(1, 0, 0, 52)
@@ -192,6 +214,8 @@ local function refresh()
 	for _, c in choiceButtons do c.stroke.Transparency = c.role == mine and 0 or 1 end
 	local myHero = player:GetAttribute("PreferredHero")
 	for _, c in heroButtons do c.stroke.Transparency = c.hero == myHero and 0 or 1 end
+	local myMonster = player:GetAttribute("PreferredMonsterHero")
+	for _, c in monsterButtons do c.stroke.Transparency = c.hero == myMonster and 0 or 1 end
 	local enough = #players >= Config.MIN_PLAYERS
 	start.Text = enough and "Start match" or ("Waiting for %d more..."):format(Config.MIN_PLAYERS - #players)
 	start.AutoButtonColor = enough

@@ -6,6 +6,8 @@
 --   monster:Lunge()             -- the player clicked to lunge (checked here; the stand-in only)
 --   monster:DevourStart(toward, def) / DevourDash(aim, distance, time) / DevourCatch(survivor)
 --                               -- Devour's steps (HeroAbilities.FearEater runs them)
+--   monster:ChargeWindup / ChargeGo / ChargeEnd, LeapStart, Trample(survivor, kill)
+--                               -- the Minotaur's Charge and Crush (HeroAbilities.Minotaur runs them)
 --   monster:Stun(seconds)       -- can't move, lunge or catch for a while
 --   monster:Pull(to, speed)     -- their character dragged to `to` (Pull); -> seconds
 --   monster:Destroy()
@@ -127,6 +129,7 @@ end
 function PlayerMonster:Stun(seconds)
 	if self:Killing() then return end
 	self.devourToken = nil       -- a Devour under way is called off
+	self.chargeToken = nil       -- ...and a Charge (HeroAbilities.Minotaur stops it where he is)
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	local untilServer = workspace:GetServerTimeNow() + (self.stunUntil - os.clock())
 	self.player:SetAttribute("StunnedUntil", untilServer)
@@ -187,6 +190,73 @@ function PlayerMonster:DevourCatch(survivor)
 	local theirs = rootOf(survivor)
 	if not (root and theirs) then return end
 	self:catch(survivor, (theirs.Position - root.Position) * Vector3.new(1, 0, 1), os.clock())
+end
+
+-- THE MINOTAUR'S CHARGE (HeroAbilities.Minotaur plans it and decides who it catches; the player's
+-- computer carries them along it: MonsterControls). Held still facing `dir` for def.windup (the
+-- body's "ChargeAt", "ChargeDir", "ChargeTo": the lane players' computers draw)...
+function PlayerMonster:ChargeWindup(dir, def, to)
+	local now = workspace:GetServerTimeNow()
+	self.facing = dir
+	self.player:SetAttribute("CastingUntil", now + def.windup + 30)   -- held (Movement.held) until it ends
+	local model = self.model
+	model:SetAttribute("ChargeDir", dir)
+	model:SetAttribute("ChargeTo", to)
+	model:SetAttribute("ChargeWindup", def.windup)
+	model:SetAttribute("ChargeAt", now)
+	self:publish()
+end
+
+-- ...then carried from `from` to `to` in `time` seconds ("ChargeGo")...
+function PlayerMonster:ChargeGo(from, to, time)
+	SpeedCheck.exempt(self.player, time + 0.5)
+	local model = self.model
+	model:SetAttribute("ChargeFrom", from)
+	model:SetAttribute("ChargeTo", to)
+	model:SetAttribute("ChargeTime", time)
+	model:SetAttribute("ChargeGo", workspace:GetServerTimeNow())
+end
+
+-- ...until it ends at `at` (the wall, or called off by a stun): reeling for `recovery` seconds
+-- ("ChargeEnd": their computer stops carrying them)
+function PlayerMonster:ChargeEnd(at, recovery)
+	local now = workspace:GetServerTimeNow()
+	self.player:SetAttribute("CastingUntil", now + recovery)
+	SpeedCheck.exempt(self.player, 0.4)
+	if self.model then
+		self.model:SetAttribute("ChargeStopAt", at)
+		self.model:SetAttribute("ChargeRecovery", recovery)
+		self.model:SetAttribute("ChargeEnd", now)
+	end
+end
+
+-- Caught by the Charge: no stopping for it (`kill`: the hero's trample timing). -> true if caught
+function PlayerMonster:Trample(survivor, kill)
+	local now = os.clock()
+	if (self.graceUntil[survivor] or 0) > now or Abilities.refusesCatch(survivor) then return false end
+	self.graceUntil[survivor] = now + CATCH_GRACE
+	self.onCatch(survivor, self, kill)
+	return true
+end
+
+-- THE MINOTAUR'S CRUSH: a leap from `from` to `to`, landing def.windup seconds from now ("LeapAt",
+-- "LeapFrom", "LeapTo", ...: their computer carries them over the walls, MonsterControls; everyone's
+-- draws the arc, HeroVisuals.Minotaur). Held until def.recovery after landing.
+function PlayerMonster:LeapStart(from, to, def)
+	local now = workspace:GetServerTimeNow()
+	local flat = (to - from) * Vector3.new(1, 0, 1)
+	if flat.Magnitude > 0.5 then self.facing = flat.Unit end
+	self.player:SetAttribute("CastingUntil", now + def.windup + def.recovery)
+	SpeedCheck.exempt(self.player, def.windup + 0.5)
+	local model = self.model
+	model:SetAttribute("LeapFrom", from)
+	model:SetAttribute("LeapTo", to)
+	model:SetAttribute("LeapWindup", def.windup)
+	model:SetAttribute("LeapCrouch", def.crouch)
+	model:SetAttribute("LeapHeight", def.height)
+	model:SetAttribute("LeapRecovery", def.recovery)
+	model:SetAttribute("LeapAt", now)
+	self:publish()
 end
 
 -- LIVING NIGHTMARE (HeroAbilities.FearEater): for def.duration seconds their character is in the

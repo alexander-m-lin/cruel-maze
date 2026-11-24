@@ -3,7 +3,8 @@
 --   Primary: right mouse button for survivors (left click collects relics), LEFT for monsters
 --   Q - Secondary     E - Ultimate
 -- (on a touch screen or gamepad: the buttons on the bar, or the gamepad's shoulder buttons)
--- Each ability aims the way you face. The server checks and carries it out (Abilities); the bar
+-- Each ability aims the way you face; a `targeted` one (the Minotaur's Crush) also sends the point on
+-- the floor under the mouse (without a mouse: straight ahead at its full range). The server checks and carries it out (Abilities); the bar
 -- shows each one's key, name and cooldown (the "AbilityReady<Slot>" attributes it publishes).
 --
 -- HOLD TO AIM: if the hero's HeroVisuals module has an `aim[slot]` (e.g. Fear Eater's Devour), the
@@ -13,6 +14,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -59,12 +61,29 @@ local function aimerFor(hero, slot)
 	return visuals and visuals.aim and visuals.aim[slot] or nil
 end
 
+-- The point on the maze's floor under the mouse (nil without a mouse)
+local function mouseOnFloor()
+	if not UserInputService.MouseEnabled then return nil end
+	local maze = workspace:FindFirstChild("Maze")
+	local y = maze and maze:GetAttribute("FloorY") or 0
+	local m = UserInputService:GetMouseLocation()
+	local ray = workspace.CurrentCamera:ViewportPointToRay(m.X, m.Y)
+	if math.abs(ray.Direction.Y) < 1e-4 then return nil end
+	local t = (y - ray.Origin.Y) / ray.Direction.Y
+	return t > 0 and ray.Origin + ray.Direction * t or nil
+end
+
 local function use(slot)
 	local hero = myHero()
 	if not (hero and hero.abilities[slot]) or hero.abilities[slot].soon then return end
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
-	useEvent:FireServer(slot, root.CFrame.LookVector)
+	local def = hero.abilities[slot]
+	local point = nil
+	if def.targeted then
+		point = mouseOnFloor() or root.Position + root.CFrame.LookVector * (def.range or 0)
+	end
+	useEvent:FireServer(slot, root.CFrame.LookVector, point)
 end
 
 ---------------------------------------------------------------- the bar

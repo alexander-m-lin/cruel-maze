@@ -6,7 +6,7 @@
 --                            --   stun = fn(monster, seconds), monsterOf = fn(player) -> monster,
 --                            --   doors, crushers, wards }
 --   Abilities.stop()         -- the match is over
---   Abilities.use(player, slot, aim)          -- a player (survivor or monster) uses an ability
+--   Abilities.use(player, slot, aim, point)   -- a player (survivor or monster) uses an ability
 --   Abilities.useMonster(monster, slot, aim)  -- an AI monster does
 --   Abilities.ready(who, slot)                -- off cooldown? (who: a player or an AI monster)
 --   Abilities.resetCooldowns(who)             -- everything ready now (the dev Sandbox)
@@ -14,8 +14,9 @@
 --                                             --   (Protection: Flourish deflects it, with sparks;
 --                                             --   Encrypt can't be caught). Every catch asks.
 --
--- A player's computer sends "UseAbility" (slot, aim): slot is "Primary" / "Secondary" / "Ultimate",
--- aim the flat direction they face. Checked here: a match is on, their hero has that slot, they're
+-- A player's computer sends "UseAbility" (slot, aim, point): slot is "Primary" / "Secondary" /
+-- "Ultimate", aim the flat direction they face, point (for a `targeted` ability: the Minotaur's
+-- Crush) the floor point they aimed at. Checked here: a match is on, their hero has that slot, they're
 -- alive and not held, stunned, pulled or in the middle of a kill, and the cooldown is over.
 -- Using any other ability ends Kai's Encrypt.
 -- Survivors and monsters (players or AI) all go through the same path. Cooldowns are kept here and
@@ -26,10 +27,11 @@
 --            wallBetween(a, b), stopOutsideSanctuaries(from, to) }
 --   cast = { user (the player, nil for an AI monster), monster (the monster using it, if one),
 --            root (the user's HumanoidRootPart, if they have a character), aim (flat, unit),
---            def (the ability's numbers), hero }
+--            point (a targeted ability's aimed floor point, or nil), def (the ability's numbers), hero }
 -- and returns ok, message[, cooldown] (cooldown: seconds, instead of the ability's own, e.g. Devour's
 -- during Living Nightmare). ctx.shortenCooldown(who, slot, seconds) cuts what's left of another
--- ability's cooldown to at most `seconds`. Everyone's computer is told what happened through "AbilityFx" (kind, the
+-- ability's cooldown to at most `seconds`; ctx.setCooldown(who, slot, seconds) sets it outright (the
+-- Minotaur's Charge: its cooldown starts when it ends). Everyone's computer is told what happened through "AbilityFx" (kind, the
 -- user's UserId, details) so it can draw it (HeroVisuals).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -115,6 +117,10 @@ local function setCooldown(who, slot, seconds)
 	end
 end
 
+function ctx.setCooldown(who, slot, seconds)
+	setCooldown(who, slot, seconds)
+end
+
 -- Cut what's left of a cooldown to at most `seconds`
 function ctx.shortenCooldown(who, slot, seconds)
 	local left = ((readyAt[who] or {})[slot] or 0) - os.clock()
@@ -178,7 +184,7 @@ local function monsterBusy(monster)
 end
 
 -- user: a player (survivor or monster). Returns ok, message.
-function Abilities.use(user, slot, aim)
+function Abilities.use(user, slot, aim, point)
 	if not ctx.match then return false end
 	local hero = Heroes.get(user:GetAttribute("Hero"))
 	local def = hero and hero.abilities[slot]
@@ -194,23 +200,24 @@ function Abilities.use(user, slot, aim)
 		return false
 	end
 	local ok, message = cast(user, slot, { user = user, monster = monster, root = root, def = def, hero = hero,
-		aim = flatAim(aim, root.CFrame.LookVector) })
+		aim = flatAim(aim, root.CFrame.LookVector),
+		point = typeof(point) == "Vector3" and point == point and point or nil })
 	if ok and def.id ~= "Encrypt" then Encrypt.stop(user) end    -- (anything else ends it)
 	return ok, message
 end
 
--- An AI monster uses an ability (its hero: monster.hero)
-function Abilities.useMonster(monster, slot, aim)
+-- An AI monster uses an ability (its hero: monster.hero); point: for a targeted one
+function Abilities.useMonster(monster, slot, aim, point)
 	if not ctx.match or monsterBusy(monster) then return false end
 	local hero = Heroes.get(monster.hero)
 	local def = hero and hero.abilities[slot]
 	if not def then return false end
-	return cast(monster, slot, { monster = monster, def = def, hero = hero, aim = flatAim(aim, monster.facing) })
+	return cast(monster, slot, { monster = monster, def = def, hero = hero, aim = flatAim(aim, monster.facing), point = point })
 end
 
-useEvent.OnServerEvent:Connect(function(player, slot, aim)
+useEvent.OnServerEvent:Connect(function(player, slot, aim, point)
 	if typeof(slot) ~= "string" then return end
-	local ok, message = Abilities.use(player, slot, aim)
+	local ok, message = Abilities.use(player, slot, aim, point)
 	if not ok and message then resultEvent:FireClient(player, slot, message) end
 end)
 

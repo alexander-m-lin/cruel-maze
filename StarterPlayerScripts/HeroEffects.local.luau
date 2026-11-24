@@ -18,7 +18,8 @@
 --   TREASURE HUNT - a hand to the brow, a gold pulse sweeping out from her, and a pillar of light
 --                   over the relic it found (survivors only).
 --   PULLED        - anyone being dragged (a whip) kicks up dust and scrapes along the floor.
---   STUNNED       - little stars circling over the head of anything stunned ("StunnedUntil").
+--   STUNNED       - little stars circling over the head of anything stunned ("StunnedUntil"):
+--                   monsters, and survivors (the Minotaur's Crush).
 -- Effects of someone you can't see (hidden by the fog) aren't drawn, so they give nothing away.
 
 local Players = game:GetService("Players")
@@ -580,6 +581,16 @@ local function stunnedThings()
 			list[model] = true
 		end
 	end
+	-- survivors (the Minotaur's Crush): a player's is on the player, a bot's on its body
+	local function survivor(holder, body)
+		if body and body.Parent and (holder:GetAttribute("StunnedUntil") or 0) > now and body:GetAttribute("FogState") ~= "hidden" then
+			list[body] = true
+		end
+	end
+	for _, other in Players:GetPlayers() do
+		if other:GetAttribute("Role") == "Survivor" then survivor(other, other.Character) end
+	end
+	for _, bot in CollectionService:GetTagged("SurvivorBot") do survivor(bot, bot) end
 	return list
 end
 

@@ -1,4 +1,5 @@
--- Who Fear Eater's DEVOUR goes for, and whether it lands. Shared by the server (HeroAbilities.FearEater,
+-- Who Fear Eater's DEVOUR (and the Minotaur's Tear Asunder: any auto-targeted catch, `autoTarget`)
+-- goes for, and whether it lands. Shared by the server (HeroAbilities.FearEater,
 -- which carries it out) and the player's computer (FearMarks, which rings the survivor it would
 -- target, so you know before you click).
 --
@@ -11,7 +12,7 @@
 --                  (the caller decides: the server's sight check, or the fog on a player's computer)
 --     blocked(a, b) - true if a wall stands between two points
 --   1. FEARED: the nearest feared survivor within def.fearedRange, in a clear line (anywhere
---      round him: they're revealed). feared = true.
+--      round him: they're revealed). feared = true. (Skipped without a fearedRange.)
 --   2. Otherwise the nearest visible survivor within def.range, in a clear line, in front of him
 --      (within Config.VIEW_CONE, or closer than Config.VIEW_NEAR).
 --   Nobody: nil.
@@ -33,6 +34,7 @@ function DevourAim.pick(from, facing, def, candidates, blocked)
 	for pass = 1, 2 do                        -- feared first, then anyone in sight
 		for _, c in candidates do
 			if (pass == 1) ~= (c.feared == true) then continue end
+			if pass == 1 and not def.fearedRange then continue end   -- (no fear in it: Tear Asunder)
 			local offset = flat(c.root.Position - from)
 			local d = offset.Magnitude
 			if d > (pass == 1 and def.fearedRange or def.range) then continue end
@@ -54,7 +56,7 @@ end
 
 function DevourAim.lands(from, root, def, feared, blocked)
 	local d = flat(root.Position - from).Magnitude
-	if feared then return d <= def.fearedCatchRange end
+	if feared and def.fearedCatchRange then return d <= def.fearedCatchRange end
 	return d <= def.catchRange and not blocked(from, root.Position)
 end
 

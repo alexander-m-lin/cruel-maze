@@ -17,6 +17,15 @@
 -- windup is over it sets "DevourGo", with the final "DevourAim" (direction times distance) and
 -- "DevourTime": you're carried along it here (your movement is simulated on your own computer).
 -- The server decides whether it catches.
+--
+-- THE MINOTAUR'S CHARGE: "ChargeAt" on your body: you're turned the way it goes ("ChargeDir") and
+-- held there; "ChargeGo": you're carried toward "ChargeTo" at the charge's speed (steered at it
+-- every frame, so you end where the server planned, even if your computer was a little off);
+-- "ChargeEnd": stopped dead. The server decides who it tramples.
+--
+-- THE MINOTAUR'S CRUSH (a leap): "LeapAt": crouched for "LeapCrouch" seconds, then carried in an
+-- arc ("LeapHeight" studs up, over the walls) to "LeapTo", landing "LeapWindup" seconds after
+-- "LeapAt". Your character is placed along the arc every frame (no walls in the way up there).
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -154,10 +163,125 @@ local function dash(model)
 	task.delay(seconds + 0.6, endDevour, token)
 end
 
+-- THE CHARGE
+local charge = nil   -- { model, dir, push, attachment, to, speed } while one is under way
+
+local function rootAndHumanoid()
+	local character = player.Character
+	return character and character:FindFirstChild("HumanoidRootPart"), character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function stopCharge()
+	if not charge then return end
+	if charge.push then charge.push:Destroy() end
+	if charge.attachment then charge.attachment:Destroy() end
+	local root = rootAndHumanoid()
+	if root then root.AssemblyLinearVelocity *= Vector3.new(0, 1, 0) end
+	charge = nil
+end
+
+local function chargeWindup(model)
+	stopCharge()
+	local dir = model:GetAttribute("ChargeDir")
+	if typeof(dir) ~= "Vector3" then return end
+	local token = { model = model, dir = dir }
+	charge = token
+	local _, humanoid = rootAndHumanoid()
+	if humanoid then humanoid.AutoRotate = false end
+	RunService:UnbindFromRenderStep("ChargeFacing")
+	RunService:BindToRenderStep("ChargeFacing", Enum.RenderPriority.Camera.Value + 3, function()
+		local root = rootAndHumanoid()
+		if charge ~= token or not root then
+			RunService:UnbindFromRenderStep("ChargeFacing")
+			return
+		end
+		root.CFrame = CFrame.lookAt(root.Position, root.Position + token.dir)
+		-- carried toward where it ends, at the charge's speed
+		if token.push and token.to then
+			local left = (token.to - root.Position) * Vector3.new(1, 0, 1)
+			if left.Magnitude < 0.5 or left:Dot(token.dir) < 0 then
+				token.push.PlaneVelocity = Vector2.zero
+			else
+				local v = left.Unit * token.speed
+				token.push.PlaneVelocity = Vector2.new(v.X, v.Z)
+			end
+		end
+	end)
+	-- (if the server never says go - a stun in the windup - ChargeEnd still comes)
+end
+
+local function chargeGo(model)
+	local root = rootAndHumanoid()
+	if not root then return end
+	if not charge or charge.model ~= model then chargeWindup(model) end
+	local token = charge
+	if not token then return end
+	local from, to, time = model:GetAttribute("ChargeFrom"), model:GetAttribute("ChargeTo"), model:GetAttribute("ChargeTime")
+	if typeof(from) ~= "Vector3" or typeof(to) ~= "Vector3" or not time then return end
+	token.to = Vector3.new(to.X, root.Position.Y, to.Z)
+	token.speed = (to - from).Magnitude / math.max(time, 0.01)
+	if not token.push then
+		local attachment = Instance.new("Attachment")
+		attachment.Parent = root
+		local push = Instance.new("LinearVelocity")
+		push.Attachment0 = attachment
+		push.RelativeTo = Enum.ActuatorRelativeTo.World
+		push.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane   -- only across the floor; gravity still works
+		push.PrimaryTangentAxis = Vector3.xAxis
+		push.SecondaryTangentAxis = Vector3.zAxis
+		push.MaxForce = 1e6
+		push.Parent = root
+		token.push, token.attachment = push, attachment
+	end
+end
+
+-- THE LEAP
+local leapToken = nil
+local function leap(model)
+	local token = {}
+	leapToken = token
+	stopCharge()
+	local root, humanoid = rootAndHumanoid()
+	local at, to = model:GetAttribute("LeapAt"), model:GetAttribute("LeapTo")
+	if not (root and humanoid and at and typeof(to) == "Vector3") then return end
+	local crouch = model:GetAttribute("LeapCrouch") or 0.3
+	local windup = model:GetAttribute("LeapWindup") or 1.5
+	local height = model:GetAttribute("LeapHeight") or 16
+	humanoid.AutoRotate = false
+	local from = root.Position
+	local target = Vector3.new(to.X, from.Y, to.Z)
+	local flat = (target - from) * Vector3.new(1, 0, 1)
+	local facing = flat.Magnitude > 0.5 and flat.Unit or root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	local takeoff, land = at + crouch, at + windup
+	while leapToken == token and root.Parent do
+		local now = workspace:GetServerTimeNow()
+		local k = math.clamp((now - takeoff) / math.max(land - takeoff, 0.01), 0, 1)
+		if now >= takeoff then
+			local p = from:Lerp(target, k) + Vector3.yAxis * height * 4 * k * (1 - k)
+			root.CFrame = CFrame.lookAt(p, p + facing)
+			root.AssemblyLinearVelocity = Vector3.zero
+		else
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + facing)
+		end
+		if k >= 1 then break end
+		RunService.RenderStepped:Wait()
+	end
+	if leapToken == token then leapToken = nil end
+end
+
 local function watchBody(model)
 	if model:GetAttribute("OwnerUserId") ~= player.UserId then return end
 	model:GetAttributeChangedSignal("DevourAt"):Connect(function() hold(model) end)
 	model:GetAttributeChangedSignal("DevourGo"):Connect(function() task.spawn(dash, model) end)
+	model:GetAttributeChangedSignal("ChargeAt"):Connect(function() chargeWindup(model) end)
+	model:GetAttributeChangedSignal("ChargeGo"):Connect(function() chargeGo(model) end)
+	model:GetAttributeChangedSignal("ChargeEnd"):Connect(function()
+		if charge and charge.model == model then stopCharge() end
+	end)
+	model:GetAttributeChangedSignal("LeapAt"):Connect(function() task.spawn(leap, model) end)
+	model.Destroying:Connect(function()
+		if charge and charge.model == model then stopCharge() end
+	end)
 end
 CollectionService:GetInstanceAddedSignal("Monster"):Connect(function(model) task.defer(watchBody, model) end)
 for _, model in CollectionService:GetTagged("Monster") do watchBody(model) end

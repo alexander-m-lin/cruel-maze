@@ -37,6 +37,7 @@ return {
 		-- windup calls it off (a teammate can save them).
 		Primary = {
 			id = "Devour", name = "Devour", cooldown = 5,
+			autoTarget = true,      -- (AutoCatch carries it out; FearMarks rings who it'd go for)
 			windup = 0.3,           -- seconds he gathers himself (can't move); the target sees it coming
 			range = 12,             -- studs: who he can target (seen, in front of him)
 			catchRange = 14,        -- studs: still this close (clear line) when the windup ends = caught

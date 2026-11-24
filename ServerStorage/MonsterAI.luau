@@ -210,9 +210,9 @@ end
 -- options.pack: a list of all the match's monsters (this one included), to spread out from.
 -- options.spottedBySide(player): true if the monster side can see them right now (another
 -- monster, a ward, a crushing wall): it goes after them as if it saw them itself, when near.
--- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is Devour catches
--- only with Devour (it dashes at you once you're in range); otherwise it catches anyone who gets
--- within CATCH_DIST, like the stand-in.
+-- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is auto-targeted
+-- (Devour, Tear Asunder) catches only with it (it dashes at you once you're in range); otherwise it
+-- catches anyone who gets within CATCH_DIST, like the stand-in.
 -- options.castsAbilities: also uses its hero's Secondary and Ultimate (for now only Fear Eater's):
 -- Instill Fear whenever it's ready, Living Nightmare whenever it's ready and a survivor is feared.
 function MonsterAI.new(maze, options)
@@ -236,7 +236,7 @@ function MonsterAI.new(maze, options)
 	self.kill = MonsterAI.killFor(self.model:GetAttribute("Hero"))
 	local heroDef = Heroes.get(self.model:GetAttribute("Hero"))
 	local primary = heroDef and heroDef.abilities.Primary
-	self.devourDef = primary and primary.id == "Devour" and primary or nil
+	self.devourDef = primary and primary.autoTarget and primary or nil   -- (Devour, Tear Asunder: AutoCatch)
 	self.castsAbilities = options.castsAbilities == true
 
 	local start = options.startCell or { math.ceil(maze.n / 2), math.ceil(maze.n / 2) }
@@ -392,7 +392,7 @@ end
 ---------------------------------------------------------------- abilities (castsAbilities)
 -- Instill Fear on cooldown; Living Nightmare when it's ready and any survivor is feared
 function MonsterAI:castAbilities(targets)
-	if self.dash or self.killUntil then return end
+	if self.dash or self.killUntil or self.hero ~= "FearEater" then return end   -- (no other hero's Q/E brain yet)
 	if Abilities.ready(self, "Secondary") then
 		Abilities.useMonster(self, "Secondary", self.facing)
 	end

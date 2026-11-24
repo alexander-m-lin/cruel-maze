@@ -5,7 +5,7 @@
 --     Bot, Dummy (a bot held in place), Feared dummy, AI monster, Ward, False relic,
 --     Concepts (every model in ServerStorage.ModelConcepts, in a row, each gliding round a small square)
 --   At once: Fear all, Freeze AI, Ready (your cooldowns), Lives, Clear (bots and AI monsters),
---            Hero (a survivor: switch to the next survivor hero, e.g. Sara -> Kai)
+--            Hero (switch to the next hero of your role, e.g. Sara -> Kai, Fear Eater -> Minotaur)
 -- The server's answer shows under the buttons.
 -- At the top, a TRACKER: where you are (studs, and the maze cell) and how fast you're moving
 -- (across the floor, smoothed a little), next to the walk speed the movement rules allow you now.
