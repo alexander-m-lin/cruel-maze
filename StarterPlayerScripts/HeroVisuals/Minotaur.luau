@@ -14,7 +14,8 @@
 --              (his arms close in to fit them: gripSpread). They struggle as he pulls his fists
 --              apart, and they're torn in two (Victims.tear), arms flung apart.
 --   DEVASTATING CHARGE - ("ChargeAt" ...) for the windup he lowers his horns and paws the floor,
---              and a red LANE shows his path to the wall (anyone who can see him sees it; his side
+--              and a red LANE shows his path to the wall, a pair of horns repeated along it pointing
+--              the way he'll go (anyone who can see him sees it; his side
 --              always); then he gallops along it, kicking up dust; at the wall ("ChargeEnd") a
 --              burst of dust and he reels, shaking his head. Survivors he TRAMPLES ("Trampled", from
 --              the server) are flung aside and drop.
@@ -69,6 +70,23 @@ local REMAINS_TIME = 6      -- seconds the pieces lie about
 local FLING_SPEED = 45      -- how fast someone he tramples is flung (studs per second, his way)
 local RED = Color3.fromRGB(255, 45, 30)
 local DUST = Color3.fromRGB(150, 130, 105)
+-- The charge lane's HORNS: a pair of horns drawn flat on it again and again, tips pointing the way
+-- he'll charge, drifting that way through the windup. In the pair's own space: x across, z ahead.
+local HORN = {                 -- one horn's curve (the left; the right mirrors it): sweeping out
+	Vector3.new(-0.9, 0, 0),   -- sideways from the brow, then curving forward, the tip only just
+	Vector3.new(-2.4, 0, -0.1),-- turning in (an open U, not a closed C)
+	Vector3.new(-3.6, 0, 0.5),
+	Vector3.new(-4.2, 0, 1.6),
+	Vector3.new(-4.1, 0, 2.9),
+}
+local HORN_WIDTHS  = { 1.0, 0.8, 0.55, 0.3 }    -- each stretch of it, tapering to the tip
+local HORN_BROW    = 1.1       -- the brow's thickness, joining the pair (studs, before scaling)
+local HORN_HEAD    = { Vector3.new(0, 0, 0), Vector3.new(0, 0, -1.3), Vector3.new(0, 0, -2.2) }   -- his head, behind
+local HORN_HEAD_WIDTHS = { 1.7, 1.1 }                                                            -- the brow, narrowing to the muzzle
+local HORN_SCALE   = 1.2       -- (about 10 studs across, 4 deep: the lane is 14 wide)
+local HORN_EVERY   = 10        -- studs between pairs
+local HORN_START   = 7         -- studs ahead of him the first can be (its head reaches back about 2.6)
+local HORN_SCROLL  = 12        -- studs a second they drift forward
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
 -- THE GRIP: the victim is held in his fists, the middle of their body this many studs above the grip
 -- point on each fist (the fist reaches about 1.1 above it): their body runs through the top half of
@@ -552,9 +570,48 @@ local function chargeEffects(model, mt)
 		bar(mt.lane.right, a - side, b - side, 0.35)
 		bar(mt.lane.front, b - side, b + side, 0.35)
 		for _, name in { "left", "right", "front" } do mt.lane[name].Transparency = 0.45 - 0.35 * k end
+		-- the horns, repeated along it (fading in at his end and out at the far end)
+		mt.laneHorns = mt.laneHorns or {}
+		local length = (b - a):Dot(dir)
+		local across = Vector3.new(-dir.Z, 0, dir.X)
+		local depth = HORN[#HORN].Z * HORN_SCALE
+		local used = 0
+		local function hornBar(p1, p2, width, transparency)
+			used += 1
+			local piece = mt.laneHorns[used]
+			if not piece then
+				piece = part("ChargeHorn", nil, RED, 0.3)
+				mt.laneHorns[used] = piece
+			end
+			piece.Parent = folder
+			bar(piece, p1, p2, width)
+			piece.Transparency = transparency
+		end
+		local first = HORN_START + (now * HORN_SCROLL) % HORN_EVERY
+		local at = first
+		while at + depth <= length - 1 do
+			local origin = a + dir * at + Vector3.new(0, 0.02, 0)
+			local function world(v) return origin + across * (v.X * HORN_SCALE) + dir * (v.Z * HORN_SCALE) end
+			local fade = math.min(1, (at - HORN_START) / 4, (length - 1 - at - depth) / 4)
+			local transparency = 1 - (0.55 + 0.35 * k) * math.clamp(fade, 0, 1)
+			hornBar(world(HORN[1]), world(Vector3.new(-HORN[1].X, 0, 0)), HORN_BROW * HORN_SCALE, transparency)   -- the brow
+			for i = 1, #HORN_HEAD - 1 do
+				hornBar(world(HORN_HEAD[i]), world(HORN_HEAD[i + 1]), HORN_HEAD_WIDTHS[i] * HORN_SCALE, transparency)
+			end
+			for i = 1, #HORN - 1 do
+				local p1, p2 = HORN[i], HORN[i + 1]
+				local w = HORN_WIDTHS[i] * HORN_SCALE
+				hornBar(world(p1), world(p2), w, transparency)
+				hornBar(world(Vector3.new(-p1.X, 0, p1.Z)), world(Vector3.new(-p2.X, 0, p2.Z)), w, transparency)
+			end
+			at += HORN_EVERY
+		end
+		for i = used + 1, #mt.laneHorns do mt.laneHorns[i].Parent = nil end
 	elseif mt.lane then
 		for _, p in mt.lane do p:Destroy() end
 		mt.lane = nil
+		for _, p in mt.laneHorns or {} do p:Destroy() end
+		mt.laneHorns = nil
 	end
 
 	-- DUST kicked up while he runs
