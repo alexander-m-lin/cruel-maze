@@ -70,22 +70,25 @@ local REMAINS_TIME = 6      -- seconds the pieces lie about
 local FLING_SPEED = 45      -- how fast someone he tramples is flung (studs per second, his way)
 local RED = Color3.fromRGB(255, 45, 30)
 local DUST = Color3.fromRGB(150, 130, 105)
--- The charge lane's HORNS: a pair of horns drawn flat on it again and again, tips pointing the way
--- he'll charge, drifting that way through the windup. In the pair's own space: x across, z ahead.
-local HORN = {                 -- one horn's curve (the left; the right mirrors it): sweeping out
-	Vector3.new(-0.9, 0, 0),   -- sideways from the brow, then curving forward, the tip only just
-	Vector3.new(-2.4, 0, -0.1),-- turning in (an open U, not a closed C)
-	Vector3.new(-3.6, 0, 0.5),
-	Vector3.new(-4.2, 0, 1.6),
-	Vector3.new(-4.1, 0, 2.9),
+-- The charge lane's HORNS: his own head, seen from above, drawn flat on it again and again, horns
+-- pointing the way he'll charge and drifting that way through the windup. Strokes of thick bars, in
+-- the head's own space: x across, z ahead (studs, before HORN_SCALE). Like his real head: a broad,
+-- rounded skull narrowing to the muzzle behind, and stout horns going almost straight out from it,
+-- only their ends hooking forward to blunt tips.
+local HORN_STROKES = {
+	-- the skull, brow to muzzle (widths: each stretch, in order)
+	{ points = { Vector3.new(0, 0, 0.9), Vector3.new(0, 0, -0.3), Vector3.new(0, 0, -1.6), Vector3.new(0, 0, -2.6) },
+		widths = { 3.2, 2.7, 1.9 } },
+	-- a horn (the left; mirrored for the right): out from the skull, then hooking forward
+	{ points = { Vector3.new(-1.2, 0, 0.3), Vector3.new(-2.6, 0, 0.35), Vector3.new(-3.7, 0, 0.75),
+		Vector3.new(-4.4, 0, 1.6), Vector3.new(-4.6, 0, 2.5) },
+		widths = { 1.7, 1.5, 1.2, 0.75 }, mirror = true },
 }
-local HORN_WIDTHS  = { 1.0, 0.8, 0.55, 0.3 }    -- each stretch of it, tapering to the tip
-local HORN_BROW    = 1.1       -- the brow's thickness, joining the pair (studs, before scaling)
-local HORN_HEAD    = { Vector3.new(0, 0, 0), Vector3.new(0, 0, -1.3), Vector3.new(0, 0, -2.2) }   -- his head, behind
-local HORN_HEAD_WIDTHS = { 1.7, 1.1 }                                                            -- the brow, narrowing to the muzzle
-local HORN_SCALE   = 1.2       -- (about 10 studs across, 4 deep: the lane is 14 wide)
-local HORN_EVERY   = 10        -- studs between pairs
-local HORN_START   = 7         -- studs ahead of him the first can be (its head reaches back about 2.6)
+local HORN_SCALE   = 1.3       -- (about 13 studs across the horn tips: most of the lane's 14)
+local HORN_FRONT   = 2.9       -- how far ahead of its middle the shape reaches (the tips), and...
+local HORN_BACK    = 2.6       -- ...behind it (the muzzle), before scaling
+local HORN_EVERY   = 10        -- studs between them
+local HORN_START   = 8         -- studs ahead of him the first one's middle can be
 local HORN_SCROLL  = 12        -- studs a second they drift forward
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
 -- THE GRIP: the victim is held in his fists, the middle of their body this many studs above the grip
@@ -574,9 +577,11 @@ local function chargeEffects(model, mt)
 		mt.laneHorns = mt.laneHorns or {}
 		local length = (b - a):Dot(dir)
 		local across = Vector3.new(-dir.Z, 0, dir.X)
-		local depth = HORN[#HORN].Z * HORN_SCALE
+		local front = HORN_FRONT * HORN_SCALE
 		local used = 0
-		local function hornBar(p1, p2, width, transparency)
+		-- a stroke's stretch: a bar from p1 to p2, run on a little past each end (not past a tip) so
+		-- the bends don't show notches
+		local function hornBar(p1, p2, width, transparency, tip)
 			used += 1
 			local piece = mt.laneHorns[used]
 			if not piece then
@@ -584,25 +589,27 @@ local function chargeEffects(model, mt)
 				mt.laneHorns[used] = piece
 			end
 			piece.Parent = folder
-			bar(piece, p1, p2, width)
+			local u = (p2 - p1).Magnitude > 0.01 and (p2 - p1).Unit or dir
+			bar(piece, p1 - u * width * 0.3, tip and p2 or p2 + u * width * 0.3, width)
 			piece.Transparency = transparency
 		end
 		local first = HORN_START + (now * HORN_SCROLL) % HORN_EVERY
 		local at = first
-		while at + depth <= length - 1 do
+		while at + front <= length - 1 do
 			local origin = a + dir * at + Vector3.new(0, 0.02, 0)
 			local function world(v) return origin + across * (v.X * HORN_SCALE) + dir * (v.Z * HORN_SCALE) end
-			local fade = math.min(1, (at - HORN_START) / 4, (length - 1 - at - depth) / 4)
+			local fade = math.min(1, (at - HORN_START) / 4, (length - 1 - at - front) / 4)
 			local transparency = 1 - (0.55 + 0.35 * k) * math.clamp(fade, 0, 1)
-			hornBar(world(HORN[1]), world(Vector3.new(-HORN[1].X, 0, 0)), HORN_BROW * HORN_SCALE, transparency)   -- the brow
-			for i = 1, #HORN_HEAD - 1 do
-				hornBar(world(HORN_HEAD[i]), world(HORN_HEAD[i + 1]), HORN_HEAD_WIDTHS[i] * HORN_SCALE, transparency)
-			end
-			for i = 1, #HORN - 1 do
-				local p1, p2 = HORN[i], HORN[i + 1]
-				local w = HORN_WIDTHS[i] * HORN_SCALE
-				hornBar(world(p1), world(p2), w, transparency)
-				hornBar(world(Vector3.new(-p1.X, 0, p1.Z)), world(Vector3.new(-p2.X, 0, p2.Z)), w, transparency)
+			for _, stroke in HORN_STROKES do
+				for side = 1, stroke.mirror and 2 or 1 do
+					local flip = side == 2 and -1 or 1
+					local pts = stroke.points
+					for i = 1, #pts - 1 do
+						local p1 = Vector3.new(pts[i].X * flip, 0, pts[i].Z)
+						local p2 = Vector3.new(pts[i + 1].X * flip, 0, pts[i + 1].Z)
+						hornBar(world(p1), world(p2), stroke.widths[i] * HORN_SCALE, transparency, stroke.mirror and i == #pts - 1)
+					end
+				end
 			end
 			at += HORN_EVERY
 		end
