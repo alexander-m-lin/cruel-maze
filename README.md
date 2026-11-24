@@ -140,10 +140,12 @@ slow, heavy stomp; the chase boost still applies), so the Charge and Crush are h
   that finishes opening before he gets there lets him through. A stun calls it off. At the wall he
   reels for 0.6 seconds.
 - **E: Crush** (60 s). Hold E to see his 100-stud range and where he'd land (under the mouse);
-  let go and he crouches, leaps in a high arc (over walls if need be) and lands 1.5 seconds
+  while you hold it the camera comes loose: push the mouse to an edge of the screen to pan over
+  his range (it eases back onto him when you let go). Let go and he crouches, leaps in a high arc (over walls if need be) and lands 1.5 seconds
   later. For the last 0.7 seconds a red ring shows where, drawn above the fog and the walls, to
   his side and to survivors within 40 studs of it. Survivors within 14 studs of the landing, in a
-  clear line, are stunned for 2.5 seconds (stars circle their heads) - time for a Charge. He has
+  clear line, are stunned for 2.5 seconds (stars circle their heads) - time for a Charge. The
+  landing shakes his screen, and the screen of anyone within 40 studs of it. He has
   to land somewhere he could stand: an aim inside a wall or a sanctuary is pulled back toward him.
 His sounds: a heavy thump for each hoof as he walks (and faster as he charges), a snort as the
 Charge winds up, a bellow as he sets off and a crash of rock at the wall; a snort as he leaps

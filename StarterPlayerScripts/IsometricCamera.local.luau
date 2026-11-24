@@ -1,5 +1,13 @@
 -- Fixed isometric camera that follows the player.
 -- Runs on each player's own computer (LocalScript), because the camera is client-side.
+--
+-- EDGE PANNING (aiming the Minotaur's Crush): while the player's "CameraPanRange" attribute is set
+-- (on this computer, by the aim preview: HeroVisuals.Minotaur), moving the mouse to an edge of the
+-- screen pans the view that way, up to that many studs from their character, so they can look
+-- over all of its range. Cleared, the view eases back onto them. (Sounds are still heard from the
+-- character, and walls between it and the camera still fade.)
+-- SCREEN SHAKE: "CameraShakeAt" (os.clock()) and "CameraShakeStrength" (studs) on the player, set on
+-- this computer (e.g. Crush landing nearby): a short shake that dies away over SHAKE_TIME.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -89,6 +97,51 @@ end
 
 local lastFocus = nil
 
+-- EDGE PANNING
+local EDGE = 0.07          -- this much of the screen's size from an edge starts panning...
+local EDGE_SPEED = 110     -- ...at up to this many studs a second (the deeper into the edge, the faster)
+local RETURN_EASE = 6      -- how quickly the view eases back when it's let go
+local panOffset = Vector3.zero
+
+local function edgePan(dt)
+	local range = player:GetAttribute("CameraPanRange")
+	if typeof(range) ~= "number" then
+		panOffset = panOffset:Lerp(Vector3.zero, math.min(1, dt * RETURN_EASE))
+		if panOffset.Magnitude < 0.05 then panOffset = Vector3.zero end
+		return panOffset
+	end
+	local size = camera.ViewportSize
+	local m = UserInputService:GetMouseLocation()
+	local function push(at, length)          -- -1..1: how deep into the low or high edge
+		local e = length * EDGE
+		if at < e then return -(1 - at / e) end
+		if at > length - e then return 1 - (length - at) / e end
+		return 0
+	end
+	local px, py = push(m.X, size.X), push(m.Y, size.Y)
+	if px ~= 0 or py ~= 0 then
+		local right = (camera.CFrame.RightVector * Vector3.new(1, 0, 1)).Unit
+		local up = (camera.CFrame.UpVector * Vector3.new(1, 0, 1)).Unit
+		panOffset += (right * px - up * py) * EDGE_SPEED * dt
+		if panOffset.Magnitude > range then panOffset = panOffset.Unit * range end
+	end
+	return panOffset
+end
+
+-- SCREEN SHAKE
+local SHAKE_TIME = 0.45
+local function shake()
+	local at, strength = player:GetAttribute("CameraShakeAt"), player:GetAttribute("CameraShakeStrength")
+	if typeof(at) ~= "number" or typeof(strength) ~= "number" then return Vector3.zero end
+	local k = (os.clock() - at) / SHAKE_TIME
+	if k < 0 or k >= 1 then return Vector3.zero end
+	local fade = (1 - k) ^ 2
+	local t = os.clock() * 40
+	local right = camera.CFrame.RightVector
+	local up = camera.CFrame.UpVector
+	return (right * math.noise(t, 1.3) + up * math.noise(t, 7.1)) * 2 * strength * fade
+end
+
 -- THE MAZE MASTER has no character: their camera pans freely over the maze. WASD or the arrow
 -- keys move it across the screen (up on the screen is +X+Z in the world, since the camera looks
 -- from the -X-Z corner). It starts over the middle and can't leave the maze.
@@ -167,14 +220,17 @@ RunService:BindToRenderStep("IsometricCamera", Enum.RenderPriority.Camera.Value 
 	end
 	if not focus then return end
 	lastFocus = focus
+	local hearFrom = focus                  -- (sounds stay with the character, whatever the camera does)
+	if not isMazeMaster() then focus += edgePan(dt) end
 
 	local zoomed = isMazeMaster() and zoom or 1
-	local camPos = focus + DIRECTION * DISTANCE * zoomed
-	camera.CFrame = CFrame.lookAt(camPos, focus)
+	local jolt = shake()
+	local camPos = focus + DIRECTION * DISTANCE * zoomed + jolt
+	camera.CFrame = CFrame.lookAt(camPos, focus + jolt)
 	-- The atmosphere's haze builds up with distance from the camera, so zooming out would wash the
 	-- maze out. Thin it (on this computer only) by as much as the camera moved away.
 	if atmosphere then atmosphere.Density = baseDensity / zoomed end
-	camera.Focus = CFrame.new(focus)        -- what we're looking at (sounds are heard from here: SoundEffects)
+	camera.Focus = CFrame.new(hearFrom)     -- what we're following (sounds are heard from here: SoundEffects)
 
 	if character then fadeBlockingWalls(focus, camPos, character) end
 end)

@@ -28,7 +28,11 @@
 --              for each survivor trampled. Heard wherever they come from, fog or not (they fade
 --              with distance): his telegraphs are meant to be heard.
 --   AIMING CRUSH - (hold E) a thin circle shows his range and a ring where he'd land, both drawn
---              above the fog and the walls (so you can aim into places you can't see).
+--              above the fog and the walls (so you can aim into places you can't see), and the
+--              camera comes loose: the screen's edges pan it over his range (IsometricCamera's
+--              "CameraPanRange"), easing back onto him when E is let go.
+--   LANDING SHAKE - Crush's impact shakes the screen of the Minotaur who landed and of anyone
+--              (survivor or monster player) within SHAKE_RANGE of it, harder the closer.
 --
 -- Joints (ServerStorage.MinotaurRig): Root (the root to the torso), Neck, Left/RightShoulder,
 -- Left/RightHip, all Motor6Ds whose frames are lined up with the body (facing -Z), so Transform
@@ -85,6 +89,9 @@ local HORN_COLOR   = Color3.fromRGB(255, 45, 25)   -- (a decal doesn't glow like
 local HORN_EVERY   = 10        -- studs between their middles
 local HORN_START   = 7         -- studs ahead of him the first one's middle can be
 local HORN_SCROLL  = 12        -- studs a second they drift forward
+local SHAKE_RANGE = 40      -- studs from Crush's landing within which screens shake (fading out to here)
+local SHAKE_MAX   = 1.6     -- studs the camera jolts at the landing itself
+local PAN_MARGIN  = 25      -- studs past his range the camera can pan while aiming (to see the ring's edge)
 local ABOVE_FOG = 1.3       -- studs above the wall tops the Crush ring floats (fog and walls never hide it)
 -- THE GRIP: the victim is held in his fists, the middle of their body this many studs above the grip
 -- point on each fist (the fist reaches about 1.1 above it): their body runs through the top half of
@@ -755,7 +762,20 @@ end
 
 ---------------------------------------------------------------- the server's word
 -- Crush's impact: a shockwave out over the ring (where it's shown) and dust (where you can see it)
-local function crushImpact(at, radius)
+local function crushImpact(at, radius, casterId)
+	-- the screen shakes: his (whoever cast it), and anyone's near the landing
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local strength = 0
+	if casterId == player.UserId then strength = SHAKE_MAX end
+	if root then
+		local d = ((root.Position - at) * Vector3.new(1, 0, 1)).Magnitude
+		if d <= SHAKE_RANGE then strength = math.max(strength, SHAKE_MAX * (1 - 0.7 * d / SHAKE_RANGE)) end
+	end
+	if strength > 0 then
+		player:SetAttribute("CameraShakeStrength", strength)
+		player:SetAttribute("CameraShakeAt", os.clock())
+	end
 	local y = floorY() + 0.1
 	playAt("CrushSlam", Vector3.new(at.X, y + 1, at.Z))       -- (everyone hears it, fog or not)
 	playAt("CrushRubble", Vector3.new(at.X, y + 1, at.Z))
@@ -797,7 +817,7 @@ fxEvent.OnClientEvent:Connect(function(kind, userId, a, b)
 	if kind == "Trampled" and typeof(a) == "Vector3" then
 		trampled(userId, a)
 	elseif kind == "CrushImpact" and typeof(a) == "Vector3" then
-		crushImpact(a, b or CRUSH.radius)
+		crushImpact(a, b or CRUSH.radius, userId)
 	end
 end)
 
@@ -846,8 +866,10 @@ Minotaur.aim = {
 			aimSpot.CFrame = CFrame.new(at + offset + lift + Vector3.new(0, 0.02, 0)) * CFrame.Angles(0, 0, math.pi / 2)
 			aimSpot.Transparency = 0.6
 			aimSpot.Parent = folder
+			player:SetAttribute("CameraPanRange", def.range + PAN_MARGIN)   -- (the camera comes loose: edge panning)
 		end,
 		hide = function()
+			player:SetAttribute("CameraPanRange", nil)
 			for _, p in aimRange do p.Parent = nil end
 			aimSpot.Parent = nil
 		end,
