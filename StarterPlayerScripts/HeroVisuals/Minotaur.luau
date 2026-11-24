@@ -23,6 +23,10 @@
 --              slams them down as he lands. For the last moments a red RING shows where, drawn
 --              above the fog and the walls, to his side and to survivors near it; at the impact a
 --              shockwave runs out over it ("CrushImpact").
+--   SOUNDS   - (ReplicatedStorage.Sounds) a thump as each hoof lands, walking or charging; the
+--              Charge's snort, bellow and crash into the wall; Crush's snort and its slam; a thump
+--              for each survivor trampled. Heard wherever they come from, fog or not (they fade
+--              with distance): his telegraphs are meant to be heard.
 --   AIMING CRUSH - (hold E) a thin circle shows his range and a ring where he'd land, both drawn
 --              above the fog and the walls (so you can aim into places you can't see).
 --
@@ -41,6 +45,7 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local Heroes = require(ReplicatedStorage:WaitForChild("Heroes"))
 local Characters = require(ReplicatedStorage:WaitForChild("Characters"))
+local Sounds = require(ReplicatedStorage:WaitForChild("Sounds"))
 local Victims = require(script.Parent.Parent:WaitForChild("Victims"))
 
 local HERO = Heroes.list.Minotaur
@@ -159,6 +164,27 @@ local function dustBurst(at, count, speed)
 	Debris:AddItem(p, 2)
 end
 
+-- A sound from a point in the world (ReplicatedStorage.Sounds), cleaned up when it ends
+local function playAt(name, at)
+	local def = Sounds[name]
+	if not def or typeof(at) ~= "Vector3" then return end
+	local holder = Instance.new("Attachment")
+	holder.WorldPosition = at
+	holder.Parent = workspace.Terrain
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxassetid://" .. def.id
+	s.Volume = def.volume or 1
+	s.PlaybackSpeed = def.speed or 1
+	if def.range then
+		s.RollOffMode = Enum.RollOffMode.InverseTapered
+		s.RollOffMinDistance = 10
+		s.RollOffMaxDistance = def.range
+	end
+	s.Parent = holder
+	s:Play()
+	Debris:AddItem(holder, def.stopAfter or 6)
+end
+
 -- Raised above the fog: drawn `raise` studs higher and shifted back toward the camera by as much,
 -- so on screen it still sits where it would on the floor
 local function aboveFog(y)
@@ -251,7 +277,12 @@ function animate.pose(model, s, dt)
 		mt.moveDir = (mt.moveDir or Vector3.new(0, 0, -1)):Lerp(localMove.Unit, math.min(1, localMove.Magnitude * 0.5))
 	end
 	-- (slower than walking pace the steps shrink with `move`, so the cycle goes round faster to match)
+	local lastPhase = mt.phase
 	mt.phase = (mt.phase + moved.Magnitude / (stride * math.max(move, 0.3))) % 1
+	-- a hoof lands as each leg's cycle starts again (0 for the left, 0.5 for the right): a thump
+	-- (not while charging, leaping or killing: those have their own)
+	local stepped = mt.phase ~= lastPhase and ((mt.phase < lastPhase) or (lastPhase < 0.5 and mt.phase >= 0.5))
+	if stepped and move > 0.6 and not s.killStart and not mt.busy then playAt("HoofStep", pivot.Position) end
 	mt.reach += ((s.mode == "chase" and 1 or 0) - mt.reach) * math.min(1, dt * REACH_EASE)
 	local reach = mt.reach
 
@@ -443,6 +474,11 @@ function animate.pose(model, s, dt)
 		y = lerp(y, -L * (1 - math.cos(0.12)), hold)
 	end
 
+	-- (no walking footsteps while a charge or leap is under way: they have their own sounds)
+	local chargeOn = chargeAt and not (chargeEnd and chargeEnd >= chargeAt) and now - chargeAt < 30
+	local leapOn = leapAt and now - leapAt < (model:GetAttribute("LeapWindup") or CRUSH.windup) + 0.5
+	mt.busy = (chargeOn or leapOn) and true or false
+
 	j.Root.Transform = CFrame.new(0, y, 0) * CFrame.Angles(pitch, yaw, roll)
 	if j.Neck then j.Neck.Transform = CFrame.Angles(neck, neckYaw, 0) end
 	if j.LeftShoulder then j.LeftShoulder.Transform = CFrame.Angles(shL, 0, -outL) end
@@ -599,6 +635,28 @@ local function chargeEffects(model, mt)
 		mt.laneHorns = nil
 	end
 
+	-- SOUNDS: the snort as the windup starts, the bellow as he sets off, a hoof striking twice a
+	-- gallop cycle while he runs (fog or not: they're how survivors hear it coming)
+	local here = model:GetPivot().Position
+	if chargeAt and chargeAt ~= mt.snortSeen then
+		mt.snortSeen = chargeAt
+		if now - chargeAt < 0.5 then playAt("ChargeSnort", here) end
+	end
+	if running and go ~= mt.goSeen then
+		local first = mt.goSeen == nil or mt.goSeen < chargeAt
+		mt.goSeen = go
+		if first and now - go < 0.5 then playAt("ChargeBellow", here) end   -- (not again when the path changes)
+	end
+	if running then
+		local strikes = math.floor((now - (mt.goSeen or now)) * GALLOP_RATE * 2)
+		if strikes ~= mt.strikes then
+			mt.strikes = strikes
+			playAt("HoofGallop", here)
+		end
+	else
+		mt.strikes = nil
+	end
+
 	-- DUST kicked up while he runs
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if root and not mt.dust then
@@ -626,8 +684,10 @@ local function chargeEffects(model, mt)
 		mt.impactSeen = chargeEnd
 		local stopAt = model:GetAttribute("ChargeStopAt")
 		if now - chargeEnd < 0.6 and (model:GetAttribute("ChargeRecovery") or 0) > 0 and typeof(stopAt) == "Vector3"
-			and typeof(dir) == "Vector3" and model:GetAttribute("FogState") ~= "hidden" then
-			dustBurst(Vector3.new(stopAt.X, floorY() + 2, stopAt.Z) + dir * (CHARGE.bodyRadius + 0.5), 40, 18)
+			and typeof(dir) == "Vector3" then
+			local wall = Vector3.new(stopAt.X, floorY() + 2, stopAt.Z) + dir * (CHARGE.bodyRadius + 0.5)
+			playAt("ChargeCrash", wall)                                       -- (heard through the fog)
+			if model:GetAttribute("FogState") ~= "hidden" then dustBurst(wall, 40, 18) end
 		end
 	end
 end
@@ -645,6 +705,10 @@ local RING_SEGMENTS = 48
 local function crushEffects(model, mt)
 	local leapAt, to = model:GetAttribute("LeapAt"), model:GetAttribute("LeapTo")
 	local windup = model:GetAttribute("LeapWindup") or CRUSH.windup
+	if leapAt and leapAt ~= mt.leapSeen then                -- a snort as he crouches to leap
+		mt.leapSeen = leapAt
+		if workspace:GetServerTimeNow() - leapAt < 0.5 then playAt("CrushLeap", model:GetPivot().Position) end
+	end
 	local left = leapAt and (windup - clock(leapAt, "CastPreviewAt")) or -1
 	local show = typeof(to) == "Vector3" and left > 0 and left <= CRUSH.telegraph and threatened(to)
 	if not show then
@@ -692,8 +756,10 @@ end
 ---------------------------------------------------------------- the server's word
 -- Crush's impact: a shockwave out over the ring (where it's shown) and dust (where you can see it)
 local function crushImpact(at, radius)
-	if not threatened(at) then return end
 	local y = floorY() + 0.1
+	playAt("CrushSlam", Vector3.new(at.X, y + 1, at.Z))       -- (everyone hears it, fog or not)
+	playAt("CrushRubble", Vector3.new(at.X, y + 1, at.Z))
+	if not threatened(at) then return end
 	local lift = aboveFog(y)
 	local wave = part("CrushWave", Vector3.new(0.2, 2, 2), RED, 0.1)
 	wave.Shape = Enum.PartType.Cylinder
@@ -709,6 +775,7 @@ local function trampled(userId, dir)
 	local character = Characters.of(userId)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
+	playAt("Trample", root.Position)
 	if character:GetAttribute("FogState") == "hidden" then
 		Victims.hide(character)
 		return

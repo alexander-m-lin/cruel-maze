@@ -607,11 +607,11 @@ local function pickMonsterHero(wanted)
 end
 
 -- An AI monster (a match's empty monster slots, or one the Sandbox panel adds), with the next free
--- monster hero. Up to Config.AI_MONSTERS_CASTING a match whose hero has a Q/E brain (Fear Eater so
--- far) use those abilities too. Not yet in `monsters`, and not active.
+-- monster hero. Up to Config.AI_MONSTERS_CASTING a match whose hero has a Q/E brain
+-- (MonsterAI.BRAINS: Fear Eater, the Minotaur) use those abilities too. Not yet in `monsters`, and not active.
 local function addAIMonster(startCell)
 	local hero = pickMonsterHero(nil)
-	local casts = hero == "FearEater" and aiMonsterCount < Config.AI_MONSTERS_CASTING
+	local casts = MonsterAI.BRAINS[hero] ~= nil and aiMonsterCount < Config.AI_MONSTERS_CASTING
 	if casts then aiMonsterCount += 1 end
 	return MonsterAI.new(maze, {
 		onCatch = onCaught,

@@ -213,8 +213,8 @@ end
 -- options.hero: its hero's id (ReplicatedStorage.Heroes). A hero whose Primary is auto-targeted
 -- (Devour, Tear Asunder) catches only with it (it dashes at you once you're in range); otherwise it
 -- catches anyone who gets within CATCH_DIST, like the stand-in.
--- options.castsAbilities: also uses its hero's Secondary and Ultimate (for now only Fear Eater's):
--- Instill Fear whenever it's ready, Living Nightmare whenever it's ready and a survivor is feared.
+-- options.castsAbilities: also uses its hero's Secondary and Ultimate, if the AI has a brain for
+-- them (MonsterAI.BRAINS: Fear Eater, the Minotaur; see castAbilities).
 function MonsterAI.new(maze, options)
 	options = options or {}
 	local self = setmetatable({}, MonsterAI)
@@ -317,6 +317,7 @@ end
 function MonsterAI:Stun(seconds)
 	if self:Killing() then return end
 	self.dash, self.devourToken = nil, nil
+	self.charging, self.chargeToken = nil, nil      -- (a Charge is called off: HeroAbilities.Minotaur ends it)
 	self.stunUntil = math.max(self.stunUntil or 0, os.clock() + seconds)
 	if self.model then
 		self.model:SetAttribute("StunnedUntil", workspace:GetServerTimeNow() + (self.stunUntil - os.clock()))
@@ -391,9 +392,18 @@ function MonsterAI:canPassNightmare(a, b)
 end
 
 ---------------------------------------------------------------- abilities (castsAbilities)
--- Instill Fear on cooldown; Living Nightmare when it's ready and any survivor is feared
+-- Each hero with a Q/E brain (MonsterAI.BRAINS): when to use them
+local brains = {}
+MonsterAI.BRAINS = brains          -- [hero id] = true for heroes whose Q and E the AI knows how to use
+
 function MonsterAI:castAbilities(targets)
-	if self.dash or self.killUntil or self.hero ~= "FearEater" then return end   -- (no other hero's Q/E brain yet)
+	if self.dash or self.killUntil or self.charging or self.leap or self.devourToken then return end
+	local brain = brains[self.hero]
+	if brain then brain(self, targets) end
+end
+
+-- FEAR EATER: Instill Fear on cooldown; Living Nightmare when it's ready and any survivor is feared
+brains.FearEater = function(self, targets)
 	if Abilities.ready(self, "Secondary") then
 		Abilities.useMonster(self, "Secondary", self.facing)
 	end
@@ -405,6 +415,188 @@ function MonsterAI:castAbilities(targets)
 				break
 			end
 		end
+	end
+end
+
+-- THE MINOTAUR:
+--   Devastating Charge whenever it's ready and a survivor it can see (its own eyes, a reveal, or
+--   its side's sight: as for chasing) is within CHARGE_RANGE in a clear straight run, wide enough
+--   for his body: at them.
+--   Crush whenever it's ready and, within its range, a survivor it can see is standing still to
+--   capture something (collecting a relic or destroying a ward: "Collector" on its info), or a
+--   landing would catch 2 or more survivors it can see in the stun (the best spot between them).
+local CHARGE_RANGE = 70            -- studs
+local CRUSH_SPREAD = 0.85          -- (of its radius: survivors move during the leap, so it aims a bit tighter)
+
+-- survivors it can see now: { { player, root, at (floor-level) } }
+function MonsterAI:visibleSurvivors(targets)
+	local list = {}
+	local now = workspace:GetServerTimeNow()
+	for _, player in targets do
+		local root = rootOf(player)
+		if not root or (self.graceUntil[player] or 0) > os.clock() then continue end
+		local revealed = (player:GetAttribute("RevealedUntil") or 0) > now
+			or (self.spottedBySide ~= nil and self.spottedBySide(player))
+		if self:canDetect(root, revealed) then
+			table.insert(list, { player = player, root = root,
+				at = Vector3.new(root.Position.X, self.maze.floorY, root.Position.Z) })
+		end
+	end
+	return list
+end
+
+-- UserIds of everyone collecting a relic or destroying a ward right now
+local function capturing()
+	local ids = {}
+	local match = game:GetService("ReplicatedStorage"):FindFirstChild("Match")
+	for _, name in { "Relics", "WardEyes" } do
+		local folder = match and match:FindFirstChild(name)
+		for _, info in folder and folder:GetChildren() or {} do
+			local id = info:GetAttribute("Collector")
+			if id then ids[id] = true end
+		end
+	end
+	return ids
+end
+
+brains.Minotaur = function(self, targets)
+	local hero = Heroes.get(self.hero)
+	if not hero then return end
+	local seen = self:visibleSurvivors(targets)
+	if #seen == 0 then return end
+	-- Q: a clear charge at the nearest one in range
+	if Abilities.ready(self, "Secondary") then
+		local best, bestD
+		for _, s in seen do
+			local d = (s.at - self.pos).Magnitude
+			if d > 1 and d <= CHARGE_RANGE and (not bestD or d < bestD) and self:canPass(self.pos, s.at) then
+				best, bestD = s, d
+			end
+		end
+		if best then
+			Abilities.useMonster(self, "Secondary", (best.at - self.pos).Unit)
+			return
+		end
+	end
+	-- E: on someone capturing, or where it'd stun the most (at least 2)
+	if Abilities.ready(self, "Ultimate") then
+		local def = hero.abilities.Ultimate
+		local reach = {}
+		for _, s in seen do
+			if (s.at - self.pos).Magnitude <= def.range then table.insert(reach, s) end
+		end
+		local radius = def.radius * CRUSH_SPREAD
+		local function countAt(p)
+			local n = 0
+			for _, s in reach do
+				if (s.at - p).Magnitude <= radius then n += 1 end
+			end
+			return n
+		end
+		local spot, count = nil, 0
+		for i, a in reach do
+			for k = i + 1, #reach do
+				local b = reach[k]
+				if (a.at - b.at).Magnitude <= radius * 2 then
+					local mid = (a.at + b.at) / 2
+					local n = countAt(mid)
+					if n > count then spot, count = mid, n end
+				end
+			end
+		end
+		if count < 2 then
+			spot, count = nil, 0
+			local busy = capturing()
+			for _, s in reach do
+				if busy[s.player.UserId] then
+					local n = countAt(s.at)
+					if n > count then spot, count = s.at, n end
+				end
+			end
+		end
+		if spot then
+			local toward = (spot - self.pos) * Vector3.new(1, 0, 1)
+			Abilities.useMonster(self, "Ultimate", toward.Magnitude > 0.1 and toward.Unit or self.facing, spot)
+		end
+	end
+end
+
+-- THE MINOTAUR'S CHARGE and CRUSH for an AI monster (HeroAbilities.Minotaur runs them, as for a
+-- player's; here the server moves the body itself). The same body attributes as a player's
+-- (PlayerMonster), so everyone's computer draws it the same way.
+function MonsterAI:ChargeWindup(dir, def, to)
+	local now = workspace:GetServerTimeNow()
+	self.facing = dir
+	self.path = {}
+	self.castUntil = os.clock() + def.windup + 30          -- held until it ends
+	self.model:SetAttribute("ChargeDir", dir)
+	self.model:SetAttribute("ChargeTo", to)
+	self.model:SetAttribute("ChargeWindup", def.windup)
+	self.model:SetAttribute("ChargeAt", now)
+	self:publish(os.clock())
+end
+
+function MonsterAI:ChargeGo(from, to, time)
+	self.charging = { from = from, to = to, start = self.charging and self.charging.start or os.clock(), time = time }
+	self.model:SetAttribute("ChargeFrom", from)
+	self.model:SetAttribute("ChargeTo", to)
+	self.model:SetAttribute("ChargeTime", time)
+	self.model:SetAttribute("ChargeGo", workspace:GetServerTimeNow())
+end
+
+function MonsterAI:ChargeEnd(at, recovery)
+	self.charging = nil
+	self.pos = Vector3.new(at.X, self.pos.Y, at.Z)
+	self.path = {}
+	self.castUntil = os.clock() + recovery
+	if self.model then
+		self.model:SetAttribute("ChargeStopAt", at)
+		self.model:SetAttribute("ChargeRecovery", recovery)
+		self.model:SetAttribute("ChargeEnd", workspace:GetServerTimeNow())
+	end
+end
+
+function MonsterAI:Trample(survivor, kill)
+	local now = os.clock()
+	if (self.graceUntil[survivor] or 0) > now or Abilities.refusesCatch(survivor) then return false end
+	self.graceUntil[survivor] = now + CATCH_GRACE
+	self.onCatch(survivor, self, kill)
+	return true
+end
+
+function MonsterAI:LeapStart(from, to, def)
+	local flat = (to - from) * Vector3.new(1, 0, 1)
+	if flat.Magnitude > 0.5 then self.facing = flat.Unit end
+	self.path = {}
+	self.leap = { from = from, to = Vector3.new(to.X, from.Y, to.Z), start = os.clock(), crouch = def.crouch, windup = def.windup }
+	self.castUntil = os.clock() + def.windup + def.recovery
+	local model = self.model
+	model:SetAttribute("LeapFrom", from)
+	model:SetAttribute("LeapTo", to)
+	model:SetAttribute("LeapWindup", def.windup)
+	model:SetAttribute("LeapCrouch", def.crouch)
+	model:SetAttribute("LeapHeight", def.height)
+	model:SetAttribute("LeapRecovery", def.recovery)
+	model:SetAttribute("LeapAt", workspace:GetServerTimeNow())
+	self:publish(os.clock())
+end
+
+-- every frame while charging or leaping: carried along it (the walls were checked when it was planned)
+function MonsterAI:stepCharge(now)
+	local c = self.charging
+	local k = math.clamp((now - c.start) / math.max(c.time, 0.01), 0, 1)
+	self.pos = c.from:Lerp(c.to, k)
+	local dir = (c.to - c.from) * Vector3.new(1, 0, 1)
+	if dir.Magnitude > 0.1 then self.facing = dir.Unit end
+end
+
+function MonsterAI:stepLeap(now)
+	local l = self.leap
+	local k = math.clamp((now - l.start - l.crouch) / math.max(l.windup - l.crouch, 0.01), 0, 1)
+	self.pos = l.from:Lerp(l.to, k)
+	if now >= l.start + l.windup then
+		self.pos = l.to
+		self.leap = nil
 	end
 end
 
@@ -515,6 +707,12 @@ function MonsterAI:Step(dt, targets)
 		self.mode = "roam"
 		self.model:SetAttribute("KillVictim", nil)
 		self.model:SetAttribute("KillStart", nil)
+	end
+	-- Mid-Charge or mid-leap (the Minotaur): carried along it, nothing else
+	if self.charging or self.leap then
+		if self.charging then self:stepCharge(now) else self:stepLeap(now) end
+		self:publish(now)
+		return
 	end
 	-- Mid-Devour: the dash, nothing else
 	if self.dash then

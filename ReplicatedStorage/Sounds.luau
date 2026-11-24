@@ -45,6 +45,19 @@ local Sounds = {
 	EMPPulse       = { id = 9114277402, volume = 1.1, range = 160 },                   -- ...and going off
 	EncryptIn      = { id = 9114277338, volume = 0.7, range = 80, speed = 1.4 },       -- Kai dissolving into a circuit, and coming back
 
+	-- The Minotaur (HeroVisuals.Minotaur; all Pro Sound Effects). His telegraphs carry: survivors hear
+	-- the snort, the bellow, the crash and the slam even when the fog hides him.
+	MinotaurRoar   = { id = 9113636194, volume = 1.4, range = 140 },                   -- starting a chase (instead of MonsterRoar): bull grunts and snorts
+	HoofStep       = { id = 9113524237, volume = 0.45, range = 70, speed = 0.6 },      -- each hoof landing as he walks (a hard thump, pitched down)
+	HoofGallop     = { id = 9113524237, volume = 0.8, range = 110, speed = 0.75 },     -- ...and as he charges
+	ChargeSnort    = { id = 9113634952, volume = 1.4, range = 120 },                   -- the Charge's windup: a wet bull snort
+	ChargeBellow   = { id = 9113629087, volume = 1.6, range = 180, stopAfter = 2.2 },  -- ...as he sets off: a bull's bellow
+	ChargeCrash    = { id = 9125393230, volume = 1.4, range = 160, stopAfter = 1.5 },  -- ...hitting the wall: big rocks dropping
+	Trample        = { id = 9113524237, volume = 1.2, range = 120 },                   -- a survivor run down by it
+	CrushLeap      = { id = 9113635074, volume = 1.2, range = 120 },                   -- Crush: a snort as he leaps
+	CrushSlam      = { id = 9113525391, volume = 1.6, range = 180, speed = 0.7 },      -- ...landing: a huge body slam, pitched down...
+	CrushRubble   = { id = 9118588165, volume = 1.0, range = 140, speed = 0.8 },       -- ...and the floor cracking
+
 	-- Background music: plays all the time, on a loop
 	Music          = { id = 138890398994853, volume = 0.1, looped = true },
 

@@ -145,9 +145,15 @@ slow, heavy stomp; the chase boost still applies), so the Charge and Crush are h
   his side and to survivors within 40 studs of it. Survivors within 14 studs of the landing, in a
   clear line, are stunned for 2.5 seconds (stars circle their heads) - time for a Charge. He has
   to land somewhere he could stand: an aim inside a wall or a sanctuary is pulled back toward him.
-AI monsters use their hero's left click on whoever they're chasing once they're in range (the
-AI Minotaur doesn't Charge or Crush yet). One AI Fear Eater a match (`Config.AI_MONSTERS_CASTING`)
-also casts Instill Fear whenever it's ready,
+His sounds: a heavy thump for each hoof as he walks (and faster as he charges), a snort as the
+Charge winds up, a bellow as he sets off and a crash of rock at the wall; a snort as he leaps
+and a huge slam where Crush lands. The telegraphs are heard through the fog (fading with distance).
+AI monsters use their hero's left click on whoever they're chasing once they're in range. AI
+monsters also use their Q and E (`Config.AI_MONSTERS_CASTING`, 2: a match's two are different
+heroes). The AI Minotaur charges whenever it's ready and a survivor it can see (its own eyes, a
+reveal, or its side's sight) is within 70 studs with a clear straight run; it Crushes when it's
+ready and, within range, a survivor it can see is collecting a relic or destroying a ward, or 2 or
+more it can see would be caught in the stun. The AI Fear Eater casts Instill Fear whenever it's ready,
 and Living Nightmare whenever it's ready and a survivor is feared (then it goes straight through
 inner walls after feared survivors, faster). The cast animations are simple stand-ins for now.
 

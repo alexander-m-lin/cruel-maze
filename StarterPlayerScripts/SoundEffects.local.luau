@@ -136,7 +136,10 @@ local function updateMonsters()
 			monsterState[model] = st
 		end
 		local mode = model:GetAttribute("Mode")
-		if mode == "chase" and st.mode ~= "chase" then playAt(Sounds.MonsterRoar, monsterHead(model)) end
+		if mode == "chase" and st.mode ~= "chase" then
+			-- (a hero can have its own: Sounds.<hero id>Roar, e.g. MinotaurRoar)
+			playAt(Sounds[(model:GetAttribute("Hero") or "") .. "Roar"] or Sounds.MonsterRoar, monsterHead(model))
+		end
 		st.mode = mode
 
 		local killStart = model:GetAttribute("KillStart")
